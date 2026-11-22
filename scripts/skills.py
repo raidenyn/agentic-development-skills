@@ -6,6 +6,7 @@ Usage:
     python3 scripts/skills.py new <skill-name> "<description>" [--category CATEGORY]
     python3 scripts/skills.py check-commit-msg [PATH] [--text TITLE]
     python3 scripts/skills.py install-hooks [--force]
+    python3 scripts/skills.py build-pages --version X.Y.Z --out DIR
 
 `validate` checks every skills/<name>/SKILL.md against the Agent Skills spec
 (https://agentskills.io/specification) and checks that
@@ -13,6 +14,11 @@ Usage:
 
 `new` copies template/SKILL.md into skills/<name>/ and adds the matching
 marketplace entry.
+
+`build-pages` validates the repository, then writes the static catalogs for a
+release into DIR: opencode/index.json plus a byte-for-byte copy of every skill
+file under DIR/opencode/<name>/. It builds into a temporary directory and
+renames it into place at the end, so a failed build leaves no partial catalog.
 
 `check-commit-msg` checks a git commit message file (file mode, used by the
 commit-msg hook) or a PR title (title mode) against the Conventional Commits
@@ -22,7 +28,7 @@ header rule.
 `.githooks` directory, so the commit-msg hook runs. It is safe to run again
 and refuses to replace a different value unless `--force` is given.
 
-Requires Python 3.9+ and, for `validate` and `new`, PyYAML
+Requires Python 3.9+ and, for `validate`, `new` and `build-pages`, PyYAML
 (`pip install -r requirements-dev.txt`). The YAML import is lazy, so other
 subcommands, `check-commit-msg` and `install-hooks` included, run without it.
 """
@@ -30,9 +36,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import types
 from pathlib import Path
 
@@ -53,6 +62,8 @@ def load_yaml() -> types.ModuleType:
     return _yaml
 
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+VERSION_RE = re.compile(r"\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?")
+DEFAULT_SLUG = "raidenyn/agentic-development-skills"
 # Keys from the open Agent Skills spec. These are the only keys claude.ai and
 # the Skills API accept, so anything else is reported as a portability warning.
 SPEC_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
@@ -243,6 +254,130 @@ def new(name: str, description: str, category: str, root: Path = ROOT) -> int:
     return 0
 
 
+class BuildError(Exception):
+    """A skill that cannot be published to the static catalogs."""
+
+
+# OpenCode silently drops a whole skill when a file name contains one of these.
+UNSAFE_PATH_CHARS = "?#\\\0"
+
+
+def check_publish_path(rel: str) -> None:
+    """Raise BuildError unless rel is a relative path OpenCode accepts."""
+    for part in rel.split("/"):
+        if part in ("", ".", ".."):
+            raise BuildError(f"{rel}: path segment {part!r} is not allowed")
+        for char in UNSAFE_PATH_CHARS:
+            if char in part:
+                raise BuildError(f"{rel}: {char!r} is not allowed in a published path")
+
+
+def skill_files(skill_dir: Path) -> list[str]:
+    """Return every publishable file under skill_dir, as sorted POSIX relative paths.
+
+    Hidden files and directories and __pycache__ are skipped. A symlink, or a
+    path OpenCode refuses, raises BuildError instead of being published.
+    """
+    if skill_dir.is_symlink():
+        raise BuildError(f"{skill_dir}: symlinks are not allowed in a published skill")
+    files: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(skill_dir, followlinks=False):
+        here = Path(dirpath)
+        for name in dirnames + filenames:
+            if (here / name).is_symlink():
+                raise BuildError(f"{here / name}: symlinks are not allowed in a published skill")
+        dirnames[:] = sorted(
+            name for name in dirnames if not name.startswith(".") and name != "__pycache__"
+        )
+        for name in filenames:
+            if name.startswith("."):
+                continue
+            rel = (here / name).relative_to(skill_dir).as_posix()
+            check_publish_path(f"{skill_dir.name}/{rel}")
+            files.append(rel)
+    return sorted(files)
+
+
+def build_pages(version: str, out: Path, slug: str, root: Path = ROOT) -> int:
+    """Build the static catalogs for a release into out, returning an exit code.
+
+    slug is the GitHub 'owner/repo' slug for the release.
+    """
+    if not VERSION_RE.fullmatch(version):
+        print(f"error: invalid version '{version}' (expected X.Y.Z)", file=sys.stderr)
+        return 1
+    if out.exists() and (not out.is_dir() or any(out.iterdir())):
+        print(f"error: output directory not empty: {out}", file=sys.stderr)
+        return 1
+    if validate(root) != 0:
+        return 1
+
+    skills_dir = root / "skills"
+    skill_dirs = (
+        sorted((p for p in skills_dir.iterdir() if p.is_dir()), key=lambda p: p.name)
+        if skills_dir.is_dir()
+        else []
+    )
+    if not skill_dirs:
+        print("error: no skills found", file=sys.stderr)
+        return 1
+    marketplace_path = root / ".claude-plugin" / "marketplace.json"
+    entries = json.loads(marketplace_path.read_text(encoding="utf-8")).get("plugins", [])
+    entry_names = {entry.get("name") for entry in entries}
+    skill_names = {d.name for d in skill_dirs}
+    for d in skill_dirs:
+        if d.name not in entry_names:
+            print(
+                f"error: {d.relative_to(root)}: not listed in "
+                f"{marketplace_path.relative_to(root)}",
+                file=sys.stderr,
+            )
+            return 1
+    for name in sorted(entry_names):
+        if name not in skill_names:
+            print(
+                f"error: {marketplace_path.relative_to(root)}: no skill directory "
+                f"{skills_dir.relative_to(root)}/{name}/",
+                file=sys.stderr,
+            )
+            return 1
+    for d in skill_dirs:
+        if not (d / "SKILL.md").is_file():
+            print(f"error: {d.relative_to(root)}: missing SKILL.md", file=sys.stderr)
+            return 1
+
+    try:
+        files_by_skill = [(d, skill_files(d)) for d in skill_dirs]
+    except BuildError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        temp = Path(tempfile.mkdtemp(prefix=".build-", dir=out.parent))
+    except OSError as exc:
+        print(f"error: cannot create a build directory in {out.parent}: {exc}", file=sys.stderr)
+        return 1
+    try:
+        opencode = temp / "opencode"
+        catalog = []
+        for skill_dir, files in files_by_skill:
+            for rel in files:
+                target = opencode / skill_dir.name / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(skill_dir / rel, target)
+            catalog.append({"name": skill_dir.name, "version": version, "files": files})
+        opencode.mkdir(parents=True, exist_ok=True)
+        (opencode / "index.json").write_text(
+            json.dumps({"skills": catalog}, indent=2) + "\n", encoding="utf-8"
+        )
+        os.replace(temp, out)
+    except OSError as exc:
+        shutil.rmtree(temp, ignore_errors=True)
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def check_header(header: str, limit: int) -> str | None:
     """Check one commit header or PR title, returning an error message or None."""
     if len(header) > limit:
@@ -402,6 +537,9 @@ def main() -> int:
     p_install.add_argument(
         "--force", action="store_true", help="replace a different core.hooksPath"
     )
+    p_build = sub.add_parser("build-pages", help="build the static release catalogs")
+    p_build.add_argument("--version", required=True, metavar="X.Y.Z")
+    p_build.add_argument("--out", required=True, type=Path, metavar="DIR")
     args = parser.parse_args()
     if args.cmd == "validate":
         return validate()
@@ -409,6 +547,9 @@ def main() -> int:
         return check_commit_msg_cli(args.path, args.text)
     if args.cmd == "install-hooks":
         return install_hooks_cli(args.force)
+    if args.cmd == "build-pages":
+        slug = os.environ.get("GITHUB_REPOSITORY", DEFAULT_SLUG)
+        return build_pages(args.version, args.out, slug)
     return new(args.name, args.description, args.category)
 
 

@@ -552,5 +552,214 @@ class InstallHooksTests(unittest.TestCase):
         self.assertEqual(self.hooks_path(repo), ".githooks")
 
 
+DEMO_SKILL_MD = """---
+name: demo-skill
+description: Use when testing build-pages.
+---
+# Demo
+"""
+
+
+class BuildPagesTests(unittest.TestCase):
+    """`build-pages`: the OpenCode catalog, the copies and the consistency checks."""
+
+    # -- helpers ---------------------------------------------------------
+
+    def build(self, *args, **kwargs) -> tuple[int, str]:
+        """Run build_pages, keeping its and validate's output out of the test log."""
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = skills.build_pages(*args, **kwargs)
+        return code, out.getvalue() + err.getvalue()
+
+    def demo_repo(self, extra: dict | None = None) -> Path:
+        """A valid one-skill repo with SKILL.md and references/a.md."""
+        files = {"SKILL.md": DEMO_SKILL_MD, "references/a.md": "reference\n"}
+        files.update(extra or {})
+        return make_repo(tmpdir(), {"demo-skill": files})
+
+    def set_plugins(self, root: Path, plugins: list) -> None:
+        path = root / ".claude-plugin" / "marketplace.json"
+        market = json.loads(path.read_text(encoding="utf-8"))
+        market["plugins"] = plugins
+        path.write_text(json.dumps(market, indent=2) + "\n", encoding="utf-8")
+
+    def out_dir(self) -> Path:
+        """An output path that does not exist yet, next to nothing else."""
+        return tmpdir() / "site"
+
+    # -- the catalog -----------------------------------------------------
+
+    def test_writes_opencode_catalog(self):
+        root = self.demo_repo()
+        out = self.out_dir()
+        code, output = self.build("0.2.0", out, "o/r", root)
+        self.assertEqual(code, 0, output)
+        expected = {
+            "skills": [
+                {
+                    "name": "demo-skill",
+                    "version": "0.2.0",
+                    "files": ["SKILL.md", "references/a.md"],
+                }
+            ]
+        }
+        index = out / "opencode" / "index.json"
+        text = index.read_text(encoding="utf-8")
+        self.assertEqual(json.loads(text), expected)
+        # Stable bytes for git: two-space indent and a trailing newline.
+        self.assertEqual(text, json.dumps(expected, indent=2) + "\n")
+
+    def test_copies_files_byte_for_byte(self):
+        root = self.demo_repo()
+        out = self.out_dir()
+        self.assertEqual(self.build("0.2.0", out, "o/r", root)[0], 0)
+        for rel in ("SKILL.md", "references/a.md"):
+            source = root / "skills" / "demo-skill" / rel
+            copy = out / "opencode" / "demo-skill" / rel
+            self.assertEqual(copy.read_bytes(), source.read_bytes(), rel)
+
+    def test_skips_hidden_files_and_pycache(self):
+        root = self.demo_repo({".hidden": "x\n", "__pycache__/x.pyc": "x\n"})
+        out = self.out_dir()
+        code, output = self.build("0.2.0", out, "o/r", root)
+        self.assertEqual(code, 0, output)
+        index = json.loads((out / "opencode" / "index.json").read_text(encoding="utf-8"))
+        self.assertEqual(index["skills"][0]["files"], ["SKILL.md", "references/a.md"])
+        self.assertFalse((out / "opencode" / "demo-skill" / ".hidden").exists())
+        self.assertFalse((out / "opencode" / "demo-skill" / "__pycache__").exists())
+
+    def test_symlink_fails(self):
+        root = self.demo_repo()
+        (root / "skills" / "demo-skill" / "link.md").symlink_to("SKILL.md")
+        code, output = self.build("0.2.0", self.out_dir(), "o/r", root)
+        self.assertEqual(code, 1)
+        self.assertIn("symlink", output)
+
+    def test_hash_in_filename_fails_naming_the_file(self):
+        # OpenCode silently drops a whole skill with such a file, so the build
+        # must fail and name it.
+        root = self.demo_repo({"a#b.md": "x\n"})
+        code, output = self.build("0.2.0", self.out_dir(), "o/r", root)
+        self.assertEqual(code, 1)
+        self.assertIn("a#b.md", output)
+
+    # -- consistency checks ----------------------------------------------
+
+    def test_no_skills_fails(self):
+        root = make_repo(tmpdir(), {})
+        code, output = self.build("0.2.0", self.out_dir(), "o/r", root)
+        self.assertEqual(code, 1)
+        self.assertIn("no skills found", output)
+
+    def test_unlisted_skill_fails_naming_it(self):
+        root = self.demo_repo()
+        self.set_plugins(root, [])
+        code, output = self.build("0.2.0", self.out_dir(), "o/r", root)
+        self.assertEqual(code, 1)
+        self.assertIn("demo-skill", output)
+
+    def test_entry_without_a_skill_folder_fails_naming_it(self):
+        root = make_repo(tmpdir(), {})
+        self.set_plugins(
+            root,
+            [{"name": "ghost-skill", "source": "./skills/ghost-skill", "description": "Ghost."}],
+        )
+        code, output = self.build("0.2.0", self.out_dir(), "o/r", root)
+        self.assertEqual(code, 1)
+        self.assertIn("ghost-skill", output)
+
+    def test_skill_without_skill_md_fails_naming_it(self):
+        root = make_repo(tmpdir(), {"demo-skill": {"references/a.md": "reference\n"}})
+        code, output = self.build("0.2.0", self.out_dir(), "o/r", root)
+        self.assertEqual(code, 1)
+        self.assertIn("demo-skill", output)
+
+    def test_existing_empty_out_is_used(self):
+        root = self.demo_repo()
+        out = self.out_dir()
+        out.mkdir()
+        code, output = self.build("0.2.0", out, "o/r", root)
+        self.assertEqual(code, 0, output)
+        self.assertTrue((out / "opencode" / "index.json").is_file())
+
+    def test_non_empty_out_fails(self):
+        root = self.demo_repo()
+        out = self.out_dir()
+        out.mkdir()
+        (out / "keep.txt").write_text("keep\n", encoding="utf-8")
+        code, output = self.build("0.2.0", out, "o/r", root)
+        self.assertEqual(code, 1)
+        self.assertIn("not empty", output)
+        self.assertEqual((out / "keep.txt").read_text(encoding="utf-8"), "keep\n")
+
+    def test_non_directory_out_fails(self):
+        # A file is neither missing nor an empty directory, so it is invalid.
+        root = self.demo_repo()
+        out = self.out_dir()
+        out.write_text("a file\n", encoding="utf-8")
+        code, output = self.build("0.2.0", out, "o/r", root)
+        self.assertEqual(code, 1)
+        self.assertIn("not empty", output)
+        self.assertEqual(out.read_text(encoding="utf-8"), "a file\n")
+
+    def test_invalid_version_fails(self):
+        root = self.demo_repo()
+        out = self.out_dir()
+        code, output = self.build("1.2", out, "o/r", root)
+        self.assertEqual(code, 1)
+        self.assertIn("invalid version", output)
+        self.assertFalse(out.exists())
+
+    def test_failure_leaves_no_catalog(self):
+        def add_symlink(skill: Path) -> None:
+            (skill / "link.md").symlink_to("SKILL.md")
+
+        def add_hash_file(skill: Path) -> None:
+            (skill / "a#b.md").write_text("x\n", encoding="utf-8")
+
+        for label, make_bad in (("symlink", add_symlink), ("hash", add_hash_file)):
+            with self.subTest(case=label):
+                root = self.demo_repo()
+                make_bad(root / "skills" / "demo-skill")
+                out = self.out_dir()
+                code, output = self.build("0.2.0", out, "o/r", root)
+                self.assertEqual(code, 1, output)
+                self.assertFalse(out.exists(), "the failed build left an output directory")
+                leftovers = sorted(
+                    p.name for p in out.parent.iterdir() if p.name.startswith(".build-")
+                )
+                self.assertEqual(leftovers, [], "the failed build left a temporary directory")
+
+    # -- CLI -------------------------------------------------------------
+
+    def test_cli_builds_catalog(self):
+        out = self.out_dir()
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/skills.py",
+                "build-pages",
+                "--version",
+                "0.1.0",
+                "--out",
+                str(out),
+            ],
+            cwd=ROOT,
+            env=git_env({"GITHUB_REPOSITORY": "o/r"}),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        index = json.loads((out / "opencode" / "index.json").read_text(encoding="utf-8"))
+        names = [entry["name"] for entry in index["skills"]]
+        self.assertIn("harness-audit", names)
+        harness = index["skills"][names.index("harness-audit")]
+        self.assertEqual(harness["version"], "0.1.0")
+        copied = out / "opencode" / "harness-audit" / "SKILL.md"
+        installed = ROOT / "skills" / "harness-audit" / "SKILL.md"
+        self.assertEqual(copied.read_bytes(), installed.read_bytes())
+
+
 if __name__ == "__main__":
     unittest.main()
