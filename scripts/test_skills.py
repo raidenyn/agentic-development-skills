@@ -683,6 +683,19 @@ class BuildPagesTests(unittest.TestCase):
         self.assertEqual(code, 0, output)
         self.assertTrue((out / "opencode" / "index.json").is_file())
 
+    def test_output_directory_is_world_readable(self):
+        # mkdtemp creates 0700. The Pages artifact needs other-read and
+        # other-traverse, whether out is missing or already an empty directory.
+        for label, precreate in (("missing", False), ("empty", True)):
+            with self.subTest(out=label):
+                root = self.demo_repo()
+                out = self.out_dir()
+                if precreate:
+                    out.mkdir()
+                code, output = self.build("0.2.0", out, "o/r", root)
+                self.assertEqual(code, 0, output)
+                self.assertEqual(out.stat().st_mode & 0o005, 0o005)
+
     def test_non_empty_out_fails(self):
         root = self.demo_repo()
         out = self.out_dir()

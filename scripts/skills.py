@@ -321,30 +321,10 @@ def build_pages(version: str, out: Path, slug: str, root: Path = ROOT) -> int:
     if not skill_dirs:
         print("error: no skills found", file=sys.stderr)
         return 1
-    marketplace_path = root / ".claude-plugin" / "marketplace.json"
-    entries = json.loads(marketplace_path.read_text(encoding="utf-8")).get("plugins", [])
-    entry_names = {entry.get("name") for entry in entries}
-    skill_names = {d.name for d in skill_dirs}
-    for d in skill_dirs:
-        if d.name not in entry_names:
-            print(
-                f"error: {d.relative_to(root)}: not listed in "
-                f"{marketplace_path.relative_to(root)}",
-                file=sys.stderr,
-            )
-            return 1
-    for name in sorted(entry_names):
-        if name not in skill_names:
-            print(
-                f"error: {marketplace_path.relative_to(root)}: no skill directory "
-                f"{skills_dir.relative_to(root)}/{name}/",
-                file=sys.stderr,
-            )
-            return 1
-    for d in skill_dirs:
-        if not (d / "SKILL.md").is_file():
-            print(f"error: {d.relative_to(root)}: missing SKILL.md", file=sys.stderr)
-            return 1
+    # Checks 5 and 6 (every skill folder has a marketplace entry, every entry has
+    # a skill folder, and every skill has SKILL.md) are enforced by validate()
+    # above, which names the skill and fails before this point; repeating them
+    # here would be untested duplicate code.
 
     try:
         files_by_skill = [(d, skill_files(d)) for d in skill_dirs]
@@ -370,6 +350,9 @@ def build_pages(version: str, out: Path, slug: str, root: Path = ROOT) -> int:
         (opencode / "index.json").write_text(
             json.dumps({"skills": catalog}, indent=2) + "\n", encoding="utf-8"
         )
+        # mkdtemp creates 0700; the Pages artifact must be readable and
+        # traversable by others, so do not leave out at the temporary mode.
+        os.chmod(temp, 0o755)
         os.replace(temp, out)
     except OSError as exc:
         shutil.rmtree(temp, ignore_errors=True)
