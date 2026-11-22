@@ -17,8 +17,10 @@ marketplace entry.
 
 `build-pages` validates the repository, then writes the static catalogs for a
 release into DIR: opencode/index.json plus a byte-for-byte copy of every skill
-file under DIR/opencode/<name>/. It builds into a temporary directory and
-renames it into place at the end, so a failed build leaves no partial catalog.
+file under DIR/opencode/<name>/, a URL-based Claude marketplace at
+DIR/claude/marketplace.json, and DIR/index.html with the skill table and the
+install snippets. It builds into a temporary directory and renames it into
+place at the end, so a failed build leaves no partial catalog.
 
 `check-commit-msg` checks a git commit message file (file mode, used by the
 commit-msg hook) or a PR title (title mode) against the Conventional Commits
@@ -35,6 +37,7 @@ subcommands, `check-commit-msg` and `install-hooks` included, run without it.
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -298,6 +301,85 @@ def skill_files(skill_dir: Path) -> list[str]:
     return sorted(files)
 
 
+def claude_marketplace(market: dict, version: str, slug: str) -> dict:
+    """Return the URL-based Claude marketplace to publish for a release."""
+    published = {
+        key: market[key] for key in ("name", "owner", "description") if key in market
+    }
+    plugins = []
+    for entry in market.get("plugins", []):
+        plugin = {"name": entry["name"]}
+        for key in ("description", "category", "tags"):
+            if key in entry:
+                plugin[key] = entry[key]
+        plugin["version"] = version
+        plugin["source"] = {
+            "source": "git-subdir",
+            "url": f"https://github.com/{slug}.git",
+            "path": f"skills/{entry['name']}",
+            "ref": f"v{version}",
+        }
+        plugins.append(plugin)
+    published["plugins"] = plugins
+    return published
+
+
+def index_page(market: dict, version: str, slug: str) -> str:
+    """Return the static Pages index: the skill table and install snippets."""
+    owner, repo = slug.split("/", 1)
+    # Pages is served from <owner>.github.io, which GitHub lowercases.
+    base = f"https://{owner.lower()}.github.io/{repo}/"
+    name = market["name"]
+    rows = "\n".join(
+        "      <tr>"
+        f"<td>{html.escape(entry['name'])}</td>"
+        f"<td>{html.escape(entry['description'])}</td>"
+        f"<td>{html.escape(version)}</td>"
+        "</tr>"
+        for entry in market.get("plugins", [])
+    )
+    opencode = json.dumps({"skills": [f"{base}opencode/"]}, indent=2)
+    claude = json.dumps(
+        {
+            "extraKnownMarketplaces": {
+                name: {
+                    "source": {"source": "url", "url": f"{base}claude/marketplace.json"},
+                    "autoUpdate": True,
+                }
+            },
+            "enabledPlugins": {
+                f"{entry['name']}@{name}": True for entry in market.get("plugins", [])
+            },
+        },
+        indent=2,
+    )
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{html.escape(name)}</title>
+</head>
+<body>
+  <h1>{html.escape(name)}</h1>
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Description</th><th>Version</th></tr>
+    </thead>
+    <tbody>
+{rows}
+    </tbody>
+  </table>
+  <h2>OpenCode</h2>
+  <p>Add this to <code>opencode.jsonc</code>:</p>
+  <pre>{html.escape(opencode)}</pre>
+  <h2>Claude Code</h2>
+  <p>Add this to <code>settings.json</code>:</p>
+  <pre>{html.escape(claude)}</pre>
+</body>
+</html>
+"""
+
+
 def build_pages(version: str, out: Path, slug: str, root: Path = ROOT) -> int:
     """Build the static catalogs for a release into out, returning an exit code.
 
@@ -332,6 +414,14 @@ def build_pages(version: str, out: Path, slug: str, root: Path = ROOT) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
+    # validate() above already read and checked the committed marketplace, so
+    # this read cannot fail for a repo that reached this point.
+    market = json.loads(
+        (root / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8")
+    )
+    claude_market = claude_marketplace(market, version, slug)
+    page = index_page(market, version, slug)
+
     try:
         temp = Path(tempfile.mkdtemp(prefix=".build-", dir=out.parent))
     except OSError as exc:
@@ -350,6 +440,12 @@ def build_pages(version: str, out: Path, slug: str, root: Path = ROOT) -> int:
         (opencode / "index.json").write_text(
             json.dumps({"skills": catalog}, indent=2) + "\n", encoding="utf-8"
         )
+        claude = temp / "claude"
+        claude.mkdir()
+        (claude / "marketplace.json").write_text(
+            json.dumps(claude_market, indent=2) + "\n", encoding="utf-8"
+        )
+        (temp / "index.html").write_text(page, encoding="utf-8")
         # mkdtemp creates 0700; the Pages artifact must be readable and
         # traversable by others, so do not leave out at the temporary mode.
         os.chmod(temp, 0o755)

@@ -629,6 +629,119 @@ class BuildPagesTests(unittest.TestCase):
         self.assertFalse((out / "opencode" / "demo-skill" / ".hidden").exists())
         self.assertFalse((out / "opencode" / "demo-skill" / "__pycache__").exists())
 
+    # -- Claude marketplace and index ------------------------------------
+
+    def test_writes_claude_marketplace(self):
+        root = self.demo_repo()
+        path = root / ".claude-plugin" / "marketplace.json"
+        market = json.loads(path.read_text(encoding="utf-8"))
+        market["description"] = "Test marketplace."
+        market["plugins"][0]["tags"] = ["demo", "test"]
+        path.write_text(json.dumps(market, indent=2) + "\n", encoding="utf-8")
+
+        out = self.out_dir()
+        code, output = self.build("0.2.0", out, "o/r", root)
+        self.assertEqual(code, 0, output)
+        generated = json.loads(
+            (out / "claude" / "marketplace.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(generated["name"], market["name"])
+        self.assertEqual(generated["owner"], market["owner"])
+        self.assertEqual(generated["description"], market["description"])
+        source, entry = market["plugins"][0], generated["plugins"][0]
+        self.assertEqual(entry["description"], source["description"])
+        self.assertEqual(entry["category"], source["category"])
+        self.assertEqual(entry["tags"], source["tags"])
+        self.assertEqual(entry["version"], "0.2.0")
+        self.assertEqual(
+            entry["source"],
+            {
+                "source": "git-subdir",
+                "url": "https://github.com/o/r.git",
+                "path": "skills/demo-skill",
+                "ref": "v0.2.0",
+            },
+        )
+
+    def test_committed_marketplace_is_unchanged(self):
+        path = ROOT / ".claude-plugin" / "marketplace.json"
+        before = path.read_bytes()
+        code, output = self.build("0.2.0", self.out_dir(), "o/r", ROOT)
+        self.assertEqual(code, 0, output)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_index_lists_skills_and_install_snippets(self):
+        root = self.demo_repo()
+        out = self.out_dir()
+        code, output = self.build("0.2.0", out, "o/r", root)
+        self.assertEqual(code, 0, output)
+        page = (out / "index.html").read_text(encoding="utf-8")
+        for text in (
+            "demo-skill",
+            "0.2.0",
+            "https://o.github.io/r/opencode/",
+            "https://o.github.io/r/claude/marketplace.json",
+        ):
+            self.assertIn(text, page)
+        self.assertIn("<h1>test-marketplace</h1>", page)
+
+    def test_index_lowercases_only_the_owner(self):
+        for slug, base in (
+            ("o/r", "https://o.github.io/r/"),
+            (
+                "Raidenyn/agentic-development-skills",
+                "https://raidenyn.github.io/agentic-development-skills/",
+            ),
+            # The repo keeps its case; only the owner is lowercased.
+            ("Raidenyn/Agentic-Skills", "https://raidenyn.github.io/Agentic-Skills/"),
+        ):
+            with self.subTest(slug=slug):
+                out = self.out_dir()
+                code, output = self.build("0.2.0", out, slug, self.demo_repo())
+                self.assertEqual(code, 0, output)
+                page = (out / "index.html").read_text(encoding="utf-8")
+                self.assertIn(base, page)
+
+    def test_no_hidden_files_in_output(self):
+        out = self.out_dir()
+        code, output = self.build("0.2.0", out, "o/r", self.demo_repo())
+        self.assertEqual(code, 0, output)
+        for rel in ("index.html", "claude/marketplace.json", "opencode/index.json"):
+            self.assertTrue((out / rel).is_file(), rel)
+        hidden = [
+            p.relative_to(out).as_posix()
+            for p in out.rglob("*")
+            if any(part.startswith(".") for part in p.relative_to(out).parts)
+        ]
+        self.assertEqual(hidden, [])
+
+    @unittest.skipUnless(shutil.which("npx"), "npx is not installed")
+    def test_claude_validates_generated_marketplace(self):
+        root = self.demo_repo()
+        out = self.out_dir()
+        code, output = self.build("0.2.0", out, "o/r", root)
+        self.assertEqual(code, 0, output)
+        scratch = tmpdir() / "scratch"
+        plugin_dir = scratch / ".claude-plugin"
+        plugin_dir.mkdir(parents=True)
+        (plugin_dir / "marketplace.json").write_bytes(
+            (out / "claude" / "marketplace.json").read_bytes()
+        )
+        result = subprocess.run(
+            [
+                "npx",
+                "-y",
+                "@anthropic-ai/claude-code@2.1.330",
+                "plugin",
+                "validate",
+                str(scratch),
+            ],
+            env=git_env({"HOME": str(tmpdir())}),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_symlink_fails(self):
         root = self.demo_repo()
         (root / "skills" / "demo-skill" / "link.md").symlink_to("SKILL.md")
