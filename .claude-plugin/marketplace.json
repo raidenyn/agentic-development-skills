@@ -1,0 +1,16 @@
+{
+  "name": "agentic-development-skills",
+  "owner": {
+    "name": "raidenyn"
+  },
+  "description": "Agent Skills for agentic software development. Each skill is installable as its own plugin.",
+  "plugins": [
+    {
+      "name": "harness-audit",
+      "source": "./skills/harness-audit",
+      "description": "Read-only audit of a repository's agentic-coding harness (AGENTS.md, specs, verify command, hooks, permissions, sandbox, evals) that returns a prioritized TODO list.",
+      "category": "development",
+      "tags": ["harness", "audit", "agents-md", "agentic-coding"]
+    }
+  ]
+}
