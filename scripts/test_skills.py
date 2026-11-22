@@ -887,5 +887,54 @@ class BuildPagesTests(unittest.TestCase):
         self.assertEqual(copied.read_bytes(), installed.read_bytes())
 
 
+class ReadmeInstallTest(unittest.TestCase):
+    """The README install snippets are what users paste, so they must be valid JSON."""
+
+    @staticmethod
+    def install_json_blocks() -> list[dict]:
+        """Return the parsed ```json blocks under the README's `## Install` heading."""
+        text = (ROOT / "README.md").read_text(encoding="utf-8")
+        lines = text.splitlines()
+        try:
+            start = lines.index("## Install")
+        except ValueError:
+            raise AssertionError("README.md has no '## Install' heading") from None
+        end = next(
+            (i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")),
+            len(lines),
+        )
+        blocks: list[dict] = []
+        fence: list[str] | None = None
+        for line in lines[start:end]:
+            if fence is None:
+                if line.strip() == "```json":
+                    fence = []
+                continue
+            if line.strip() == "```":
+                blocks.append(json.loads("\n".join(fence)))
+                fence = None
+                continue
+            fence.append(line)
+        return blocks
+
+    def test_readme_snippets_are_valid_json(self):
+        blocks = self.install_json_blocks()
+        claude = [b for b in blocks if "extraKnownMarketplaces" in b]
+        opencode = [b for b in blocks if "skills" in b]
+        self.assertEqual(len(claude), 1, "expected one Claude settings.json snippet")
+        self.assertEqual(len(opencode), 1, "expected one OpenCode config snippet")
+
+        marketplace = claude[0]["extraKnownMarketplaces"]["agentic-development-skills"]
+        self.assertIs(marketplace["autoUpdate"], True)
+        self.assertEqual(marketplace["source"]["source"], "url")
+        self.assertTrue(marketplace["source"]["url"].endswith("/claude/marketplace.json"))
+        self.assertIs(claude[0]["enabledPlugins"]["harness-audit@agentic-development-skills"], True)
+
+        self.assertEqual(
+            opencode[0]["skills"],
+            ["https://raidenyn.github.io/agentic-development-skills/opencode/"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
