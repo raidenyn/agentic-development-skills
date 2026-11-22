@@ -1,0 +1,104 @@
+name: Release
+
+# A newer dispatch replaces a pending one: GitHub keeps at most one pending run
+# per concurrency group. cancel-in-progress stays false, so a dispatch never
+# interrupts a release that is already running.
+on: workflow_dispatch
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref_type == 'branch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Keep the default credentials: semantic-release pushes the tag and
+          # the release notes with them.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-dev.txt
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Validate Claude Code marketplace manifest
+        run: npx -y @anthropic-ai/claude-code@2.1.330 plugin validate .
+
+      - name: Release
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  pages:
+    # This job never reads the release job's outputs. It always works the
+    # version out again from GitHub releases, so re-running it after a failed
+    # Pages deploy publishes the newest release.
+    if: github.ref_type == 'branch' && github.ref == 'refs/heads/main'
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          # gh reads GH_TOKEN instead of these credentials.
+          persist-credentials: false
+
+      - name: Pick the published release to deploy
+        id: pick
+        run: python3 scripts/pages_release.py
+
+      # The full ref keeps a branch that shares the tag name from being picked.
+      - name: Check out the release tag
+        if: steps.pick.outputs.tag != ''
+        run: git checkout --detach "refs/tags/$TAG"
+        env:
+          TAG: ${{ steps.pick.outputs.tag }}
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: steps.pick.outputs.tag != ''
+        with:
+          python-version: "3.15"
+
+      - name: Install Python dependencies
+        if: steps.pick.outputs.tag != ''
+        run: pip install -r requirements-dev.txt
+
+      - name: Build the Pages site
+        if: steps.pick.outputs.tag != ''
+        run: python3 scripts/skills.py build-pages --version "$VERSION" --out _site
+        env:
+          VERSION: ${{ steps.pick.outputs.version }}
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: steps.pick.outputs.tag != ''
+        with:
+          path: _site
+
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        if: steps.pick.outputs.tag != ''
+        id: deploy
