@@ -6,7 +6,8 @@ Usage:
 
 The release workflow runs this after semantic-release. It re-derives the tag
 from GitHub on every run instead of reading the `release` job's outputs, so a
-re-run with Pages failed still deploys the newest published release.
+new run with Pages failed still deploys the newest published release. Do not
+re-run the failed run's pages job: it can reuse an old artifact.
 
 The choice is, in order:
   1. the orphan check: the highest stable tag merged into `origin/main`

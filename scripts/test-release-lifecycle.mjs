@@ -188,3 +188,25 @@ test("a failing prepareCmd aborts the release before tagging", async (t) => {
   assert.notEqual(result.code, 0, describeRun(result));
   assert.deepEqual(await remoteRefs(bare, env), before, "a failing prepareCmd must not push refs");
 });
+
+test("a stale clone exits 0 without releasing when remote main has moved on", async (t) => {
+  const { bare, clone, env } = await createRepositories(t);
+  const directory = path.dirname(bare);
+  const other = path.join(directory, "other");
+  await git(directory, ["clone", bare, other], env);
+  await git(other, ["commit", "--allow-empty", "-m", "fix: merged out of band"], env);
+  await git(other, ["push", "origin", "main"], env);
+  const before = await remoteRefs(bare, env);
+
+  const result = await runSemanticRelease(clone, env);
+  assert.equal(result.code, 0, describeRun(result));
+  assert.match(result.stdout + result.stderr, /behind the remote one/, describeRun(result));
+
+  const after = await remoteRefs(bare, env);
+  assert.deepEqual(after, before, "a stale clone must not add any refs");
+  assert.equal(
+    after.filter(({ ref }) => ref.startsWith("refs/tags/")).length,
+    before.filter(({ ref }) => ref.startsWith("refs/tags/")).length,
+    "a stale clone must not add a tag",
+  );
+});

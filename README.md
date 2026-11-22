@@ -98,7 +98,7 @@ scripts/pages_release.py           # picks the published release the Pages job d
 scripts/test_pages_release.py      # tests for pages_release.py
 scripts/test_skills.py             # Python tests for skills.py and this repo's docs
 scripts/test-release-rules.mjs     # Node tests: bump rules and release notes
-scripts/test-release-lifecycle.mjs # Node tests: package.json and workflow wiring
+scripts/test-release-lifecycle.mjs # Node tests: semantic-release runs against a scratch bare remote
 .githooks/commit-msg               # local commit-msg hook (`install-hooks` enables it)
 .releaserc.json                    # semantic-release: bump rules, notes sections, catalog check
 .nvmrc                             # Node version for the release toolchain
@@ -137,7 +137,7 @@ Every commit and PR title follows [Conventional Commits](https://www.conventiona
 
 Allowed types: `feat`, `fix`, `perf`, `docs`, `chore`, `ci`, `build`, `refactor`, `test`, `style`, `revert`.
 
-GitHub squashes with the PR title as the commit subject and the PR body as the commit body, so the title picks the bump, and a `BREAKING CHANGE:` line in the description makes it major. Keep GitHub's default squash message (`<PR title> (#<number>)`) rather than writing your own.
+GitHub squashes with the PR title as the commit subject and the PR body as the commit body, so the title picks the bump, and a `BREAKING CHANGE:` line in the description makes it major. Keep GitHub's default squash message (`<PR title> (#<number>)`) rather than writing your own. The parser matches `BREAKING CHANGE:` or `BREAKING-CHANGE:` at the start of a line, case-insensitively, including inside code fences, so a PR body that merely discusses the convention can still trigger a major bump.
 
 A commit whose header does not parse still gets a patch bump, but it appears in no notes section, so a release made only of such commits has empty notes.
 
@@ -154,21 +154,21 @@ python3 scripts/skills.py install-hooks
 3. The release job works out the version and the notes, validates the skills, builds the catalog, then pushes the tag and creates the GitHub release.
 4. The Pages job then checks out the newest published release, builds the catalogs for its version and deploys them.
 
-The Release workflow runs one at a time. A newer dispatch replaces a pending one, and a dispatch never interrupts a run already in progress. The run that goes ahead releases every unreleased commit, including ones merged while it waited.
+The Release workflow runs one at a time. A newer dispatch replaces a pending one, and a dispatch never interrupts a run already in progress. The run that goes ahead releases every unreleased commit on `main` as of the start of its release job, including ones merged while it waited. A merge after that checkout still makes semantic-release skip the release with "the local branch main is behind the remote one" and exit successfully; start a new run in that case.
 
 ### Previewing locally
 
 ```bash
 GITHUB_TOKEN=<token with push access> npx semantic-release --dry-run --no-ci
-python3 scripts/skills.py build-pages --version 0.0.0-dev --out /tmp/site
+python3 scripts/skills.py build-pages --version 0.0.0-dev --out "$(mktemp -d)/site"
 ```
 
-The dry run prints the next version and the notes. It still needs a `GITHUB_TOKEN` with push access, because semantic-release checks that it can push the tag, and it skips the `prepare` step, so it does not test the catalog build; the `build-pages` command does that.
+The dry run prints the next version and the notes. It still needs a `GITHUB_TOKEN` with push access, because semantic-release checks that it can push the tag, and it skips the `prepare` step, so it does not test the catalog build; the `build-pages` command does that. It also needs a local `main` that is up to date with `origin/main`, because semantic-release publishes nothing from a branch that is behind the remote.
 
 ### Recovery
 
 - **The Pages deploy failed.** Start a new release run (Actions → Release → Run workflow on `main`); do not re-run the old run's job, which can reuse an old artifact. No new commits means no new release, and the Pages job redeploys the latest published release.
-- **The tag exists but the GitHub release does not.** The run failed between pushing the tag and creating the release, and the Pages job leaves the previous deployment in place, printing `See README → Releasing → Recovery`. Delete the orphan tag and start a new run:
+- **The tag exists but the GitHub release does not.** The run failed between pushing the tag and creating the release. Its Pages job never started, because it needs the release job, so the previous deployment stays in place; the next run's Pages job fails the orphan check and prints `See README → Releasing → Recovery`. Delete the orphan tag and start a new run:
 
   ```bash
   git push origin :refs/tags/vX.Y.Z

@@ -18,6 +18,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Release main as of the start of this job, including merges that
+          # happened while the run waited in the concurrency queue.
+          ref: main
           # Keep the default credentials: semantic-release pushes the tag and
           # the release notes with them.
           fetch-depth: 0
@@ -46,8 +49,9 @@ jobs:
 
   pages:
     # This job never reads the release job's outputs. It always works the
-    # version out again from GitHub releases, so re-running it after a failed
-    # Pages deploy publishes the newest release.
+    # version out again from GitHub releases, so a new run after a failed
+    # Pages deploy publishes the newest release. Do not re-run the failed
+    # run's pages job: it can reuse an old artifact.
     if: github.ref_type == 'branch' && github.ref == 'refs/heads/main'
     needs: release
     runs-on: ubuntu-latest

@@ -13,7 +13,7 @@ The release workflow SHALL run only when triggered manually (`workflow_dispatch`
 
 #### Scenario: Overlapping runs
 - **WHEN** a second Release run starts while one is in progress
-- **THEN** the second run waits for the first to finish and does not cancel it. A newer dispatch may replace a run that is still pending, which is GitHub's default; the run that goes ahead releases all unreleased commits
+- **THEN** the second run waits for the first to finish and does not cancel it. A newer dispatch may replace a run that is still pending, which is GitHub's default; the run that goes ahead releases every unreleased commit on `main` as of the start of its release job, including ones merged while it waited. A merge after that checkout makes semantic-release skip the release with "behind the remote one" and exit successfully; start a new run in that case
 
 ### Requirement: Semantic version bump from Conventional Commits
 The release SHALL compute the next version from the commits since the last release tag (`v*`, starting from the `v0.0.0` seed tag). A breaking change on any type (`!` or a `BREAKING CHANGE:` footer) SHALL give a major bump. `feat` SHALL give a minor bump. Every other commit, including headers that don't parse, SHALL give a patch bump. The highest bump SHALL win.
