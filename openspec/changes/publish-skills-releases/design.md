@@ -176,7 +176,7 @@ The owner chose **B**.
   - A newer dispatch replaces a pending one, which is GitHub's default. The run that goes ahead releases every unreleased commit on `main` as of the start of its release job, including ones merged while it waited. A merge after that checkout makes semantic-release skip the release with "behind the remote one" and exit successfully; start a new run in that case.
 - semantic-release also pushes its own git notes ref (`refs/notes/semantic-release*`) next to the tag. That's allowed: no branch changes.
 - **Job `release`** (`permissions: contents: write`):
-  1. checkout with `fetch-depth: 0`;
+  1. checkout of `main` with `ref: main` and `fetch-depth: 0`, so the run releases main as of the start of its release job;
   2. setup-python (Python 3.15) and `pip install -r requirements-dev.txt`;
   3. setup-node (`.nvmrc`, Node 26.13.1) and `npm ci`;
   4. `claude plugin validate .` (same pinned version as `validate.yml`);
