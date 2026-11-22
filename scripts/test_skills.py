@@ -5,6 +5,8 @@ Run with: python3 -m unittest scripts/test_skills.py -v
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -406,6 +408,146 @@ class CommitMsgTests(unittest.TestCase):
                 result = self.run_cli("check-commit-msg", *args)
                 self.assertEqual(result.returncode, 1)
                 self.assertIn("exactly one of PATH or --text", result.stderr)
+
+
+class InstallHooksTests(unittest.TestCase):
+    """`install-hooks` and the committed `commit-msg` hook."""
+
+    # -- helpers ---------------------------------------------------------
+
+    def make_hook_repo(self) -> Path:
+        """A repo with skills.py and the hook committed, as a clone has them.
+
+        The hook must be committed before a linked worktree is added: a
+        worktree only contains committed files, so an uncommitted hook would
+        be missing there and the worktree test could pass for the wrong reason.
+        """
+        repo = tmpdir() / "repo"
+        repo.mkdir()
+        run_git("init", "-q", "-b", "main", cwd=repo)
+        (repo / "scripts").mkdir()
+        shutil.copyfile(ROOT / "scripts" / "skills.py", repo / "scripts" / "skills.py")
+        hook = repo / ".githooks" / "commit-msg"
+        hook.parent.mkdir()
+        shutil.copyfile(ROOT / ".githooks" / "commit-msg", hook)
+        hook.chmod(0o755)
+        run_git("add", ".", cwd=repo)
+        run_git("commit", "-q", "--no-verify", "-m", "chore: fixture", cwd=repo)
+        return repo
+
+    def install(self, repo: Path, force: bool = False) -> tuple[int, str]:
+        """Call install_hooks and return (exit code, its stdout and stderr)."""
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = skills.install_hooks(repo, force=force)
+        return code, out.getvalue() + err.getvalue()
+
+    def run_cli(self, *args: str, cwd: Path) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, "scripts/skills.py", *args],
+            cwd=cwd,
+            env=git_env(),
+            capture_output=True,
+            text=True,
+        )
+
+    def hooks_path(self, repo: Path) -> str:
+        return run_git("config", "core.hooksPath", cwd=repo).stdout.strip()
+
+    # -- tests -----------------------------------------------------------
+
+    def test_install_sets_hooks_path_and_is_idempotent(self):
+        repo = self.make_hook_repo()
+        code, output = self.install(repo)
+        self.assertEqual(code, 0)
+        self.assertIn("core.hooksPath set to .githooks", output)
+        self.assertEqual(self.hooks_path(repo), ".githooks")
+
+        code, output = self.install(repo)
+        self.assertEqual(code, 0)
+        self.assertIn("core.hooksPath already .githooks", output)
+        self.assertEqual(self.hooks_path(repo), ".githooks")
+
+    def test_hook_rejects_non_conventional_header(self):
+        repo = self.make_hook_repo()
+        self.assertEqual(self.install(repo)[0], 0)
+        result = run_git(
+            "commit", "--allow-empty", "-m", "update stuff", cwd=repo, check=False
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid commit header", result.stderr)
+
+    def test_hook_accepts_conventional_header(self):
+        repo = self.make_hook_repo()
+        self.assertEqual(self.install(repo)[0], 0)
+        result = run_git(
+            "commit", "--allow-empty", "-m", "chore: ok", cwd=repo, check=False
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_hook_applies_in_linked_worktree(self):
+        repo = self.make_hook_repo()
+        self.assertEqual(self.install(repo)[0], 0)
+        wt = repo.parent / "wt"
+        run_git("worktree", "add", "-q", str(wt), cwd=repo)
+        result = run_git(
+            "commit", "--allow-empty", "-m", "update stuff", cwd=wt, check=False
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid commit header", result.stderr)
+
+    def test_refuses_to_replace_another_hooks_path(self):
+        repo = self.make_hook_repo()
+        run_git("config", "core.hooksPath", "/somewhere/else", cwd=repo)
+
+        refused = self.run_cli("install-hooks", cwd=repo)
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn(
+            "core.hooksPath is '/somewhere/else'; refusing to replace it (use --force)",
+            refused.stderr,
+        )
+        self.assertEqual(self.hooks_path(repo), "/somewhere/else")
+
+        forced = self.run_cli("install-hooks", "--force", cwd=repo)
+        self.assertEqual(forced.returncode, 0, forced.stderr)
+        self.assertIn("core.hooksPath set to .githooks", forced.stdout)
+        self.assertEqual(self.hooks_path(repo), ".githooks")
+
+    def test_not_a_checkout_is_reported_without_traceback(self):
+        code, output = self.install(tmpdir())
+        self.assertEqual(code, 1)
+        self.assertIn("not a git checkout (or git not found)", output)
+        self.assertNotIn("Traceback", output)
+
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "skills.py"), "install-hooks"],
+            cwd=tmpdir(),
+            env=git_env(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("not a git checkout (or git not found)", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_cli_runs_without_yaml(self):
+        repo = self.make_hook_repo()
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import sys,runpy; sys.modules['yaml']=None; "
+                "sys.argv=['skills.py','install-hooks']; "
+                "runpy.run_path('scripts/skills.py', run_name='__main__')",
+            ],
+            cwd=repo,
+            env=git_env(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("core.hooksPath set to .githooks", result.stdout)
+        self.assertEqual(self.hooks_path(repo), ".githooks")
 
 
 if __name__ == "__main__":

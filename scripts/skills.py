@@ -5,6 +5,7 @@ Usage:
     python3 scripts/skills.py validate
     python3 scripts/skills.py new <skill-name> "<description>" [--category CATEGORY]
     python3 scripts/skills.py check-commit-msg [PATH] [--text TITLE]
+    python3 scripts/skills.py install-hooks [--force]
 
 `validate` checks every skills/<name>/SKILL.md against the Agent Skills spec
 (https://agentskills.io/specification) and checks that
@@ -17,9 +18,13 @@ marketplace entry.
 commit-msg hook) or a PR title (title mode) against the Conventional Commits
 header rule.
 
+`install-hooks` points this checkout's `core.hooksPath` at the committed
+`.githooks` directory, so the commit-msg hook runs. It is safe to run again
+and refuses to replace a different value unless `--force` is given.
+
 Requires Python 3.9+ and, for `validate` and `new`, PyYAML
 (`pip install -r requirements-dev.txt`). The YAML import is lazy, so other
-subcommands, `check-commit-msg` included, run without it.
+subcommands, `check-commit-msg` and `install-hooks` included, run without it.
 """
 from __future__ import annotations
 
@@ -316,6 +321,72 @@ def check_commit_msg_cli(path: str | None, text: str | None) -> int:
     return 0
 
 
+NOT_A_CHECKOUT = "not a git checkout (or git not found)"
+
+
+def git_toplevel(cwd: Path) -> Path | None:
+    """Return the working-tree root containing cwd, or None outside a checkout."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return None
+    if result.returncode != 0:
+        return None
+    root = result.stdout.strip()
+    return Path(root) if root else None
+
+
+def install_hooks(repo: Path, force: bool) -> int:
+    """Point repo's core.hooksPath at .githooks, refusing another value."""
+    try:
+        current = subprocess.run(
+            ["git", "config", "--get", "core.hooksPath"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        # `--get` exits 1 when the key is absent; anything else is a git error
+        # (a directory outside a checkout makes the later write fail instead).
+        if current.returncode not in (0, 1):
+            raise subprocess.CalledProcessError(current.returncode, current.args)
+        value = current.stdout.strip() if current.returncode == 0 else None
+        if value == ".githooks":
+            print("core.hooksPath already .githooks")
+            return 0
+        if value and not force:
+            print(
+                f"core.hooksPath is '{value}'; refusing to replace it (use --force)",
+                file=sys.stderr,
+            )
+            return 1
+        subprocess.run(
+            ["git", "config", "core.hooksPath", ".githooks"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        print(NOT_A_CHECKOUT, file=sys.stderr)
+        return 1
+    print("core.hooksPath set to .githooks")
+    return 0
+
+
+def install_hooks_cli(force: bool) -> int:
+    """Run `install-hooks` against the checkout that contains the current directory."""
+    root = git_toplevel(Path.cwd())
+    if root is None:
+        print(NOT_A_CHECKOUT, file=sys.stderr)
+        return 1
+    return install_hooks(root, force)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -327,11 +398,17 @@ def main() -> int:
     p_cm = sub.add_parser("check-commit-msg", help="check a commit message or PR title")
     p_cm.add_argument("path", nargs="?", help="commit message file (file mode)")
     p_cm.add_argument("--text", metavar="TITLE", help="PR title to check (title mode)")
+    p_install = sub.add_parser("install-hooks", help="point core.hooksPath at .githooks")
+    p_install.add_argument(
+        "--force", action="store_true", help="replace a different core.hooksPath"
+    )
     args = parser.parse_args()
     if args.cmd == "validate":
         return validate()
     if args.cmd == "check-commit-msg":
         return check_commit_msg_cli(args.path, args.text)
+    if args.cmd == "install-hooks":
+        return install_hooks_cli(args.force)
     return new(args.name, args.description, args.category)
 
 
