@@ -401,7 +401,7 @@ return (candidates[-1] if candidates else None), None
       6. `python3 scripts/skills.py build-pages --version "$VERSION" --out _site` with `env: VERSION: ${{ steps.pick.outputs.version }}`;
       7. upload-pages-artifact with `path: _site`;
       8. `id: deploy` with deploy-pages.
-- [ ] **Step 3: Lint.** Run `npx -y @action-validator/cli@0.6.0 .github/workflows/*.yml`. Expected: exit 0 for all three files. Then run `grep -c '@[0-9a-f]\{40\}' .github/workflows/*.yml`. Expected: every `uses:` line is SHA-pinned (`grep -n 'uses:' … | grep -v '@[0-9a-f]\{40\}'` prints nothing).
+- [ ] **Step 3: Lint.** Run `for f in .github/workflows/*.yml; do npx -y @action-validator/cli@0.6.0 "$f" || exit 1; done`. The pinned CLI takes exactly one path, so a glob passed as several arguments fails before linting. Expected: exit 0 for all three files. Then run `grep -c '@[0-9a-f]\{40\}' .github/workflows/*.yml`. Expected: every `uses:` line is SHA-pinned (`grep -n 'uses:' … | grep -v '@[0-9a-f]\{40\}'` prints nothing).
 - [ ] **Step 4: Commit.** `git add .github/workflows && git commit -m "ci: add release workflow and move validate to current pinned toolchain"`
 
 ### Task 10: README and AGENTS.md
