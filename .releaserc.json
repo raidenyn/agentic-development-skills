@@ -1,0 +1,53 @@
+{
+  "branches": ["main"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits",
+        "releaseRules": [
+          { "breaking": true, "release": "major" },
+          { "type": "feat", "release": "minor" },
+          { "release": "patch" }
+        ]
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits",
+        "presetConfig": {
+          "types": [
+            { "type": "feat", "section": "Features" },
+            { "type": "fix", "section": "Bug Fixes" },
+            { "type": "perf", "section": "Performance" },
+            { "type": "docs", "section": "Documentation" },
+            { "type": "chore", "section": "Other" },
+            { "type": "ci", "section": "Other" },
+            { "type": "build", "section": "Other" },
+            { "type": "refactor", "section": "Other" },
+            { "type": "test", "section": "Other" },
+            { "type": "style", "section": "Other" },
+            { "type": "revert", "section": "Other" }
+          ]
+        }
+      }
+    ],
+    [
+      "@semantic-release/exec",
+      {
+        "verifyReleaseCmd": "python3 scripts/skills.py validate",
+        "prepareCmd": "rm -rf _release-check && python3 scripts/skills.py build-pages --version ${nextRelease.version} --out _release-check"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "successCommentCondition": false,
+        "failCommentCondition": false,
+        "releasedLabels": false
+      }
+    ]
+  ]
+}
