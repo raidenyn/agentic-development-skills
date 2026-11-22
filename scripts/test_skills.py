@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).parent))
@@ -436,10 +437,11 @@ class InstallHooksTests(unittest.TestCase):
         return repo
 
     def install(self, repo: Path, force: bool = False) -> tuple[int, str]:
-        """Call install_hooks and return (exit code, its stdout and stderr)."""
+        """Call install_hooks under the same isolated git environment as git itself."""
         out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = skills.install_hooks(repo, force=force)
+        with mock.patch.dict(os.environ, git_env()):
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = skills.install_hooks(repo, force=force)
         return code, out.getvalue() + err.getvalue()
 
     def run_cli(self, *args: str, cwd: Path) -> subprocess.CompletedProcess:
