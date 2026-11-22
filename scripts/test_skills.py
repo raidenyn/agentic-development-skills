@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -219,7 +220,24 @@ class CommitMsgTests(unittest.TestCase):
         tmp = tmpdir()
         script = tmp / "scripts" / "skills.py"
         script.parent.mkdir()
-        # A recording checker, so the test can see the exact bytes argv received.
+        title = "feat: $(touch pwned)"
+
+        def run_workflow_line() -> subprocess.CompletedProcess:
+            return subprocess.run(
+                ["sh", "-c", 'python3 scripts/skills.py check-commit-msg --text="$TITLE"'],
+                cwd=tmp,
+                env=git_env({"TITLE": title}),
+                capture_output=True,
+                text=True,
+            )
+
+        # 1. The real checker: the title is data, so nothing runs and it's accepted.
+        shutil.copyfile(ROOT / "scripts" / "skills.py", script)
+        result = run_workflow_line()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((tmp / "pwned").exists(), "the title was executed as shell code")
+
+        # 2. A recording checker, so the test can see the exact bytes argv received.
         script.write_text(
             "import sys\n"
             "values = [a for a in sys.argv[1:] if a.startswith('--text=')]\n"
@@ -227,14 +245,7 @@ class CommitMsgTests(unittest.TestCase):
             "print(values[0][len('--text='):], end='')\n",
             encoding="utf-8",
         )
-        title = "feat: $(touch pwned)"
-        result = subprocess.run(
-            ["sh", "-c", 'python3 scripts/skills.py check-commit-msg --text="$TITLE"'],
-            cwd=tmp,
-            env=git_env({"TITLE": title}),
-            capture_output=True,
-            text=True,
-        )
+        result = run_workflow_line()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse((tmp / "pwned").exists(), "the title was executed as shell code")
         self.assertEqual(result.stdout, title)
