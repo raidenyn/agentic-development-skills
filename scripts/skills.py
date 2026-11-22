@@ -4,6 +4,7 @@
 Usage:
     python3 scripts/skills.py validate
     python3 scripts/skills.py new <skill-name> "<description>" [--category CATEGORY]
+    python3 scripts/skills.py check-commit-msg [PATH] [--text TITLE]
 
 `validate` checks every skills/<name>/SKILL.md against the Agent Skills spec
 (https://agentskills.io/specification) and checks that
@@ -12,15 +13,20 @@ Usage:
 `new` copies template/SKILL.md into skills/<name>/ and adds the matching
 marketplace entry.
 
+`check-commit-msg` checks a git commit message file (file mode, used by the
+commit-msg hook) or a PR title (title mode) against the Conventional Commits
+header rule.
+
 Requires Python 3.9+ and, for `validate` and `new`, PyYAML
 (`pip install -r requirements-dev.txt`). The YAML import is lazy, so other
-subcommands run without it.
+subcommands, `check-commit-msg` included, run without it.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import re
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -48,6 +54,25 @@ SPEC_KEYS = {"name", "description", "license", "compatibility", "metadata", "all
 RESERVED_PREFIXES = ("claude-", "anthropic-", "anthropics-", "cc-plugin-")
 RESERVED_NAMES = {"claude", "anthropic", "anthropics", "claude-code", "claude-mods"}
 MAX_SKILL_LINES = 500
+
+HEADER_RE = re.compile(
+    r"^(feat|fix|perf|docs|chore|ci|build|refactor|test|style|revert)"
+    r"(\([a-z0-9-]+\))?!?: \S.*"
+)
+# GitHub appends " (#N)" when it squashes, so a local header gets the larger budget.
+HEADER_LIMIT = 100
+TITLE_LIMIT = 92
+COMMIT_TYPES = "feat, fix, perf, docs, chore, ci, build, refactor, test, style, revert"
+# Headers git writes itself, and the autosquash prefixes git rebases later.
+COMMIT_PASS_PREFIXES = (
+    "Merge ",
+    'Revert "',
+    'Reapply "',
+    "fixup! ",
+    "squash! ",
+    "amend! ",
+)
+SCISSORS_TAIL = " ------------------------ >8 ------------------------"
 
 
 def read_frontmatter(path: Path) -> tuple[dict | None, str, str | None]:
@@ -213,6 +238,84 @@ def new(name: str, description: str, category: str, root: Path = ROOT) -> int:
     return 0
 
 
+def check_header(header: str, limit: int) -> str | None:
+    """Check one commit header or PR title, returning an error message or None."""
+    if len(header) > limit:
+        return f"header is {len(header)} characters (max {limit})"
+    if not HEADER_RE.match(header):
+        return (
+            f"invalid commit header: '{header}'\n"
+            "expected '<type>(<scope>)!: <subject>', e.g. 'feat: add sandbox checks'\n"
+            f"types: {COMMIT_TYPES}"
+        )
+    return None
+
+
+def check_commit_msg(text: str, mode: str, comment_char: str = "#") -> str | None:
+    """Check a commit message file (`file`) or a PR title (`title`).
+
+    File mode normalises CRLF, cuts everything from git's scissors line, drops
+    comment lines, and passes headers git wrote itself. Title mode is strict.
+    """
+    if mode == "title":
+        return check_header(text.rstrip("\n"), TITLE_LIMIT)
+    if mode != "file":
+        raise ValueError(f"unknown mode: {mode!r}")
+
+    scissors = comment_char + SCISSORS_TAIL
+    lines = text.replace("\r\n", "\n").split("\n")
+    for i, line in enumerate(lines):
+        if line == scissors:
+            lines = lines[:i]
+            break
+    header = next(
+        (line for line in lines if line.strip() and not line.startswith(comment_char)), None
+    )
+    if header is None:
+        # git aborts an empty message itself; the hook says nothing.
+        return None
+    if header.startswith(COMMIT_PASS_PREFIXES):
+        return None
+    return check_header(header, HEADER_LIMIT)
+
+
+def git_comment_char(cwd: Path) -> str:
+    """Return the comment character git will use for a commit message in cwd."""
+    for key in ("core.commentString", "core.commentChar"):
+        try:
+            result = subprocess.run(
+                ["git", "config", "--get", key], cwd=cwd, capture_output=True, text=True
+            )
+        except OSError:  # git is not installed; the default still applies
+            return "#"
+        if result.returncode != 0:
+            continue
+        value = result.stdout.strip()
+        # `auto` means git picks a character itself; the hook can't know which.
+        return value if value and value != "auto" else "#"
+    return "#"
+
+
+def check_commit_msg_cli(path: str | None, text: str | None) -> int:
+    """Run `check-commit-msg`; exactly one of path and text must be given."""
+    if (path is None) == (text is None):
+        print("error: pass exactly one of PATH or --text", file=sys.stderr)
+        return 1
+    if text is not None:
+        error = check_commit_msg(text, "title")
+    else:
+        try:
+            message = Path(path).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"error: cannot read {path}: {exc}", file=sys.stderr)
+            return 1
+        error = check_commit_msg(message, "file", git_comment_char(Path.cwd()))
+    if error:
+        print(error, file=sys.stderr)
+        return 1
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -221,9 +324,14 @@ def main() -> int:
     p_new.add_argument("name")
     p_new.add_argument("description")
     p_new.add_argument("--category", default="development")
+    p_cm = sub.add_parser("check-commit-msg", help="check a commit message or PR title")
+    p_cm.add_argument("path", nargs="?", help="commit message file (file mode)")
+    p_cm.add_argument("--text", metavar="TITLE", help="PR title to check (title mode)")
     args = parser.parse_args()
     if args.cmd == "validate":
         return validate()
+    if args.cmd == "check-commit-msg":
+        return check_commit_msg_cli(args.path, args.text)
     return new(args.name, args.description, args.category)
 
 
