@@ -12,7 +12,9 @@ Usage:
 `new` copies template/SKILL.md into skills/<name>/ and adds the matching
 marketplace entry.
 
-Requires Python 3.9+ and PyYAML (`pip install pyyaml`).
+Requires Python 3.9+ and, for `validate` and `new`, PyYAML
+(`pip install -r requirements-dev.txt`). The YAML import is lazy, so other
+subcommands run without it.
 """
 from __future__ import annotations
 
@@ -20,17 +22,24 @@ import argparse
 import json
 import re
 import sys
+import types
 from pathlib import Path
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover
-    sys.exit("PyYAML is required: pip install pyyaml")
-
 ROOT = Path(__file__).resolve().parent.parent
-SKILLS_DIR = ROOT / "skills"
-TEMPLATE = ROOT / "template" / "SKILL.md"
-MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
+
+_yaml: types.ModuleType | None = None  # imported by load_yaml() on first use
+
+
+def load_yaml() -> types.ModuleType:
+    """Import PyYAML on first use, or exit with an install hint."""
+    global _yaml
+    if _yaml is None:
+        try:
+            import yaml
+        except ImportError:  # pragma: no cover
+            sys.exit("PyYAML is required: pip install -r requirements-dev.txt")
+        _yaml = yaml
+    return _yaml
 
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 # Keys from the open Agent Skills spec. These are the only keys claude.ai and
@@ -42,6 +51,7 @@ MAX_SKILL_LINES = 500
 
 
 def read_frontmatter(path: Path) -> tuple[dict | None, str, str | None]:
+    yaml = load_yaml()
     text = path.read_text(encoding="utf-8")
     if not text.startswith("---\n"):
         return None, text, "SKILL.md must start with a '---' YAML frontmatter block"
@@ -72,14 +82,19 @@ def check_name(name: object, where: str, errors: list[str]) -> None:
         errors.append(f"{where}: name '{name}' is reserved by Claude Code for plugins")
 
 
-def validate() -> int:
+def validate(root: Path = ROOT) -> int:
     errors: list[str] = []
     warnings: list[str] = []
 
-    skill_dirs = sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir()) if SKILLS_DIR.is_dir() else []
+    skills_dir = root / "skills"
+    marketplace_path = root / ".claude-plugin" / "marketplace.json"
+    skills_rel = skills_dir.relative_to(root)
+    market_rel = marketplace_path.relative_to(root)
+
+    skill_dirs = sorted(p for p in skills_dir.iterdir() if p.is_dir()) if skills_dir.is_dir() else []
     skill_names = set()
     for d in skill_dirs:
-        rel = d.relative_to(ROOT)
+        rel = d.relative_to(root)
         skill_md = d / "SKILL.md"
         if not skill_md.is_file():
             errors.append(f"{rel}: missing SKILL.md")
@@ -121,30 +136,30 @@ def validate() -> int:
 
     # Marketplace consistency.
     try:
-        market = json.loads(MARKETPLACE.read_text(encoding="utf-8"))
+        market = json.loads(marketplace_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        errors.append(f"{MARKETPLACE.relative_to(ROOT)}: cannot read: {exc}")
+        errors.append(f"{market_rel}: cannot read: {exc}")
         market = {"plugins": []}
     entries = market.get("plugins", [])
     seen: dict[str, int] = {}
     for i, entry in enumerate(entries):
         name = entry.get("name")
-        where = f"marketplace.json plugins[{i}]"
+        where = f"{market_rel} plugins[{i}]"
         check_name(name, where, errors)
         seen[name] = seen.get(name, 0) + 1
         expected = f"./skills/{name}"
         if entry.get("source") != expected:
             errors.append(f"{where}: source must be '{expected}', found '{entry.get('source')}'")
         if name not in skill_names:
-            errors.append(f"{where}: no skill directory skills/{name}/")
+            errors.append(f"{where}: no skill directory {skills_rel}/{name}/")
         if not entry.get("description"):
             errors.append(f"{where}: description is required")
     for name, count in seen.items():
         if count > 1:
-            errors.append(f"marketplace.json: plugin '{name}' is listed {count} times")
+            errors.append(f"{market_rel}: plugin '{name}' is listed {count} times")
     for name in sorted(skill_names - set(seen)):
         errors.append(
-            f"skills/{name}/: not listed in .claude-plugin/marketplace.json "
+            f"{skills_rel}/{name}/: not listed in {market_rel} "
             "(add an entry, or create skills with: python3 scripts/skills.py new)"
         )
 
@@ -156,25 +171,29 @@ def validate() -> int:
     return 1 if errors else 0
 
 
-def new(name: str, description: str, category: str) -> int:
+def new(name: str, description: str, category: str, root: Path = ROOT) -> int:
     errors: list[str] = []
     check_name(name, "name", errors)
     if len(description) > 1024 or "<" in description or ">" in description:
         errors.append("description must be at most 1024 characters with no '<' or '>'")
-    target = SKILLS_DIR / name
+    skills_dir = root / "skills"
+    template = root / "template" / "SKILL.md"
+    marketplace_path = root / ".claude-plugin" / "marketplace.json"
+    target = skills_dir / name
     if target.exists():
-        errors.append(f"skills/{name} already exists")
+        errors.append(f"{target.relative_to(root)} already exists")
     if errors:
         for e in errors:
             print(f"error: {e}")
         return 1
 
-    body = TEMPLATE.read_text(encoding="utf-8")
+    body = template.read_text(encoding="utf-8")
     body = body.replace("{{name}}", name).replace("{{description}}", json.dumps(description))
     target.mkdir(parents=True)
-    (target / "SKILL.md").write_text(body, encoding="utf-8")
+    skill_md = target / "SKILL.md"
+    skill_md.write_text(body, encoding="utf-8")
 
-    market = json.loads(MARKETPLACE.read_text(encoding="utf-8"))
+    market = json.loads(marketplace_path.read_text(encoding="utf-8"))
     market.setdefault("plugins", []).append(
         {
             "name": name,
@@ -184,8 +203,13 @@ def new(name: str, description: str, category: str) -> int:
         }
     )
     market["plugins"].sort(key=lambda p: p["name"])
-    MARKETPLACE.write_text(json.dumps(market, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"Created skills/{name}/SKILL.md and added it to .claude-plugin/marketplace.json")
+    marketplace_path.write_text(
+        json.dumps(market, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    print(
+        f"Created {skill_md.relative_to(root)} and added it to "
+        f"{marketplace_path.relative_to(root)}"
+    )
     return 0
 
 
