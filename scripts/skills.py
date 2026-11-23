@@ -4,6 +4,9 @@
 Usage:
     python3 scripts/skills.py validate
     python3 scripts/skills.py new <skill-name> "<description>" [--category CATEGORY]
+    python3 scripts/skills.py check-commit-msg [PATH] [--text TITLE]
+    python3 scripts/skills.py install-hooks [--force]
+    python3 scripts/skills.py build-pages --version X.Y.Z --out DIR
 
 `validate` checks every skills/<name>/SKILL.md against the Agent Skills spec
 (https://agentskills.io/specification) and checks that
@@ -12,27 +15,58 @@ Usage:
 `new` copies template/SKILL.md into skills/<name>/ and adds the matching
 marketplace entry.
 
-Requires Python 3.9+ and PyYAML (`pip install pyyaml`).
+`build-pages` validates the repository, then writes the static catalogs for a
+release into DIR: opencode/index.json plus a byte-for-byte copy of every skill
+file under DIR/opencode/<name>/, a URL-based Claude marketplace at
+DIR/claude/marketplace.json, and DIR/index.html with the skill table and the
+install snippets. It builds into a temporary directory and renames it into
+place at the end, so a failed build leaves no partial catalog.
+
+`check-commit-msg` checks a git commit message file (file mode, used by the
+commit-msg hook) or a PR title (title mode) against the Conventional Commits
+header rule.
+
+`install-hooks` points this checkout's `core.hooksPath` at the committed
+`.githooks` directory, so the commit-msg hook runs. It is safe to run again
+and refuses to replace a different value unless `--force` is given.
+
+Requires Python 3.9+ and, for `validate`, `new` and `build-pages`, PyYAML
+(`pip install -r requirements-dev.txt`). The YAML import is lazy, so other
+subcommands, `check-commit-msg` and `install-hooks` included, run without it.
 """
 from __future__ import annotations
 
 import argparse
+import html
 import json
+import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
+import types
 from pathlib import Path
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover
-    sys.exit("PyYAML is required: pip install pyyaml")
-
 ROOT = Path(__file__).resolve().parent.parent
-SKILLS_DIR = ROOT / "skills"
-TEMPLATE = ROOT / "template" / "SKILL.md"
-MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
+
+_yaml: types.ModuleType | None = None  # imported by load_yaml() on first use
+
+
+def load_yaml() -> types.ModuleType:
+    """Import PyYAML on first use, or exit with an install hint."""
+    global _yaml
+    if _yaml is None:
+        try:
+            import yaml
+        except ImportError:  # pragma: no cover
+            sys.exit("PyYAML is required: pip install -r requirements-dev.txt")
+        _yaml = yaml
+    return _yaml
 
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+VERSION_RE = re.compile(r"\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?")
+DEFAULT_SLUG = "raidenyn/agentic-development-skills"
 # Keys from the open Agent Skills spec. These are the only keys claude.ai and
 # the Skills API accept, so anything else is reported as a portability warning.
 SPEC_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
@@ -40,8 +74,28 @@ RESERVED_PREFIXES = ("claude-", "anthropic-", "anthropics-", "cc-plugin-")
 RESERVED_NAMES = {"claude", "anthropic", "anthropics", "claude-code", "claude-mods"}
 MAX_SKILL_LINES = 500
 
+HEADER_RE = re.compile(
+    r"^(feat|fix|perf|docs|chore|ci|build|refactor|test|style|revert)"
+    r"(\([a-z0-9-]+\))?!?: \S.*"
+)
+# GitHub appends " (#N)" when it squashes, so a local header gets the larger budget.
+HEADER_LIMIT = 100
+TITLE_LIMIT = 92
+COMMIT_TYPES = "feat, fix, perf, docs, chore, ci, build, refactor, test, style, revert"
+# Headers git writes itself, and the autosquash prefixes git rebases later.
+COMMIT_PASS_PREFIXES = (
+    "Merge ",
+    'Revert "',
+    'Reapply "',
+    "fixup! ",
+    "squash! ",
+    "amend! ",
+)
+SCISSORS_TAIL = " ------------------------ >8 ------------------------"
+
 
 def read_frontmatter(path: Path) -> tuple[dict | None, str, str | None]:
+    yaml = load_yaml()
     text = path.read_text(encoding="utf-8")
     if not text.startswith("---\n"):
         return None, text, "SKILL.md must start with a '---' YAML frontmatter block"
@@ -72,14 +126,19 @@ def check_name(name: object, where: str, errors: list[str]) -> None:
         errors.append(f"{where}: name '{name}' is reserved by Claude Code for plugins")
 
 
-def validate() -> int:
+def validate(root: Path = ROOT) -> int:
     errors: list[str] = []
     warnings: list[str] = []
 
-    skill_dirs = sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir()) if SKILLS_DIR.is_dir() else []
+    skills_dir = root / "skills"
+    marketplace_path = root / ".claude-plugin" / "marketplace.json"
+    skills_rel = skills_dir.relative_to(root)
+    market_rel = marketplace_path.relative_to(root)
+
+    skill_dirs = sorted(p for p in skills_dir.iterdir() if p.is_dir()) if skills_dir.is_dir() else []
     skill_names = set()
     for d in skill_dirs:
-        rel = d.relative_to(ROOT)
+        rel = d.relative_to(root)
         skill_md = d / "SKILL.md"
         if not skill_md.is_file():
             errors.append(f"{rel}: missing SKILL.md")
@@ -121,30 +180,30 @@ def validate() -> int:
 
     # Marketplace consistency.
     try:
-        market = json.loads(MARKETPLACE.read_text(encoding="utf-8"))
+        market = json.loads(marketplace_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        errors.append(f"{MARKETPLACE.relative_to(ROOT)}: cannot read: {exc}")
+        errors.append(f"{market_rel}: cannot read: {exc}")
         market = {"plugins": []}
     entries = market.get("plugins", [])
     seen: dict[str, int] = {}
     for i, entry in enumerate(entries):
         name = entry.get("name")
-        where = f"marketplace.json plugins[{i}]"
+        where = f"{market_rel} plugins[{i}]"
         check_name(name, where, errors)
         seen[name] = seen.get(name, 0) + 1
         expected = f"./skills/{name}"
         if entry.get("source") != expected:
             errors.append(f"{where}: source must be '{expected}', found '{entry.get('source')}'")
         if name not in skill_names:
-            errors.append(f"{where}: no skill directory skills/{name}/")
+            errors.append(f"{where}: no skill directory {skills_rel}/{name}/")
         if not entry.get("description"):
             errors.append(f"{where}: description is required")
     for name, count in seen.items():
         if count > 1:
-            errors.append(f"marketplace.json: plugin '{name}' is listed {count} times")
+            errors.append(f"{market_rel}: plugin '{name}' is listed {count} times")
     for name in sorted(skill_names - set(seen)):
         errors.append(
-            f"skills/{name}/: not listed in .claude-plugin/marketplace.json "
+            f"{skills_rel}/{name}/: not listed in {market_rel} "
             "(add an entry, or create skills with: python3 scripts/skills.py new)"
         )
 
@@ -156,25 +215,29 @@ def validate() -> int:
     return 1 if errors else 0
 
 
-def new(name: str, description: str, category: str) -> int:
+def new(name: str, description: str, category: str, root: Path = ROOT) -> int:
     errors: list[str] = []
     check_name(name, "name", errors)
     if len(description) > 1024 or "<" in description or ">" in description:
         errors.append("description must be at most 1024 characters with no '<' or '>'")
-    target = SKILLS_DIR / name
+    skills_dir = root / "skills"
+    template = root / "template" / "SKILL.md"
+    marketplace_path = root / ".claude-plugin" / "marketplace.json"
+    target = skills_dir / name
     if target.exists():
-        errors.append(f"skills/{name} already exists")
+        errors.append(f"{target.relative_to(root)} already exists")
     if errors:
         for e in errors:
             print(f"error: {e}")
         return 1
 
-    body = TEMPLATE.read_text(encoding="utf-8")
+    body = template.read_text(encoding="utf-8")
     body = body.replace("{{name}}", name).replace("{{description}}", json.dumps(description))
     target.mkdir(parents=True)
-    (target / "SKILL.md").write_text(body, encoding="utf-8")
+    skill_md = target / "SKILL.md"
+    skill_md.write_text(body, encoding="utf-8")
 
-    market = json.loads(MARKETPLACE.read_text(encoding="utf-8"))
+    market = json.loads(marketplace_path.read_text(encoding="utf-8"))
     market.setdefault("plugins", []).append(
         {
             "name": name,
@@ -184,9 +247,358 @@ def new(name: str, description: str, category: str) -> int:
         }
     )
     market["plugins"].sort(key=lambda p: p["name"])
-    MARKETPLACE.write_text(json.dumps(market, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"Created skills/{name}/SKILL.md and added it to .claude-plugin/marketplace.json")
+    marketplace_path.write_text(
+        json.dumps(market, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    print(
+        f"Created {skill_md.relative_to(root)} and added it to "
+        f"{marketplace_path.relative_to(root)}"
+    )
     return 0
+
+
+class BuildError(Exception):
+    """A skill that cannot be published to the static catalogs."""
+
+
+# OpenCode silently drops a whole skill when a file name contains one of these.
+UNSAFE_PATH_CHARS = "?#\\\0"
+
+
+def check_publish_path(rel: str) -> None:
+    """Raise BuildError unless rel is a relative path OpenCode accepts."""
+    for part in rel.split("/"):
+        if part in ("", ".", ".."):
+            raise BuildError(f"{rel}: path segment {part!r} is not allowed")
+        for char in UNSAFE_PATH_CHARS:
+            if char in part:
+                raise BuildError(f"{rel}: {char!r} is not allowed in a published path")
+
+
+def skill_files(skill_dir: Path) -> list[str]:
+    """Return every publishable file under skill_dir, as sorted POSIX relative paths.
+
+    Hidden files and directories and __pycache__ are skipped. A symlink, or a
+    path OpenCode refuses, raises BuildError instead of being published.
+    """
+    if skill_dir.is_symlink():
+        raise BuildError(f"{skill_dir}: symlinks are not allowed in a published skill")
+    files: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(skill_dir, followlinks=False):
+        here = Path(dirpath)
+        for name in dirnames + filenames:
+            if (here / name).is_symlink():
+                raise BuildError(f"{here / name}: symlinks are not allowed in a published skill")
+        dirnames[:] = sorted(
+            name for name in dirnames if not name.startswith(".") and name != "__pycache__"
+        )
+        for name in filenames:
+            if name.startswith("."):
+                continue
+            rel = (here / name).relative_to(skill_dir).as_posix()
+            check_publish_path(f"{skill_dir.name}/{rel}")
+            files.append(rel)
+    return sorted(files)
+
+
+def claude_marketplace(market: dict, version: str, slug: str) -> dict:
+    """Return the URL-based Claude marketplace to publish for a release."""
+    published = {
+        key: market[key] for key in ("name", "owner", "description") if key in market
+    }
+    plugins = []
+    for entry in market.get("plugins", []):
+        plugin = {"name": entry["name"]}
+        for key in ("description", "category", "tags"):
+            if key in entry:
+                plugin[key] = entry[key]
+        plugin["version"] = version
+        plugin["source"] = {
+            "source": "git-subdir",
+            "url": f"https://github.com/{slug}.git",
+            "path": f"skills/{entry['name']}",
+            "ref": f"v{version}",
+        }
+        plugins.append(plugin)
+    published["plugins"] = plugins
+    return published
+
+
+def index_page(market: dict, version: str, slug: str) -> str:
+    """Return the static Pages index: the skill table and install snippets."""
+    owner, repo = slug.split("/", 1)
+    # Pages is served from <owner>.github.io, which GitHub lowercases.
+    base = f"https://{owner.lower()}.github.io/{repo}/"
+    name = market["name"]
+    rows = "\n".join(
+        "      <tr>"
+        f"<td>{html.escape(entry['name'])}</td>"
+        f"<td>{html.escape(entry['description'])}</td>"
+        f"<td>{html.escape(version)}</td>"
+        "</tr>"
+        for entry in market.get("plugins", [])
+    )
+    opencode = json.dumps({"skills": [f"{base}opencode/"]}, indent=2)
+    claude = json.dumps(
+        {
+            "extraKnownMarketplaces": {
+                name: {
+                    "source": {"source": "url", "url": f"{base}claude/marketplace.json"},
+                    "autoUpdate": True,
+                }
+            },
+            "enabledPlugins": {
+                f"{entry['name']}@{name}": True for entry in market.get("plugins", [])
+            },
+        },
+        indent=2,
+    )
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{html.escape(name)}</title>
+</head>
+<body>
+  <h1>{html.escape(name)}</h1>
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Description</th><th>Version</th></tr>
+    </thead>
+    <tbody>
+{rows}
+    </tbody>
+  </table>
+  <h2>OpenCode</h2>
+  <p>Add this to <code>opencode.jsonc</code>:</p>
+  <pre>{html.escape(opencode)}</pre>
+  <h2>Claude Code</h2>
+  <p>Add this to <code>settings.json</code>:</p>
+  <pre>{html.escape(claude)}</pre>
+</body>
+</html>
+"""
+
+
+def build_pages(version: str, out: Path, slug: str, root: Path = ROOT) -> int:
+    """Build the static catalogs for a release into out, returning an exit code.
+
+    slug is the GitHub 'owner/repo' slug for the release.
+    """
+    if not VERSION_RE.fullmatch(version):
+        print(f"error: invalid version '{version}' (expected X.Y.Z)", file=sys.stderr)
+        return 1
+    if out.exists() and (not out.is_dir() or any(out.iterdir())):
+        print(f"error: output directory not empty: {out}", file=sys.stderr)
+        return 1
+    if validate(root) != 0:
+        return 1
+
+    skills_dir = root / "skills"
+    skill_dirs = (
+        sorted((p for p in skills_dir.iterdir() if p.is_dir()), key=lambda p: p.name)
+        if skills_dir.is_dir()
+        else []
+    )
+    if not skill_dirs:
+        print("error: no skills found", file=sys.stderr)
+        return 1
+    # Checks 5 and 6 (every skill folder has a marketplace entry, every entry has
+    # a skill folder, and every skill has SKILL.md) are enforced by validate()
+    # above, which names the skill and fails before this point; repeating them
+    # here would be untested duplicate code.
+
+    try:
+        files_by_skill = [(d, skill_files(d)) for d in skill_dirs]
+    except BuildError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    # validate() above already read and checked the committed marketplace, so
+    # this read cannot fail for a repo that reached this point.
+    market = json.loads(
+        (root / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8")
+    )
+    claude_market = claude_marketplace(market, version, slug)
+    page = index_page(market, version, slug)
+
+    try:
+        temp = Path(tempfile.mkdtemp(prefix=".build-", dir=out.parent))
+    except OSError as exc:
+        print(f"error: cannot create a build directory in {out.parent}: {exc}", file=sys.stderr)
+        return 1
+    try:
+        opencode = temp / "opencode"
+        catalog = []
+        for skill_dir, files in files_by_skill:
+            for rel in files:
+                target = opencode / skill_dir.name / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(skill_dir / rel, target)
+            catalog.append({"name": skill_dir.name, "version": version, "files": files})
+        opencode.mkdir(parents=True, exist_ok=True)
+        (opencode / "index.json").write_text(
+            json.dumps({"skills": catalog}, indent=2) + "\n", encoding="utf-8"
+        )
+        claude = temp / "claude"
+        claude.mkdir()
+        (claude / "marketplace.json").write_text(
+            json.dumps(claude_market, indent=2) + "\n", encoding="utf-8"
+        )
+        (temp / "index.html").write_text(page, encoding="utf-8")
+        # mkdtemp creates 0700; the Pages artifact must be readable and
+        # traversable by others, so do not leave out at the temporary mode.
+        os.chmod(temp, 0o755)
+        os.replace(temp, out)
+    except OSError as exc:
+        shutil.rmtree(temp, ignore_errors=True)
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def check_header(header: str, limit: int) -> str | None:
+    """Check one commit header or PR title, returning an error message or None."""
+    if len(header) > limit:
+        return f"header is {len(header)} characters (max {limit})"
+    if not HEADER_RE.match(header):
+        return (
+            f"invalid commit header: '{header}'\n"
+            "expected '<type>(<scope>)!: <subject>', e.g. 'feat: add sandbox checks'\n"
+            f"types: {COMMIT_TYPES}"
+        )
+    return None
+
+
+def check_commit_msg(text: str, mode: str, comment_char: str = "#") -> str | None:
+    """Check a commit message file (`file`) or a PR title (`title`).
+
+    File mode normalises CRLF, cuts everything from git's scissors line, drops
+    comment lines, and passes headers git wrote itself. Title mode is strict.
+    """
+    if mode == "title":
+        return check_header(text.rstrip("\n"), TITLE_LIMIT)
+    if mode != "file":
+        raise ValueError(f"unknown mode: {mode!r}")
+
+    scissors = comment_char + SCISSORS_TAIL
+    lines = text.replace("\r\n", "\n").split("\n")
+    for i, line in enumerate(lines):
+        if line == scissors:
+            lines = lines[:i]
+            break
+    header = next(
+        (line for line in lines if line.strip() and not line.startswith(comment_char)), None
+    )
+    if header is None:
+        # git aborts an empty message itself; the hook says nothing.
+        return None
+    if header.startswith(COMMIT_PASS_PREFIXES):
+        return None
+    return check_header(header, HEADER_LIMIT)
+
+
+def git_comment_char(cwd: Path) -> str:
+    """Return the comment character git will use for a commit message in cwd."""
+    for key in ("core.commentString", "core.commentChar"):
+        try:
+            result = subprocess.run(
+                ["git", "config", "--get", key], cwd=cwd, capture_output=True, text=True
+            )
+        except OSError:  # git is not installed; the default still applies
+            return "#"
+        if result.returncode != 0:
+            continue
+        value = result.stdout.strip()
+        # `auto` means git picks a character itself; the hook can't know which.
+        return value if value and value != "auto" else "#"
+    return "#"
+
+
+def check_commit_msg_cli(path: str | None, text: str | None) -> int:
+    """Run `check-commit-msg`; exactly one of path and text must be given."""
+    if (path is None) == (text is None):
+        print("error: pass exactly one of PATH or --text", file=sys.stderr)
+        return 1
+    if text is not None:
+        error = check_commit_msg(text, "title")
+    else:
+        try:
+            message = Path(path).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"error: cannot read {path}: {exc}", file=sys.stderr)
+            return 1
+        error = check_commit_msg(message, "file", git_comment_char(Path.cwd()))
+    if error:
+        print(error, file=sys.stderr)
+        return 1
+    return 0
+
+
+NOT_A_CHECKOUT = "not a git checkout (or git not found)"
+
+
+def git_toplevel(cwd: Path) -> Path | None:
+    """Return the working-tree root containing cwd, or None outside a checkout."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return None
+    if result.returncode != 0:
+        return None
+    root = result.stdout.strip()
+    return Path(root) if root else None
+
+
+def install_hooks(repo: Path, force: bool) -> int:
+    """Point repo's core.hooksPath at .githooks, refusing another value."""
+    try:
+        current = subprocess.run(
+            ["git", "config", "--get", "core.hooksPath"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        # `--get` exits 1 when the key is absent; anything else is a git error
+        # (a directory outside a checkout makes the later write fail instead).
+        if current.returncode not in (0, 1):
+            raise subprocess.CalledProcessError(current.returncode, current.args)
+        value = current.stdout.strip() if current.returncode == 0 else None
+        if value == ".githooks":
+            print("core.hooksPath already .githooks")
+            return 0
+        if value and not force:
+            print(
+                f"core.hooksPath is '{value}'; refusing to replace it (use --force)",
+                file=sys.stderr,
+            )
+            return 1
+        subprocess.run(
+            ["git", "config", "core.hooksPath", ".githooks"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        print(NOT_A_CHECKOUT, file=sys.stderr)
+        return 1
+    print("core.hooksPath set to .githooks")
+    return 0
+
+
+def install_hooks_cli(force: bool) -> int:
+    """Run `install-hooks` against the checkout that contains the current directory."""
+    root = git_toplevel(Path.cwd())
+    if root is None:
+        print(NOT_A_CHECKOUT, file=sys.stderr)
+        return 1
+    return install_hooks(root, force)
 
 
 def main() -> int:
@@ -197,9 +609,26 @@ def main() -> int:
     p_new.add_argument("name")
     p_new.add_argument("description")
     p_new.add_argument("--category", default="development")
+    p_cm = sub.add_parser("check-commit-msg", help="check a commit message or PR title")
+    p_cm.add_argument("path", nargs="?", help="commit message file (file mode)")
+    p_cm.add_argument("--text", metavar="TITLE", help="PR title to check (title mode)")
+    p_install = sub.add_parser("install-hooks", help="point core.hooksPath at .githooks")
+    p_install.add_argument(
+        "--force", action="store_true", help="replace a different core.hooksPath"
+    )
+    p_build = sub.add_parser("build-pages", help="build the static release catalogs")
+    p_build.add_argument("--version", required=True, metavar="X.Y.Z")
+    p_build.add_argument("--out", required=True, type=Path, metavar="DIR")
     args = parser.parse_args()
     if args.cmd == "validate":
         return validate()
+    if args.cmd == "check-commit-msg":
+        return check_commit_msg_cli(args.path, args.text)
+    if args.cmd == "install-hooks":
+        return install_hooks_cli(args.force)
+    if args.cmd == "build-pages":
+        slug = os.environ.get("GITHUB_REPOSITORY", DEFAULT_SLUG)
+        return build_pages(args.version, args.out, slug)
     return new(args.name, args.description, args.category)
 
 

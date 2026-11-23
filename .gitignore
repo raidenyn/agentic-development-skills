@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .venv/
 .claude/settings.local.json
+node_modules/
+_release-check/

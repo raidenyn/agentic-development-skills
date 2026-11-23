@@ -1,0 +1,21 @@
+name: PR title
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the PR title against Conventional Commits
+        run: python3 scripts/skills.py check-commit-msg --text="$TITLE"
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
