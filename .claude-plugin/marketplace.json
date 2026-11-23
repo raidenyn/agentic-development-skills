@@ -6,11 +6,40 @@
   "description": "Agent Skills for agentic software development. Each skill is installable as its own plugin.",
   "plugins": [
     {
+      "name": "feature-rfc",
+      "source": "./skills/feature-rfc",
+      "description": "Write, review and amend a feature RFC: a system-level design with milestones and shared contracts, approved before the work is split into tasks, OpenSpec changes and PRs.",
+      "category": "development",
+      "tags": [
+        "rfc",
+        "design-doc",
+        "openspec",
+        "planning"
+      ]
+    },
+    {
       "name": "harness-audit",
       "source": "./skills/harness-audit",
       "description": "Read-only audit of a repository's agentic-coding harness (AGENTS.md, specs, verify command, hooks, permissions, sandbox, evals) that returns a prioritized TODO list.",
       "category": "development",
-      "tags": ["harness", "audit", "agents-md", "agentic-coding"]
+      "tags": [
+        "harness",
+        "audit",
+        "agents-md",
+        "agentic-coding"
+      ]
+    },
+    {
+      "name": "milestone-breakdown",
+      "source": "./skills/milestone-breakdown",
+      "description": "Split one milestone of an accepted feature RFC into PR-sized tasks, check their dependencies against the RFC's contracts, and prepare each task for its own OpenSpec change or PR.",
+      "category": "development",
+      "tags": [
+        "rfc",
+        "planning",
+        "task-breakdown",
+        "openspec"
+      ]
     }
   ]
 }
