@@ -24,7 +24,7 @@ Run this critically before the person sees the draft, and again before closing t
 
 - [ ] Every change is marked NEW, CHANGED or REMOVED against today, in the table and the diagrams.
 - [ ] Every NEW or CHANGED item names the milestone that delivers it.
-- [ ] At least two real options plus doing nothing are compared on the same criteria, with the deciding trade-off in prose.
+- [ ] At least two real options plus doing nothing are compared on the same criteria, with the deciding trade-off in prose. If there is honestly only one credible option, the draft says so and why, and compares it with doing nothing.
 - [ ] Drawbacks and hard-to-reverse steps are explicit.
 - [ ] Security, failure behavior, observability, migration and rollback, and cost each have a line or a reasoned "not applicable".
 - [ ] No pasted schemas or code beyond contract shapes. No implementation steps.

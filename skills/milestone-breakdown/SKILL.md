@@ -15,6 +15,7 @@ This skill is about how to split the work and check dependencies. Where the task
 
 - The RFC's status must be Accepted. If it is still in review, finish the review first (the `feature-rfc` skill covers it).
 - Read the whole RFC, its amendments, and any decision records in the same folder. Read the code the milestone touches as it is now, not as the RFC described it.
+- Check the start conditions: every milestone listed under this milestone's "Depends on" in the RFC is done, even one that produces no contract (finishing a backfill, for example), and every condition attached to the acceptance or to a decision that applies here is met ("do not start until the data owner signs off"). If one is not, tell the person before splitting.
 - Check what the milestone consumes. Every contract it consumes must already be produced by an earlier milestone, and landed in the code. If one is missing, stop and tell the person.
 - If the RFC has no Contracts section, milestone table or "Left to implementation" list, tell the person what is missing before splitting.
 
@@ -43,7 +44,9 @@ Order the tasks so that learning comes early:
 
 Use the format in [references/task-list-template.md](references/task-list-template.md). Every task states its outcome, what it produces and consumes, what it depends on, how to check it is done, and a "Design constraints" block.
 
-The Design constraints block is what carries the RFC into the implementation. It links the RFC and the milestone, names the decisions and contracts the task implements or uses (with each contract's stability), and repeats the stop rule. When a task becomes an OpenSpec change, copy the block into the change's proposal unchanged, apart from filling in the task link. Generate it from the RFC. Do not retype decisions from memory.
+The Design constraints block is what carries the RFC into the implementation. It links the RFC and the milestone, names the decisions and contracts the task implements or uses (with each contract's stability), lists the conditions from the RFC that apply to implementing or releasing the task, and repeats the stop rule. Generate it from the RFC. Do not retype decisions from memory.
+
+When a task becomes an OpenSpec change, copy the block into the change's proposal. Change nothing in its content, apart from filling in the task link. The links must still work from the new place: write them as paths from the repository root or as full URLs, or rewrite relative links for the destination, and check that each one resolves there.
 
 Leave local choices open. If the RFC lists something under "Left to implementation", the task says the choice is open, and does not make it.
 
@@ -52,6 +55,8 @@ Leave local choices open. If the RFC lists something under "Left to implementati
 Check these before showing the list, and report the result:
 
 - **Nothing is consumed before it is produced.** For every contract or piece of data a task consumes, an earlier task or an earlier milestone produces it.
+- **Dependencies are stated, not implied by the order.** A task that consumes something another task in this list produces depends on that task, directly or through another task. "Depends on: none" is right only when everything the task needs already exists in the code. Once tasks are copied into a tracker, the list order is gone and only the stated dependencies remain.
+- **Start conditions are met or carried.** The milestone's own "Depends on" entries and any acceptance conditions are satisfied, or the tasks they block say so.
 - **Each contract has one producer.** No two tasks define the same contract.
 - **The order is a real order.** No cycles. Tasks marked parallel do not touch the same contract, migration step or files in conflicting ways.
 - **Frozen contracts are untouched.** No task changes the shape of a frozen contract.

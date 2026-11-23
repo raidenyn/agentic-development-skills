@@ -116,8 +116,9 @@ Use Mermaid blocks only, so the diagrams stay readable and editable as text.
 - Start with a context diagram (the system as one box with its users and neighbors). Add a second diagram one level down (apps, services, data stores) only when the change is inside the system.
 - Pick the type that fits: `flowchart` for structure and data flow, `sequenceDiagram` for interactions, `stateDiagram` for lifecycles, `erDiagram` for data.
 - One diagram answers one question. Stay near the diagram size setting and split rather than grow.
-- Label every line with how A uses B, use `subgraph` for boundaries, set a direction (`LR` or `TB`), and give each diagram a title and a legend. Refer to each diagram from the text.
-- Show before and after as the same diagram twice, with new and changed elements highlighted through a `classDef` style.
+- Label every line with how A uses B, group elements by boundary, and give each diagram a title and a legend. Refer to each diagram from the text.
+- Use the syntax of the diagram type you chose, so the result still renders. In a `flowchart`, that is `subgraph` for boundaries, a direction (`LR` or `TB`) and `classDef` for highlighting. A `sequenceDiagram` has none of these: group with `box` and highlight with `rect` or a note.
+- Show before and after as the same diagram twice, with new and changed elements highlighted in the way the diagram type supports.
 - Check that each diagram renders if you have a way to. If not, tell the person they were not rendered.
 
 ### 6. Review your own draft
