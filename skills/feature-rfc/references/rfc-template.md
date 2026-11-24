@@ -107,7 +107,7 @@ A line or two each, or "not applicable because …": security and privacy · fai
 |---|---|---|---|---|---|---|
 | <name> | | <contracts> | <contracts> | <milestones> | ~N PRs | planned / done / dropped (why) |
 
-Rules: each milestone ships on its own and leaves the main branch working. The outcome names the capabilities or specs it touches. The riskiest comes first, and shared contracts and the data model land early. No milestone consumes a contract before an earlier one produces it, and each contract has exactly one producer. Say which milestones can run in parallel. Add a Mermaid dependency graph when there are more than three. Do not list individual tasks.
+Rules: each milestone ships on its own and leaves the main branch working. The outcome is something that can be shown working and names the capabilities or specs it touches. Cut milestones by behavior, not by layer. The first is the thinnest end-to-end path through the parts the feature touches, and the riskiest comes first. Shared contracts and the data model land early, inside the first milestone that uses them, not as a milestone of their own. No milestone consumes a contract before an earlier one produces it, and each contract has exactly one producer. Say which milestones can run in parallel. Add a Mermaid dependency graph when there are more than three. Do not list individual tasks.
 
 ## Decisions to approve
 
