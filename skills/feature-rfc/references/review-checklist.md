@@ -36,7 +36,7 @@ Run this critically before the person sees the draft, and again before closing t
 - [ ] "Left to implementation" names what the RFC deliberately does not decide.
 - [ ] Each milestone ships on its own and leaves the main branch working.
 - [ ] Each milestone's outcome can be shown working. None is a layer on its own ("the schema", "the API").
-- [ ] The first milestone is the thinnest end-to-end path. The riskiest milestone is first, and parallel milestones are marked.
+- [ ] The first milestone is the thinnest end-to-end path and tests the riskiest assumption. Riskier milestones come before safer ones, and parallel milestones are marked.
 - [ ] Shared contracts and the data model land inside the first milestone that uses them.
 - [ ] No milestone consumes a contract before an earlier one produces it. Each contract has exactly one producer.
 - [ ] The milestone table holds no individual tasks.
