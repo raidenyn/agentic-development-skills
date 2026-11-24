@@ -20,7 +20,7 @@ The skill has two modes:
 - **An outline claims nothing the RFC does not say.** No size, no slicing, no invented acceptance criteria.
 - **One vocabulary for the whole RFC.** Area names, milestone names and task keys are fixed before any breakdown starts, so parallel breakdowns do not name the same thing twice.
 - **A subagent never asks the person and never guesses.** It returns its questions. You ask them together.
-- **Fix the tasks, never the plan.** A finding that would change a milestone's scope, order or contracts, or the RFC text, goes to the person as a proposed amendment (the `feature-rfc` skill covers amendments).
+- **Fix the tasks, never the plan.** A finding that would change a milestone's scope, order or contracts, or the RFC text, goes to the person as a proposed follow-up RFC (the `feature-rfc` skill covers it).
 - **Nothing is published before the person approves.**
 - **English by default.** Write in another language only when the person explicitly asks.
 
@@ -40,7 +40,7 @@ A tasks folder with one folder per milestone:
 - **The plan and the files of an outlined milestone** follow [references/outline-template.md](references/outline-template.md).
 - **Every task and outline has a key:** `<rfc-slug>/<milestone-slug>/<number>`. The number is the next unused one in its milestone when the file is first written. It is never reused and never changes. The `NN` in the file name is the order and may change. Blockers and trackers refer to the key.
 
-**Where the folder goes.** Default: `tasks/` next to the RFC file. The person can name another place. The files are not committed unless the person asks for that. To keep them out of commits, add the folder's path to the clone's local exclude file and tell the person you did:
+**Where the folder goes.** Default: `openspec/design/<feature-name>/tasks/`, the feature's folder outside the archive. Do not put it next to the RFC file: task files keep changing, and nothing in the archive does. The person can name another place. The files are not committed unless the person asks for that. To keep them out of commits, add the folder's path to the clone's local exclude file and tell the person you did:
 
 ```bash
 echo "<path of the tasks folder from the repository root>/" >> "$(git rev-parse --git-path info/exclude)"
@@ -53,7 +53,7 @@ That file is local to the clone and is never committed, so nothing in the reposi
 ### 1. Check the RFC
 
 - Its status is Accepted. If it is still in review, finish the review first.
-- Read the whole RFC, its amendments, and any decision records in the same folder.
+- Read the whole RFC, every follow-up RFC its header links as "Partly superseded by", and the decision records (`adr-*.md`) in its folder. The RFC is frozen at acceptance, so a later change is only in a follow-up RFC. Where the two disagree, the follow-up wins. If the status is "Superseded by", the RFC is no longer the design: tell the person and use the one it links.
 - It has a milestone table, a Contracts section, a "What changes" table and a "Left to implementation" list. If one is missing, tell the person and stop.
 
 ### 2. Settle the choices for the whole run
@@ -71,11 +71,11 @@ Give every milestone one state, with the reason.
 
 | State | Test | What it gets |
 |---|---|---|
-| Done or dropped | The RFC's milestone table says so | Nothing. The contracts of a done milestone count as produced. |
+| Done or dropped | Done: its plan in the tasks folder has a closing entry, or its tracker milestone is closed. Dropped: a follow-up RFC says so | Nothing. The contracts of a done milestone count as produced. |
 | Ready | It passes every start condition in `milestone-breakdown`, "Before you start": each milestone it depends on is done, each contract it consumes is in the code, and each condition attached to the acceptance or to a decision is met | A full breakdown |
 | Later | Anything else. Name the condition that is not met | Outlines |
 
-Check the code for the consumed contracts. The status column alone is not enough.
+Check the code for the consumed contracts. A closing entry alone is not enough. The RFC itself does not say which milestones are done: it is frozen at acceptance.
 
 Stop and ask the person, with what you found, when the RFC and the repository disagree or work has already begun:
 
@@ -102,7 +102,7 @@ Run `milestone-breakdown` once per ready milestone. When your tool can run subag
 - Run the break-down mode through its checks (step 7). Stop before the review with the person (step 8).
 - Write `00-plan.md` and one file per task, each with its key, Area and Phase.
 - Leave unwritten every task that waits on a blocking question, as `milestone-breakdown` requires. In the coverage table, such an entry says what it waits on.
-- Return a short report: the number of tasks, the open questions, the assumptions, the hotspot files, whether the list reached the independent review setting, and any finding that needs an RFC amendment.
+- Return a short report: the number of tasks, the open questions, the assumptions, the hotspot files, whether the list reached the independent review setting, and any finding that needs a follow-up RFC.
 
 **Independent review of one milestone.** A subagent usually cannot start a reviewer. When a milestone's report says its list reached the independent review setting, start that review yourself, as `milestone-breakdown` step 7 describes. If no separate session is possible, the plan says "self-check only".
 
@@ -136,7 +136,7 @@ Each milestone's own checks ran in step 5. This check covers what none of them c
 | A conflict inside one milestone's split | Send it back to that milestone's breakdown. |
 | A question a breakdown returned | Ask the person, all questions together, each with the possible readings and your recommendation. Give the answer to that milestone's breakdown, which records it in the plan, writes the tasks that waited, and runs its checks again. Then run step 7 again. |
 | Tasks that wait on a spike | They stay unwritten. The spike task is written. The coverage entries say they wait on it. |
-| A dependency between milestones that the RFC does not state, including an order you would have to impose on two parallel milestones to keep them off the same hotspot. Anything else that changes a milestone's scope, order or contracts, or the RFC text | Stop that part and propose an RFC amendment to the person. Do not write or change the affected tasks until it is approved. |
+| A dependency between milestones that the RFC does not state, including an order you would have to impose on two parallel milestones to keep them off the same hotspot. Anything else that changes a milestone's scope, order or contracts, or the RFC text | Stop that part and propose a follow-up RFC to the person. Do not write or change the affected tasks until it is approved. |
 
 ### 9. Review with the person
 
@@ -163,7 +163,7 @@ If the person wants to publish only part of it, the part must hold together: a t
 
 Use this when a milestone that has outlines becomes next, usually right after the milestone before it was closed.
 
-1. **Get the current state.** Read the RFC with its amendments, and the tasks folder. If the folder is gone and the tasks were published, restore it from the tracker with `task-publishing`. If there is neither, ask the person.
+1. **Get the current state.** Read the RFC with its follow-up RFCs, and the tasks folder. If the folder is gone and the tasks were published, restore it from the tracker with `task-publishing`. If there is neither, ask the person.
 2. **Sort the milestones again** (step 3).
 3. **Break down each milestone that is now ready** (steps 4 and 5). The vocabulary from the first run stays. New tasks get new keys. The outlines keep theirs until they are retired.
 4. **Write the replacement table** in the milestone's plan: for each outline key, the keys of the tasks that replace it, and for every item that was blocked by the outline, the key of the new task that blocks it from now on. An outline usually becomes several tasks, and a consumer usually needs only one of them.
@@ -172,7 +172,7 @@ Use this when a milestone that has outlines becomes next, usually right after th
 
 Continue covers this one case. Stop and ask the person, with what you found, when the situation is anything else:
 
-- an amendment changed a milestone that already has tasks or outlines;
+- a follow-up RFC changed a milestone that already has tasks or outlines;
 - a milestone was dropped after its tasks or outlines were written;
 - a reconcile in one milestone changed a contract or a task that another milestone's items are blocked by;
 - a task merged with acceptance criteria marked "not done", and something in another milestone is blocked by it;
@@ -186,5 +186,5 @@ Continue covers this one case. Stop and ask the person, with what you found, whe
 
 ## Output
 
-- **Break down:** the tasks folder, the sorting of the milestones with reasons, the result of the cross-milestone check, the open questions and assumptions, and any findings that need an RFC amendment.
+- **Break down:** the tasks folder, the sorting of the milestones with reasons, the result of the cross-milestone check, the open questions and assumptions, and any findings that need a follow-up RFC.
 - **Continue:** the new plan and task files for the milestones that became ready, the replacement table for their outlines, and the result of the cross-milestone check.

@@ -37,6 +37,6 @@ Break down one milestone of an accepted feature RFC into tasks. Use the `milesto
 5. Contracts from the RFC that the tasks consume, and for each: found in the code at <path>, or produced by <task key>.
 6. Whether the list reached the independent review setting.
 7. Area values you needed that are not on the list.
-8. Findings that need an RFC amendment.
+8. Findings that need a follow-up RFC.
 9. The result of the checks: every check that is not a plain "yes".
 ````

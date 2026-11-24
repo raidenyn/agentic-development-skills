@@ -1,6 +1,6 @@
 ---
 name: feature-rfc
-description: Use when a feature is too big or too risky for a single change and needs a system-level design approved first, or when asked to write, review or amend a feature RFC or feature design doc. Covers milestones and shared contracts, settled before the work is split into tasks, OpenSpec changes and PRs. Not for the proposal or design of a single change.
+description: Use when a feature is too big or too risky for a single change and needs a system-level design approved first, or when asked to write or review a feature RFC or feature design doc, or to change a design that is already accepted. Covers milestones and shared contracts, settled before the work is split into tasks, OpenSpec changes and PRs. Not for the proposal or design of a single change.
 ---
 
 # Feature RFC
@@ -33,21 +33,26 @@ The values below are defaults. If `openspec/design/README.md` (or the README of 
 | Milestone size | about 3 to 6 PRs |
 | Document language | English |
 
-The main body runs from Summary through Open questions. Code and Mermaid blocks, Decision outcome, Review log, Amendments and Appendix do not count. If the body cannot fit under the cap after cutting, tell the person the feature is probably two features, each with its own RFC.
+The main body runs from Summary through Open questions. Code and Mermaid blocks, Decision outcome, Review log and Appendix do not count. If the body cannot fit under the cap after cutting, tell the person the feature is probably two features, each with its own RFC.
 
 ## Where files live
 
-Design records sit together, grouped by feature:
+Design records sit together, grouped by feature. An RFC under discussion is in the design folder, on its own branch. An accepted one is in the archive, on the main branch:
 
 ```
-openspec/design/<feature-name>/rfc-<title>.md
-openspec/design/<feature-name>/adr-<title>.md
+openspec/design/<feature-name>/rfc-<title>.md       open: Draft or In review, on the RFC's branch only
+
+openspec/design/archive/YYYY-MM-<feature-name>/     accepted: the whole feature folder, moved once
+  rfc-<title>.md                                    frozen
+  adr-<title>.md                                    added later, one file per decision record
 ```
 
-- If the repo has no `openspec/` folder, look for an existing design-records folder and follow it. If there is none, ask where to put the RFC.
+- If the repo has no `openspec/` folder, look for an existing design-records folder and follow it, with an `archive/` folder inside it. If there is none, ask where to put the RFC.
 - Use short descriptive names, not numbers.
-- Files never move. Status lives in each file's header, so links from changes and other records never break.
-- A decision record not tied to a feature goes in a folder named after the area it affects, for example `openspec/design/billing/`.
+- Draft and review on a branch, usually with a pull request. Do not merge an RFC that is not accepted: the main branch holds only accepted RFCs, already archived. A rejected or withdrawn RFC stays on its branch and is never merged.
+- The folder moves exactly once, when the person accepts the RFC (step 8). `YYYY-MM` is the month of the acceptance. After the move the path never changes, so links from tasks, changes and other records stay valid.
+- The text of an archived RFC is never reworded. A design that must change gets a new RFC (step 9), and the obsolete RFC is edited only to link to the one that replaces it.
+- A decision record not tied to a feature goes in a folder named after the area it affects, for example `openspec/design/billing/`, and stays there.
 
 ## Procedure
 
@@ -145,18 +150,20 @@ When the person accepts, rejects or withdraws the RFC:
 
 1. Fill in the decision outcome: result, date, decider, and any conditions.
 2. Set the status in the header.
-3. On acceptance, freeze the document. After that only four things change: milestone status, the header status, small clarifications, and amendments (step 9). Clarifications and amendments are both logged in the Amendments section.
-4. On acceptance, offer the two follow-ups in [references/after-acceptance.md](references/after-acceptance.md): breaking down the first milestone, and adding the implementation rule to the repo.
+3. On acceptance, archive the RFC: move the whole feature folder to `openspec/design/archive/YYYY-MM-<feature-name>/`, repair the links the move broke, and link this RFC and every record it replaces to each other, in both directions. [references/after-acceptance.md](references/after-acceptance.md) has the steps. The archived RFC is what gets merged to the main branch.
+4. From here the RFC is frozen. It is the record of what was discussed and decided, not documentation that is kept in step with the code. Its text is not changed again, not for progress, not for clarifications and not when the design turns out wrong. The only later edit is a link to the RFC that replaces it.
+5. On acceptance, offer the two follow-ups in [references/after-acceptance.md](references/after-acceptance.md): breaking down the first milestone, and adding the implementation rule to the repo.
+6. On rejection or withdrawal, commit the outcome on the RFC's branch and stop there. The RFC is not archived and is never merged to the main branch. Tell the person the branch or pull request can be closed without merging. Closing or deleting it is their call.
 
 Implementation starts only after acceptance.
 
-### 9. Amend when the work disproves the design
+### 9. Write a new RFC when the work disproves the design
 
-If later work shows that a decision or a frozen contract is wrong, the fix is an amendment: a new decision entry that supersedes the old one, with the reason, approved by the person. Log it in the Amendments section, leave the original text in place, and add a line under it that points to the amendment, so nobody reads the old decision as current. Never let an implementation change diverge quietly. A change too large to amend gets a new RFC that supersedes this one, with links in both directions.
+If later work shows that a decision or a frozen contract is wrong, or that the milestones must change, the fix is a follow-up RFC: a new RFC file in its own folder in the design folder. There are no amendments. The accepted RFC keeps its text and only gains links to the follow-up. Never let an implementation change diverge quietly.
 
-[references/after-acceptance.md](references/after-acceptance.md) also covers how smaller technical decisions are recorded once the RFC is accepted.
+The follow-up goes through the same steps as any RFC, from the direction check to acceptance and the archive. It covers only what changes, so it is usually short. [references/after-acceptance.md](references/after-acceptance.md) says how to scope it and how the two RFCs are linked. It also covers how smaller technical decisions are recorded once the RFC is accepted.
 
 ## Output
 
-- The RFC file at the agreed path, with its status and review log up to date.
+- The RFC file at the agreed path, with its status and review log up to date. After acceptance: the feature folder in the archive, with no broken links.
 - A short message to the person: what is proposed, how many points need their call, and what you could not verify.

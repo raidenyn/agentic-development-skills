@@ -63,3 +63,4 @@ Run this critically before the person sees the draft, and again before closing t
 - [ ] Before Accepted: every decision is agreed, and no blocking open question or pending spike remains.
 - [ ] The review log has an entry for each round.
 - [ ] Header status, decider and dates are current. On a decision, the outcome section is filled in.
+- [ ] On acceptance: the feature folder is in the archive under `YYYY-MM-<feature-name>`, no link into or out of it is broken, and this RFC and every record it replaces link to each other. A rejected or withdrawn RFC is not archived and not merged.

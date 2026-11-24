@@ -22,7 +22,7 @@ The last two are in [references/after-the-split.md](references/after-the-split.m
 - **One milestone at a time, when it is next.** Tasks written early describe code that does not exist yet. The RFC's contracts keep the milestones consistent in the meantime. When several people need work at once, the first one or two independent tasks of the following milestone may be prepared early. Nothing more.
 - **The RFC is the authority** for decisions, contracts and scope. The code as it is now is the authority for facts about the code. The task list overrides neither.
 - **Plan here, build elsewhere.** This skill writes no production code. Implementation starts in a fresh session per task, after the person has approved the list.
-- **Never fill a gap silently.** Every detail the RFC leaves out is left to the implementer on purpose, recorded as an assumption, asked as a question, or raised as an amendment.
+- **Never fill a gap silently.** Every detail the RFC leaves out is left to the implementer on purpose, recorded as an assumption, asked as a question, or raised as a proposal for a follow-up RFC.
 - **Review is the limit, not generation.** Size tasks by what can be reviewed well, by people with agents helping, and by what the checks can verify inside one pull request.
 - **Names, not numbers.** Refer to tasks, contracts, decisions and assumptions by short names with links, so a task still makes sense after it is copied or reordered. Each task also has a key that never changes, so a tracker can recognize it after a rename.
 - **Where tasks are stored is the person's call.** An issue tracker, a project board, files in the repo: the skill does not assume one. It produces the tasks as Markdown that can be copied anywhere, and reads them back from wherever the person keeps them.
@@ -54,9 +54,9 @@ Task size counts code and configuration, tests included. Documents, generated fi
 
 ## Before you start
 
-- The RFC's status must be Accepted. If it is still in review, finish the review first (the `feature-rfc` skill covers it).
-- Read the whole RFC, its amendments, and any decision records in the same folder.
-- Check the start conditions: every milestone listed under this milestone's "Depends on" is done, even one that produces no contract, and every condition attached to the acceptance or to a decision that applies here is met. If one is not, tell the person before splitting.
+- The RFC's status must be Accepted. If it is still in review, finish the review first (the `feature-rfc` skill covers it). An accepted RFC sits in the design archive and is never edited, by this skill or by a task.
+- Read the whole RFC, every follow-up RFC its header links as "Partly superseded by", and the decision records (`adr-*.md`) in its folder. The RFC is frozen at acceptance, so a later change is only in a follow-up RFC. Where the two disagree, the follow-up wins. If the status is "Superseded by", the RFC is no longer the design: tell the person and use the one it links.
+- Check the start conditions: every milestone listed under this milestone's "Depends on" is done (its plan has a closing entry, or its tracker milestone is closed), even one that produces no contract, and every condition attached to the acceptance or to a decision that applies here is met. If one is not, tell the person before splitting.
 - Check what the milestone consumes. Every contract it consumes from another milestone must already be produced by that milestone and landed in the code. A contract this milestone produces and also uses itself does not count here. If one is missing, stop and tell the person.
 - Tasks prepared early for the following milestone may be written before the two checks above pass. Prepare only tasks that need nothing unmerged, write every condition that is not yet met into the task's "Ready to start when", and check the tasks again when their milestone becomes next. An early task may be started only when its own conditions are met.
 - If the RFC has no Contracts section, milestone table or "Left to implementation" list, tell the person what is missing before splitting.
@@ -100,13 +100,13 @@ For every missing detail that matters to the split, choose one of four actions. 
 | Local, reversible, best decided with the code open | Leave it to the implementing agent, as an open choice in the task |
 | A safe, reversible default that no behavior visible in the RFC depends on | Record a named assumption. Tasks that rely on it cite it |
 | The answer changes the task list, a contract, the data model, security or visible behavior | Ask a blocking question as soon as you find it, with the readings and your recommendation. Do not write the tasks that depend on it until it is answered |
-| The RFC is wrong or cannot work given the code, or the choice would change scope | Stop that part of the milestone and propose an RFC amendment |
+| The RFC is wrong or cannot work given the code, or the choice would change scope | Stop that part of the milestone and propose a follow-up RFC |
 
 Then check for a design gap. If two or more tasks must agree on something the RFC does not define precisely, write it down as a milestone-level contract with one producing task before writing either task. If the task list depends on a question only an experiment can answer, the first task is a spike and the tasks that depend on it are written after it reports.
 
 Collect the questions and ask them together where you can. Keep working on the tasks that do not depend on the answers. Tasks written after an answer go through the checks in step 7 like the others.
 
-A gap in an RFC decision or a frozen contract is never settled here. It is an amendment (see "When the split contradicts the RFC").
+A gap in an RFC decision or a frozen contract is never settled here. It needs a follow-up RFC (see "When the split contradicts the RFC").
 
 ### 4. Decide whether to split at all
 
@@ -182,8 +182,8 @@ Run every check before showing the list, and report the result. The template has
 
 **Coverage, both ways**
 
-- Every entry on the coverage list is delivered by at least one task, or is deferred with a reason. Deferring something the RFC places in this milestone changes the RFC's plan: it needs the person's agreement, and an RFC amendment when the entry moves to another milestone or is dropped.
-- Every task delivers at least one entry, or is an enabling task for one. A task that traces to nothing is scope the RFC did not ask for. Remove it, or turn it into an amendment proposal.
+- Every entry on the coverage list is delivered by at least one task, or is deferred with a reason. Deferring something the RFC places in this milestone changes the RFC's plan: it needs the person's agreement, and a follow-up RFC when the entry moves to another milestone or is dropped.
+- Every task delivers at least one entry, or is an enabling task for one. A task that traces to nothing is scope the RFC did not ask for. Remove it, or turn it into a proposal for a follow-up RFC.
 
 **Tasks**
 
@@ -229,9 +229,9 @@ The `rfc-breakdown` skill runs this skill once per milestone, often in a session
 
 ## When the split contradicts the RFC
 
-This holds at every step and in every mode. If the work shows that an RFC decision or a frozen contract is wrong, or reveals a dependency between milestones that the RFC does not show, stop. Explain what you found and propose an RFC amendment for the person to approve (the `feature-rfc` skill covers amendments). Do not work around it inside the task list.
+This holds at every step and in every mode. If the work shows that an RFC decision or a frozen contract is wrong, or reveals a dependency between milestones that the RFC does not show, stop. Explain what you found and propose a follow-up RFC for the person to approve (the `feature-rfc` skill covers it). Do not work around it inside the task list.
 
-A provisional contract may change, but only in the way the RFC says it may. Record the change as an RFC amendment that the person approves.
+A provisional contract may change, but only in the way the RFC says it may. Record the change as a follow-up RFC that the person approves.
 
 ## Rules that always hold
 
@@ -241,6 +241,6 @@ A provisional contract may change, but only in the way the RFC says it may. Reco
 
 ## Output
 
-- **Break down:** a task list for one milestone in the template's format, with the coverage table, the assumptions and open questions, the result of the checks, and any findings that need an RFC amendment.
+- **Break down:** a task list for one milestone in the template's format, with the coverage table, the assumptions and open questions, the result of the checks, and any findings that need a follow-up RFC.
 - **Reconcile:** the updated remaining tasks and a short note of what changed in the plan and why, or a new breakdown of the remaining work when a trigger fires.
-- **Close:** the coverage list checked against the code, what is carried forward, and the milestone marked done in the RFC.
+- **Close:** the coverage list checked against the code, what is carried forward, and the closing entry in the plan that marks the milestone done.

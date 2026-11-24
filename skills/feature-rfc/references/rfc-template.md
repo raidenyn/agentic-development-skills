@@ -15,12 +15,12 @@ Three reading depths should each stand alone:
 
 | Field | Value |
 |---|---|
-| Status | Draft / In review / Accepted / Rejected / Withdrawn / Implemented / Superseded by <link> |
+| Status | Draft / In review / Accepted / Rejected / Withdrawn / Superseded by <link> |
 | Author | <person accountable for the text> |
 | Decider | <one person> |
 | Review by | YYYY-MM-DD |
 | Created / Updated | YYYY-MM-DD / YYYY-MM-DD |
-| Links | <issue, related RFCs and decision records> |
+| Links | <issue, related RFCs and decision records. "Supersedes <link>" for each record this RFC replaces> |
 
 Reading order: Summary and What changes (2 min) · add How it works today, Proposal, Contracts, Milestones, Drawbacks and risks (10 min) · Decisions to approve last. Link each name to its heading.
 
@@ -103,11 +103,11 @@ A line or two each, or "not applicable because …": security and privacy · fai
 
 ## Milestones
 
-| Milestone | Outcome (what works when done) | Produces | Consumes | Depends on | Size | Status |
-|---|---|---|---|---|---|---|
-| <name> | | <contracts> | <contracts> | <milestones> | ~N PRs | planned / done / dropped (why) |
+| Milestone | Outcome (what works when done) | Produces | Consumes | Depends on | Size |
+|---|---|---|---|---|---|
+| <name> | | <contracts> | <contracts> | <milestones> | ~N PRs |
 
-Rules: each milestone ships on its own and leaves the main branch working. The outcome is something that can be shown working and names the capabilities or specs it touches. Cut milestones by behavior, not by layer. The first is the thinnest end-to-end path through the parts the feature touches, shaped to test the riskiest assumption. After it, riskier milestones come before safer ones. Shared contracts and the data model land early, inside the first milestone that uses them, not as a milestone of their own. No milestone consumes a contract before an earlier one produces it, and each contract has exactly one producer. A milestone that produces a contract and uses it itself lists it under Produces only. Say which milestones can run in parallel. Add a Mermaid dependency graph when there are more than three. Do not list individual tasks.
+Rules: each milestone ships on its own and leaves the main branch working. The outcome is something that can be shown working and names the capabilities or specs it touches. Cut milestones by behavior, not by layer. The first is the thinnest end-to-end path through the parts the feature touches, shaped to test the riskiest assumption. After it, riskier milestones come before safer ones. Shared contracts and the data model land early, inside the first milestone that uses them, not as a milestone of their own. No milestone consumes a contract before an earlier one produces it, and each contract has exactly one producer. A milestone that produces a contract and uses it itself lists it under Produces only. Say which milestones can run in parallel. Add a Mermaid dependency graph when there are more than three. Do not list individual tasks, and do not track progress here: the RFC is frozen once it is accepted.
 
 ## Decisions to approve
 
@@ -115,7 +115,7 @@ Every decision, "needs your call" first. Each contract is one decision here, lin
 
 | Decision | In one sentence | Needs your call? | Status | Reason (once agreed) | Argued in |
 |---|---|---|---|---|---|
-| <name> | | yes / routine (source) | proposed / waiting on spike / agreed / superseded by <name> | <the person's reason and any "yes, if" condition> | <section link> |
+| <name> | | yes / routine (source) | proposed / waiting on spike / agreed | <the person's reason and any "yes, if" condition> | <section link> |
 
 ## Open questions
 
@@ -131,13 +131,6 @@ Filled in when review ends: outcome, date, decider, conditions ("yes, if …"), 
 ## Review log
 
 One entry per review round: date, what was asked, what changed (by name), what was decided and why.
-
-## Amendments
-
-After acceptance only.
-
-- **Amendment:** date, the decision or contract superseded, the new decision, the reason, who approved. Leave the original text in place and add one line under it: "Superseded by amendment <name>, see Amendments".
-- **Clarification:** date and what was clarified.
 
 ## Appendix
 
