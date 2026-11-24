@@ -7,7 +7,7 @@ An accepted RFC is decision history. It is not kept in step with the code. Curre
 1. **Break down the first milestone.** It is usually the riskiest, and splitting it early tests whether the plan and contracts hold. Use the `milestone-breakdown` skill if it is available. If it is not, say so, and split the milestone by the same rules: one task per PR, each leaving the main branch working, with dependencies checked against the contracts. Later milestones stay at milestone level until their turn.
 2. **Add the implementation rule to the repo**, once per repo. Put it in a rule that loads only when relevant, not in the always-loaded instruction file, because most tasks have nothing to do with RFCs. Use whatever scoped-rule mechanism the agent host offers. For example, in Claude Code that is a file under `.claude/rules/` with a `paths:` list covering the changes folder and the design folder. Suggested text:
 
-   > Changes made from a feature RFC follow its frozen contracts and agreed decisions. If one turns out wrong, stop and propose an RFC amendment. Do not diverge in the change's own design. Link the RFC in every change made from it. When the last task of a milestone is merged, mark the milestone done in the RFC's milestone table.
+   > Changes made from a feature RFC follow its frozen contracts and agreed decisions. If one turns out wrong, stop and propose an RFC amendment. Do not diverge in the change's own design. Link the RFC in every change made from it. When the last task of a milestone is merged and the milestone has been checked against what it had to deliver, mark it done in the RFC's milestone table.
 
    The always-loaded instruction file gets at most one line: where design records live, and to check them before proposing architectural changes.
 
@@ -17,7 +17,7 @@ Ask before doing either. Do not edit repo rules on your own initiative.
 
 ## Keeping the RFC current
 
-- **Milestone status.** Mark a milestone done when its last task is merged, or dropped with one line on why. Task status lives wherever the team tracks tasks, not in the RFC.
+- **Milestone status.** Mark a milestone done when its last task is merged and it has been checked against what it had to deliver (the `milestone-breakdown` skill's close step covers the check), or dropped with one line on why. Task status lives wherever the team tracks tasks, not in the RFC.
 - **Implemented.** When every milestone is done or dropped, set the header status to Implemented.
 - **Amendments.** If breaking down or implementing a milestone shows that a decision or frozen contract is wrong, stop and propose an amendment: the superseded decision, the new one, the reason, and the person's approval. Log it in the Amendments section and mark the original text as superseded, without deleting it. A change too large to amend gets a new RFC next to this one, and this one's status becomes "Superseded by" with a link.
 
