@@ -146,7 +146,7 @@ Points the template depends on:
 
 - **Out of scope** is its own field in every task: neighboring behavior that belongs to another task (named), things that must not change, no new dependencies without asking.
 - **Acceptance criteria** are observable from outside, and each names the test or command that proves it. They describe behavior that is not true before the task. If the RFC already gives a checkable criterion, link it.
-- **Starting points** are paths to the contracts, the example to copy and the likely entry points. Say they are starting points, not the list of files allowed to change. No line numbers.
+- **Starting points** are references that stay true: the specs that describe the behavior (the OpenSpec specs, where the repo has them), the contracts, the entry points, and the example to copy. Links into the code go stale quickly, so keep them to entry points and the example, and do not list the files to change. Say they are starting points, not the list of files allowed to change. No line numbers.
 - **Design constraints** carries the RFC into the implementation. It links the RFC and the milestone, names the decisions and contracts the task implements or uses (with each contract's stability), lists the conditions that apply, and repeats the stop rule. Generate it from the RFC. Do not retype decisions from memory.
 - **If it does not fit** tells the implementing agent when to stop and what to hand back.
 - **The pull request reports** what was learned, which is the input for reconciling the remaining tasks.

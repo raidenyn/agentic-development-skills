@@ -107,7 +107,7 @@ Empty at first. After each reconcile: date, what changed, why, and the merged ta
 
 **Delivers:** <coverage entry names, each linked to the RFC. For an enabling task: what it enables.>
 
-**In scope:** <what this task changes>
+**In scope:** <what this task changes, named by behavior, spec and component, not by file list>
 
 **Out of scope:**
 - <neighboring behavior, and the task that owns it>
@@ -123,9 +123,10 @@ Empty at first. After each reconcile: date, what changed, why, and the merged ta
 **Assumptions in force:** <assumption names, or none. If the code contradicts one, report it and do not change course on your own.>
 
 **Starting points** (not the full list of files that may change):
-- <path to a contract or schema>: <why>
-- <path to the example to copy>: <what to follow in it>
-- <path to an entry point or test folder>: <why>
+- <spec that describes the behavior, such as an OpenSpec spec>: <which requirement applies>
+- <contract or schema>: <why>
+- <entry point>: <where the change starts>
+- <example to copy>: <what to follow in it>
 
 **Acceptance criteria:**
 - Given <…>, when <…>, then <…>. Proved by: <test name or command>
@@ -172,7 +173,7 @@ Never drop a criterion silently, change or delete existing tests to make them pa
 - **Kind** tells the reviewer what to expect. A behavior task shows something working. An enabling task creates something stable that others consume. A spike produces findings. A closing task proves the whole flow and removes temporary code.
 - **Size** is a rough signal for the reviewer, not an estimate to be held to. S is well under half the task size settings, M is within them, L is at or over one of them. A task marked L is split or states why it is an exception. See [task-sizing.md](task-sizing.md).
 - **Out of scope** is never empty. It is the main defense against a task growing.
-- **Starting points** are paths to stable things. A full file list goes stale after the first refactor, and line numbers go stale sooner.
+- **Starting points** point at things that stay true: specs, contracts and entry points first, then one example to copy. Links deep into the code are fragile. A full file list goes stale after the first refactor, and line numbers go stale sooner.
 - **Acceptance criteria** always include the line about the standard checks and the main branch. It is what makes each task safe to merge on its own. Where the repo's practice allows, the tests for the other criteria fail before the task and pass after.
 - **Design constraints** is copied into the proposal of the OpenSpec change made from the task, or into the pull request description in a repo without OpenSpec. Its content does not change, apart from filling in the task link. Write its links as paths from the repository root or as full URLs, so they still resolve from the new place. If you use relative links, rewrite them for the destination and check them there.
 - **If it does not fit** and **The pull request reports** are the same text in every task. Keep them in each task anyway, because the implementing session sees only its own task.
