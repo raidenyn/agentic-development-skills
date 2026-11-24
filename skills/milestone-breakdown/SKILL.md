@@ -1,6 +1,6 @@
 ---
 name: milestone-breakdown
-description: Use when a milestone of an accepted feature RFC is next to be built and must be split into PR-sized tasks for coding agents, for example "break down milestone X" or "plan the tasks for the next milestone". Also use when a task of that milestone has merged, failed or reported spike findings and the remaining tasks need updating, or when the milestone's last task has merged and it must be checked and closed. Covers slicing, task size, gaps in the RFC, dependencies, the task descriptions and the checks. Not for splitting work that has no accepted RFC.
+description: Use when a milestone of an accepted feature RFC is next to be built and must be split into PR-sized tasks for coding agents, for example "break down milestone X" or "plan the tasks for the next milestone". Also use when a task of that milestone is about to start and must be reconciled with the merged code, when a task has merged, failed or reported spike findings and the remaining tasks need updating, or when the milestone's last task has merged and it must be checked and closed. Covers slicing, task size, gaps in the RFC, dependencies, the task descriptions and the checks. Not for splitting work that has no accepted RFC.
 ---
 
 # Milestone breakdown
@@ -12,14 +12,14 @@ One task is one fresh agent session, one pull request and, where the repo uses t
 The skill has three modes. Pick the one the request calls for:
 
 - **Break down** a milestone that is next (the main procedure below).
-- **Reconcile** the remaining tasks after one has merged, a spike has reported, or a task has failed.
+- **Reconcile** a task with the code as it is now. Every task is reconciled before any work on it starts. The remaining tasks are reconciled when a merge, a spike or a failed task affects them.
 - **Close** the milestone after its last task has merged.
 
 The last two are in [references/after-the-split.md](references/after-the-split.md).
 
 ## Principles
 
-- **One milestone at a time, when it is next.** Tasks written early describe code that does not exist yet. The RFC's contracts keep the milestones consistent in the meantime. When several people need work at once, the first one or two independent tasks of the following milestone may be prepared early. Nothing more.
+- **One milestone at a time, when it is next.** Tasks written early describe code that does not exist yet. The RFC's contracts keep the milestones consistent in the meantime. No task of a milestone is written while a milestone it depends on is still open.
 - **The RFC is the authority** for decisions, contracts and scope. The code as it is now is the authority for facts about the code. The task list overrides neither.
 - **Plan here, build elsewhere.** This skill writes no production code. Implementation starts in a fresh session per task, after the person has approved the list.
 - **Never fill a gap silently.** Every detail the RFC leaves out is left to the implementer on purpose, recorded as an assumption, asked as a question, or raised as a proposal for a follow-up RFC.
@@ -39,10 +39,12 @@ The values below are defaults. If `openspec/design/README.md` (or the README of 
 | Task size, acceptance criteria | 2 to 5 |
 | Task overrun | stop at about 1.5 times the task's estimate |
 | Tasks per milestone | up to about 15 |
+| Milestone size overrun | about 2 times the RFC's estimate for the milestone |
 | Independent review | from 6 tasks, or when the list marks any tasks as parallel |
 | Independent review model | ask the person, once per session |
 | Independent review rounds | at most 2 |
 | Stacked pull requests | ask the person, once per milestone |
+| How a task is started | the repo's own process, read in step 2. Ask the person only when the repo does not say |
 | Tasks in flight | 2 to 3 per reviewer |
 | Failed attempts before a task returns to planning | 2 |
 | Share of remaining tasks needing edits that triggers a new breakdown | about a quarter |
@@ -54,11 +56,11 @@ Task size counts code and configuration, tests included. Documents, generated fi
 
 ## Before you start
 
-- The RFC's status must be Accepted. If it is still in review, finish the review first (the `feature-rfc` skill covers it). An accepted RFC sits in the design archive and is never edited, by this skill or by a task.
+- The RFC's status must be Accepted. If it is still in review, do not stop at saying so. List what is still open (decisions not agreed, blocking open questions, pending spikes, changes the person has not seen) and ask whether they accept the RFC now. A request to break it down is not an acceptance. On an explicit yes, the acceptance is recorded and the RFC is archived as `feature-rfc` step 8 describes, before any task is written. An accepted RFC sits in the design archive and is never edited, by this skill or by a task.
+- The accepted RFC is on the default branch, at its archived path, because tasks link to it there. If it is only on a branch, tell the person: tasks can be written, but nothing is published and no task starts until it is merged. Every task written before the merge carries it under "Ready to start when": "the RFC is on the default branch at <path>". The same holds for an accepted follow-up RFC that a task relies on.
 - Read the whole RFC, every follow-up RFC its header links as "Partly superseded by", and the decision records (`adr-*.md`) in its folder. The RFC is frozen at acceptance, so a later change is only in a follow-up RFC. Where the two disagree, the follow-up wins. If the status is "Superseded by", the RFC is no longer the design: tell the person and use the one it links.
-- Check the start conditions: every milestone listed under this milestone's "Depends on" is done (its plan has a closing entry, or its tracker milestone is closed), even one that produces no contract, and every condition attached to the acceptance or to a decision that applies here is met. If one is not, tell the person before splitting.
+- Check the start conditions: every milestone listed under this milestone's "Depends on" is done, even one that produces no contract, and every condition attached to the acceptance or to a decision that applies here is met. A milestone is done when its plan has a closing entry, and, when it is published in a tracker, its plan item is closed as completed there too. A closed tracker milestone or a merged last task alone is not enough. If one is not done, stop and tell the person: this milestone is not broken down yet. If a condition is not met, tell the person before splitting.
 - Check what the milestone consumes. Every contract it consumes from another milestone must already be produced by that milestone and landed in the code. A contract this milestone produces and also uses itself does not count here. If one is missing, stop and tell the person.
-- Tasks prepared early for the following milestone may be written before the two checks above pass. Prepare only tasks that need nothing unmerged, write every condition that is not yet met into the task's "Ready to start when", and check the tasks again when their milestone becomes next. An early task may be started only when its own conditions are met.
 - If the RFC has no Contracts section, milestone table or "Left to implementation" list, tell the person what is missing before splitting.
 
 ## Procedure
@@ -71,9 +73,15 @@ Before proposing any task, write the coverage list from the RFC text:
 - each behavior it must deliver;
 - each contract it produces or consumes;
 - each RFC decision and condition that applies;
+- each open question or unchecked assumption the RFC assigns to this milestone, with how it is checked and by whom;
 - each requirement on quality that applies, such as performance, security or compatibility.
 
 Give every entry a short name and a link to the place in the RFC it comes from. Mark anything you inferred as inferred. This list is what the coverage check in step 7 runs against.
+
+Two rules keep an entry from hiding work:
+
+- **A contract this milestone produces is listed by its parts:** one entry per operation, group of fields or error case that could land in a different task. "The contract" as a single entry lets a partial delivery pass as delivered.
+- **Mark every "all", "every" and "each"** in the RFC text behind an entry ("all tools", "every write"). Step 2 turns each into a named list.
 
 ### 2. Read the code
 
@@ -85,9 +93,14 @@ Read the parts of the repository the milestone touches, as they are now, not as 
 - the **areas** the milestone touches: the components, modules or repositories, named as the RFC's "What changes" table names them. Each task is assigned one;
 - **hotspot files** that many changes must touch: routers, registries, dependency wiring, index exports, shared config, numbered migrations;
 - **one existing example to copy** for each kind of thing the milestone adds (an endpoint, a worker, a migration, a screen). If there is none, the first task that adds one becomes the example and goes early;
+- **a named list for every "all", "every" and "each"** marked in step 1, taken from the code, each item with its path. The coverage list then holds the items, not the phrase. If the RFC's wording may not have meant an item, ask;
+- **how a task is started here:** the repo's process for a change, from its agent instructions and contribution docs: the branch rule, the command or skill that opens a change (for example an OpenSpec change), the reviews it requires. It goes into every task's "Start" section. If the repo does not say, ask the person once;
+- **how a release or deploy is triggered,** and whether a merge to the main branch ships anything. Every guard depends on it, and so does any RFC decision that relies on nothing shipping in between;
 - anything that contradicts the RFC.
 
 Confirm that the main branch builds and passes its checks, and that the commands run. If you cannot run them here, say so and ask the person to confirm. If the checks that exist could not prove a task done, say so. The first task may have to add the missing check.
+
+If a check fails here and passes in the repo's CI on the same commit, that is a finding about this environment, not a reason to stop. Record the failing tests by name, the passing CI run and the likely cause, tell the person, and repeat the finding in every task whose standard checks include that command, so an implementing agent neither chases those failures nor "fixes" the tests. Stop when CI fails too, or when a failure is in the code the milestone touches.
 
 Keep the findings short. They are facts the tasks need, not a summary of the codebase.
 
@@ -102,9 +115,11 @@ For every missing detail that matters to the split, choose one of four actions. 
 | The answer changes the task list, a contract, the data model, security or visible behavior | Ask a blocking question as soon as you find it, with the readings and your recommendation. Do not write the tasks that depend on it until it is answered |
 | The RFC is wrong or cannot work given the code, or the choice would change scope | Stop that part of the milestone and propose a follow-up RFC |
 
-Then check for a design gap. If two or more tasks must agree on something the RFC does not define precisely, write it down as a milestone-level contract with one producing task before writing either task. If the task list depends on a question only an experiment can answer, the first task is a spike and the tasks that depend on it are written after it reports.
+Then check for a design gap. If two or more tasks must agree on something the RFC does not define precisely, write it down as a milestone-level contract before writing either task, with one producing task, or one per part when several tasks build it. The same goes for a name that two tasks would each have to pick, such as a spec capability, a package or a config section: fix it in the plan. If the task list depends on a question only an experiment can answer, the first task is a spike and the tasks that depend on it are written after it reports.
 
 Collect the questions and ask them together where you can. Keep working on the tasks that do not depend on the answers. Tasks written after an answer go through the checks in step 7 like the others.
+
+**A question the person defers.** Only the person can leave a blocking question open. When they do, the task that waits on it may be written on the recommended reading. It names the question under "Ready to start when", the plan keeps the readings, and the task is not started until the answer is in. A different answer sends the task back through the checks. Never choose this yourself to avoid asking.
 
 A gap in an RFC decision or a frozen contract is never settled here. It needs a follow-up RFC (see "When the split contradicts the RFC").
 
@@ -135,7 +150,12 @@ If the whole milestone has one outcome and fits the task size settings, it is on
 
 **Ask before stacking.** When a behavior does not split cleanly below the size settings, there are two ways out: split it further into smaller tasks that can each still be verified alone, which usually costs extra scaffolding or narrower checks, or allow a short chain of stacked pull requests. Which is better depends mostly on how many reviewers the team has. Unless the stacked pull requests setting already answers it, ask the person which they want for this milestone, the first time the case comes up, and apply the answer to the rest of the milestone. Do not choose for them. Write the answer into the list, so a later session does not ask again. If no further split leaves every part verifiable alone and the person does not want a stack, keep one task and state the size exception.
 
-If the split lands above the tasks-per-milestone setting, or far from the size the RFC estimated, tell the person. The milestone is probably two milestones, and that is an RFC change.
+If the split lands above the tasks-per-milestone setting or the milestone size overrun setting, stop and give the person two options. First look for a point inside the list where something shippable works and the main branch could be released, because that is where a milestone would split.
+
+- **Keep it as one milestone.** The plan records the count against the estimate, and the person's reason.
+- **Split it.** That changes the RFC's milestones, so it is a proposal for a follow-up RFC.
+
+Do not pick for them, and do not merge tasks to get under the number.
 
 ### 6. Describe each task
 
@@ -153,7 +173,8 @@ Points the template depends on:
 - **Area** is the one component, module or repository the task mainly changes, from the areas found in step 2. A vertical slice touches several layers and still has one Area: the component whose behavior it delivers.
 
 - **Out of scope** is its own field in every task: neighboring behavior that belongs to another task (named), things that must not change, no new dependencies without asking.
-- **Acceptance criteria** are observable from outside, and each names the test or command that proves it. They describe behavior that is not true before the task. If the RFC already gives a checkable criterion, link it.
+- **Acceptance criteria** are observable from outside, and each names the test or command that proves it. They describe behavior that is not true before the task. If the RFC already gives a checkable criterion, link it. A criterion that only a person or a real environment can prove (a live account, production data) names who runs the check and what they record. It stays a criterion: the task does not close on "not checked".
+- **Start** is the first thing the implementing session does, and it is the reconcile of this one task: read the code the task touches, as merged, before any design work or brainstorming. Its first two steps are the same text in every task. The third is how a task is started in this repo, from step 2.
 - **Starting points** are references that stay true: the specs that describe the behavior (the OpenSpec specs, where the repo has them), the contracts, the entry points, and the example to copy. Links into the code go stale quickly, so keep them to entry points and the example, and do not list the files to change. Say they are starting points, not the list of files allowed to change. No line numbers.
 - **Design constraints** carries the RFC into the implementation. It links the RFC and the milestone, names the decisions and contracts the task implements or uses (with each contract's stability), lists the conditions that apply, and repeats the stop rule. Generate it from the RFC. Do not retype decisions from memory.
 - **If it does not fit** tells the implementing agent when to stop and what to hand back.
@@ -172,7 +193,7 @@ Run every check before showing the list, and report the result. The template has
 - **Nothing is consumed before it is produced.** For every contract or piece of data a task consumes, an earlier task or an earlier milestone produces it. A task that produces a contract and uses it in the same change lists it under Produces only, so an interface can arrive together with its first use.
 - **Dependencies are stated, not implied by the order.** A task that consumes something another task in this list produces depends on that task, directly or through another task. A dependency exists only where there is a real one. "Depends on: none" is right only when everything the task needs already exists in the code.
 - **A task depends only on merged work.** If it needs a sibling's unmerged code, it comes after that sibling, or the two are stacked because the person allowed it for this milestone (see [references/task-sizing.md](references/task-sizing.md)).
-- **Each contract has one producer.** This includes the milestone-level contracts from step 3.
+- **Each part of a contract has one producer.** This includes the milestone-level contracts from step 3. A contract may be built over several tasks, each adding a named part. Then the plan lists the parts with their tasks, a consumer depends on the task that produces the part it uses, and one task, normally the closing one, checks the complete shape against the RFC. What a later milestone consumes is complete only with that task.
 - **The order is a real order.** No cycles.
 - **Parallel tasks are safe.** Tasks marked parallel meet the three conditions in [references/task-sizing.md](references/task-sizing.md). If two tasks must touch the same hotspot, add a dependency or move the shared edit into one task.
 - **Frozen contracts are untouched.**
@@ -182,12 +203,14 @@ Run every check before showing the list, and report the result. The template has
 
 **Coverage, both ways**
 
-- Every entry on the coverage list is delivered by at least one task, or is deferred with a reason. Deferring something the RFC places in this milestone changes the RFC's plan: it needs the person's agreement, and a follow-up RFC when the entry moves to another milestone or is dropped.
+- Every entry on the coverage list is delivered by at least one task, or is deferred with a reason. Deferring something the RFC places in this milestone changes the RFC's plan: it needs the person's agreement, and a follow-up RFC when the entry moves to another milestone or is dropped. A deferral names what picks the entry up: the key of the task or outline that will deliver it, or the accepted follow-up RFC that drops it. "Later" is not a place. When an accepted follow-up RFC moves the entry to a milestone that has no tasks or outlines yet, that RFC is the record, because the milestone's breakdown starts from it. When the milestone has them, the entry names the receiving key.
+- An assumption never stands in for part of an RFC contract's shape. The milestone the RFC names produces the whole shape, even when the data behind a field arrives later.
+- Every "all", "every" and "each" from the RFC is a named list in the coverage table, and every item on it is in a task.
 - Every task delivers at least one entry, or is an enabling task for one. A task that traces to nothing is scope the RFC did not ask for. Remove it, or turn it into a proposal for a follow-up RFC.
 
 **Tasks**
 
-- No blocking question is open for a task that was written, and every assumption used is cited.
+- No blocking question is open for a task that was written, and every assumption used is cited. The one exception is a question the person deferred, which the task carries under "Ready to start when".
 - Every behavior task passes the "what can be shown working" test, and every enabling task says what it enables.
 - Every task can be verified alone: its criteria pass without later tasks.
 - Every task fits the size settings or says why it is an exception, and none is too small.
@@ -195,7 +218,7 @@ Run every check before showing the list, and report the result. The template has
 - The milestone starts with an end-to-end path and ends with the closing task, where they apply.
 - No task contains line numbers or step-by-step implementation.
 
-**Independent review.** When the list reaches the independent review setting and your tool can run a separate read-only session, have a reviewer that has not seen this conversation check the list against the RFC and the checks above. Before starting it, unless the independent review model setting names one, ask the person which model the reviewer should use, and name the options your tool offers. Use their answer for the rest of the session without asking again. Tell the reviewer to report only what affects correctness, coverage or parallel safety. Fix and re-check, up to the review rounds setting. If no such review is possible, say that the checks are a self-check only.
+**Independent review.** When the list reaches the independent review setting and your tool can run a separate read-only session, have a reviewer that has not seen this conversation check the list against the RFC and the checks above. Before starting it, unless the independent review model setting names one, ask the person which model the reviewer should use, and name the options your tool offers. Use their answer for the rest of the session without asking again. Tell the reviewer to report only what affects correctness, coverage or parallel safety. Fix and re-check, up to the review rounds setting. If the last allowed round still reported findings, the fixes for them have had no review: say so in the Checks, list those findings, and ask the person whether to run one more round or accept your own check of the fixes. If no such review is possible, say that the checks are a self-check only.
 
 ### 8. Review the list with the person
 
@@ -215,7 +238,7 @@ Nothing is created in a tracker before the person approves.
 
 - Deliver the agreed list in the place and form the person asks for. If they name none, show it in your reply and ask where they keep tasks. Do not pick a place for them. Creating items in a tracker is their call and uses their tools. When the `task-publishing` skill is available, it is the way to put the tasks on a GitHub Project: write the plan to `00-plan.md` and each task to its own file in one folder for the milestone, and hand that folder over.
 - Whatever the place, the coverage list, the assumptions and answers, and the tasks must stay readable later, because reconciling and closing start from them.
-- Tell the person to come back after each merge so the remaining tasks can be reconciled, and after the last one so the milestone can be closed. Both are in [references/after-the-split.md](references/after-the-split.md).
+- Tell the person what keeps the list true. Every task starts with its own reconcile, which is its "Start" section. They come back when a pull request reports effects on later tasks, a spike reports or a task fails, and after the last merge so the milestone can be closed. All of it is in [references/after-the-split.md](references/after-the-split.md).
 - Do not start implementing in the same step unless asked.
 
 ## When the breakdown is part of a whole RFC
@@ -223,8 +246,9 @@ Nothing is created in a tracker before the person approves.
 The `rfc-breakdown` skill runs this skill once per milestone, often in a session that cannot reach the person. When the request says so:
 
 - run through the checks in step 7 and stop. Steps 8 and 9 are done once for all milestones by the session that started you;
-- where this skill says to ask the person, do not ask and do not guess. Return the question with the possible readings and your recommendation, and leave unwritten the tasks that wait on it;
-- use the Area values and the key format you were given, and report any Area you needed that was not on the list;
+- where this skill says to ask the person, do not ask and do not guess. Return the question with the possible readings and your recommendation, and leave unwritten the tasks that wait on it. The one exception is a question the request lists as deferred by the person, with the reading to use: that task is written as "A question the person defers" in step 3 says;
+- use the Area values, the shared names, the key format and the way a task is started that you were given, and report any Area or shared name you needed that was not on the list;
+- report the number of tasks against the RFC's estimate. When it passes the milestone size overrun setting, write the list as one milestone and return the two options as a question;
 - report whether the list reached the independent review setting, and do not start the review yourself.
 
 ## When the split contradicts the RFC
@@ -242,5 +266,5 @@ A provisional contract may change, but only in the way the RFC says it may. Reco
 ## Output
 
 - **Break down:** a task list for one milestone in the template's format, with the coverage table, the assumptions and open questions, the result of the checks, and any findings that need a follow-up RFC.
-- **Reconcile:** the updated remaining tasks and a short note of what changed in the plan and why, or a new breakdown of the remaining work when a trigger fires.
+- **Reconcile:** for one task before it starts, the facts filled in, or what goes back to the person. For the remaining tasks, the updated tasks and a short note of what changed in the plan and why, or a new breakdown of the remaining work when a trigger fires.
 - **Close:** the coverage list checked against the code, what is carried forward, and the closing entry in the plan that marks the milestone done.

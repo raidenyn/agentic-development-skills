@@ -18,14 +18,17 @@ Run this critically before the person sees the draft, and again before closing t
 
 - [ ] Every important number is labelled measured, derived, estimated or assumed, with source and time window.
 - [ ] Nothing is invented. Each unverified claim is an open question.
-- [ ] Risky assumptions were spiked, or are listed as open questions with a way to check them.
+- [ ] Risky assumptions were spiked, or are listed as open questions with the milestone that checks them, how, and who does it when an agent cannot.
 
 ## Design
 
 - [ ] Every change is marked NEW, CHANGED or REMOVED against today, in the table and the diagrams.
 - [ ] Every NEW or CHANGED item names the milestone that delivers it.
+- [ ] Every milestone has at least one row in "What changes", also when its work is not code (documents, agent skills, operations). A milestone without a row has nothing the breakdown can assign its tasks to.
+- [ ] Wherever a contract, a decision or a "What changes" row says "all", "every" or "each", the items are listed, or the rule that picks them is stated so that the code answers it without judgement.
 - [ ] At least two real options plus doing nothing are compared on the same criteria, with the deciding trade-off in prose. If there is honestly only one credible option, the draft says so and why, and compares it with doing nothing.
 - [ ] Drawbacks and hard-to-reverse steps are explicit.
+- [ ] A decision that holds only while nobody does something (no release between two milestones, no caller of an old interface) names what enforces that, or lists it as a risk with its trigger.
 - [ ] Security, failure behavior, observability, migration and rollback, and cost each have a line or a reasoned "not applicable".
 - [ ] No pasted schemas or code beyond contract shapes. No implementation steps.
 - [ ] Owners of code or services this depends on know about the change, or asking them is an open question.
@@ -63,4 +66,4 @@ Run this critically before the person sees the draft, and again before closing t
 - [ ] Before Accepted: every decision is agreed, and no blocking open question or pending spike remains.
 - [ ] The review log has an entry for each round.
 - [ ] Header status, decider and dates are current. On a decision, the outcome section is filled in.
-- [ ] On acceptance: the feature folder is in the archive under `YYYY-MM-<feature-name>`, no link into or out of it is broken, and this RFC and every record it replaces link to each other. A rejected or withdrawn RFC is not archived and not merged.
+- [ ] On acceptance: the feature folder is in the archive (the archive folder setting) under `YYYY-MM-<feature-name>`, no link into or out of it is broken, and this RFC and every record it replaces link to each other. A rejected or withdrawn RFC is not archived and not merged.

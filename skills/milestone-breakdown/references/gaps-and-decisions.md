@@ -18,11 +18,17 @@ Use when a default is needed to draw task boundaries, the default is safe and re
 
 Each assumption has a short name, the default, why it is safe, and how to revisit it. Tasks that rely on it cite it by name and repeat the default, because a copied task does not carry the table. The person sees all assumptions in one list at review and can turn any of them into a question.
 
+An assumption never covers part of a contract the RFC gives to this milestone. A field, an operation or an error case of that contract is produced here, in the shape the RFC states, even when the data behind it only arrives with a later milestone. Leaving part of the shape out is a deferral, and a deferral of something the RFC places here needs the person and a follow-up RFC.
+
 ### Ask a blocking question
 
 Use when the answer changes the task list, a contract, the data model, security, permissions or behavior a user would see. Also use when the RFC can be read two ways.
 
 Ask as soon as you find it, together with other open questions where you can. Write the question with the possible readings and your recommendation. Do not write the tasks that depend on the answer until the person has answered. Tasks that do not depend on it can go ahead. Tasks written after the answer go through the same checks as the rest.
+
+A question can also come up after its task was written, for example from the independent review. It is handled the same way: ask, and treat the task as unwritten until the answer is in.
+
+Only the person can leave a blocking question open. If they defer the answer, the task may stand on the recommended reading, on three conditions: it names the question under "Ready to start when", the plan keeps the readings and who deferred it, and nobody starts the task before the answer. A different answer sends the task back through the checks. Writing a task on your own recommendation without asking is guessing.
 
 ### Propose a follow-up RFC
 
@@ -46,6 +52,7 @@ A simple test: if changing the decision later would mean editing more than one t
 |---|---|
 | Module boundaries, interfaces between milestones, the data model, auth and error conventions, shared library choices, rollout strategy | The RFC. If missing, it is a follow-up RFC or a blocking question |
 | An interface, event or config key shared by two tasks in this milestone | A milestone-level contract, written during the breakdown |
+| The name of something several tasks add to, such as a spec capability | The plan, with the task that creates it. For a whole RFC, the shared vocabulary |
 | Acceptance criteria, verification commands, the order of migration steps, which guard covers which task | The breakdown |
 | Internal structure, algorithms, local names, test cases inside a module, where to log | The implementing agent |
 | A name that appears in a public interface, a config key or a database column | Wherever the contract that holds it is decided, never the implementing agent |
@@ -55,6 +62,7 @@ A simple test: if changing the decision later would mean editing more than one t
 Before slicing, ask whether any of these is true and not already settled by the RFC:
 
 - Two or more tasks must agree on an interface or data shape that is not defined precisely.
+- Two or more tasks would each create or name the same shared thing: a spec capability, a package, a config section, a directory.
 - Persistent data or a public interface changes.
 - A migration must keep old and new versions working at the same time.
 - Security or permission boundaries change.
@@ -67,7 +75,7 @@ If one is true, settle it first, in the lightest form that works:
 
 | The gap | Form |
 |---|---|
-| A seam between tasks | A milestone-level contract: types, a schema or an error table, with one producing task. Where practical the producing task lands it in code so later tasks consume the merged thing |
+| A seam between tasks | A milestone-level contract: types, a schema or an error table, with one producing task, or one per part when several tasks build it. Where practical the producing task lands it in code so later tasks consume the merged thing |
 | A durable choice between alternatives, inside the RFC's bounds | A one-page decision record in the RFC's folder |
 | A question about what is feasible | A spike |
 | A missing example | Make the first task that introduces the pattern the reference, and put it early |
