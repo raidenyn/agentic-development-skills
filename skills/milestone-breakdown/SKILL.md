@@ -1,6 +1,6 @@
 ---
 name: milestone-breakdown
-description: Use when a milestone of an accepted feature RFC is next to be built and must be split into PR-sized tasks for coding agents, for example "break down milestone X" or "plan the tasks for the next milestone". Also use when a task of that milestone has merged and the remaining tasks need updating, or when the milestone's last task has merged and it must be checked and closed. Covers slicing, task size, gaps in the RFC, dependencies, the task descriptions and the checks. Not for splitting work that has no accepted RFC.
+description: Use when a milestone of an accepted feature RFC is next to be built and must be split into PR-sized tasks for coding agents, for example "break down milestone X" or "plan the tasks for the next milestone". Also use when a task of that milestone has merged, failed or reported spike findings and the remaining tasks need updating, or when the milestone's last task has merged and it must be checked and closed. Covers slicing, task size, gaps in the RFC, dependencies, the task descriptions and the checks. Not for splitting work that has no accepted RFC.
 ---
 
 # Milestone breakdown
@@ -12,7 +12,7 @@ One task is one fresh agent session, one pull request and, where the repo uses t
 The skill has three modes. Pick the one the request calls for:
 
 - **Break down** a milestone that is next (the main procedure below).
-- **Reconcile** the remaining tasks after one has merged.
+- **Reconcile** the remaining tasks after one has merged, a spike has reported, or a task has failed.
 - **Close** the milestone after its last task has merged.
 
 The last two are in [references/after-the-split.md](references/after-the-split.md).
@@ -57,8 +57,8 @@ Task size counts code and configuration, tests included. Documents, generated fi
 - The RFC's status must be Accepted. If it is still in review, finish the review first (the `feature-rfc` skill covers it).
 - Read the whole RFC, its amendments, and any decision records in the same folder.
 - Check the start conditions: every milestone listed under this milestone's "Depends on" is done, even one that produces no contract, and every condition attached to the acceptance or to a decision that applies here is met. If one is not, tell the person before splitting.
-- Check what the milestone consumes. Every contract it consumes must already be produced by an earlier milestone and landed in the code. If one is missing, stop and tell the person.
-- Tasks prepared early for the following milestone are the one exception to the two checks above. Prepare only tasks that need nothing unmerged, and check them again when their milestone becomes next.
+- Check what the milestone consumes. Every contract it consumes from another milestone must already be produced by that milestone and landed in the code. A contract this milestone produces and also uses itself does not count here. If one is missing, stop and tell the person.
+- Tasks prepared early for the following milestone may be written before the two checks above pass. Prepare only tasks that need nothing unmerged, write every condition that is not yet met into the task's "Ready to start when", and check the tasks again when their milestone becomes next. An early task may be started only when its own conditions are met.
 - If the RFC has no Contracts section, milestone table or "Left to implementation" list, tell the person what is missing before splitting.
 
 ## Procedure
@@ -119,8 +119,8 @@ If the whole milestone has one outcome and fits the task size settings, it is on
 
 **Order by learning and by dependency:**
 
-1. Preparatory refactoring that makes the change simple, as its own task with no behavior change. Small cleanup met along the way stays in the task that meets it.
-2. A spike, if step 3 called for one.
+1. A spike, if step 3 called for one.
+2. Preparatory refactoring that makes the change simple, as its own task with no behavior change. Small cleanup met along the way stays in the task that meets it.
 3. The thinnest end-to-end path through everything the milestone touches, with real build, test and deploy wiring. For a new system this may take a few tasks. It is never one large foundation pull request.
 4. Tasks that produce a contract before the tasks that consume it. The producing task lands the contract in code, with contract tests where practical.
 5. The remaining slices, with what can run in parallel marked.
@@ -132,7 +132,7 @@ If the whole milestone has one outcome and fits the task size settings, it is on
 
 **Size each task** against the settings. The signs of a task that is too big or too small, how to count mechanical changes, and the cases where "one task, one pull request, one session" does not fit are in [references/task-sizing.md](references/task-sizing.md). A task that is too small is as much a defect as one that is too big: each task costs a review.
 
-**Ask before stacking.** When a behavior cannot be split below the size settings without losing the ability to verify each part, there are two ways out: split it further anyway, or allow a short chain of stacked pull requests. Which is better depends mostly on how many reviewers the team has. Ask the person which they want for this milestone, the first time the case comes up, and apply the answer to the rest of the milestone. Do not choose for them.
+**Ask before stacking.** When a behavior does not split cleanly below the size settings, there are two ways out: split it further into smaller tasks that can each still be verified alone, which usually costs extra scaffolding or narrower checks, or allow a short chain of stacked pull requests. Which is better depends mostly on how many reviewers the team has. Unless the stacked pull requests setting already answers it, ask the person which they want for this milestone, the first time the case comes up, and apply the answer to the rest of the milestone. Do not choose for them. Write the answer into the list, so a later session does not ask again. If no further split leaves every part verifiable alone and the person does not want a stack, keep one task and state the size exception.
 
 If the split lands above the tasks-per-milestone setting, or far from the size the RFC estimated, tell the person. The milestone is probably two milestones, and that is an RFC change.
 
@@ -165,7 +165,7 @@ Run every check before showing the list, and report the result. The template has
 **Dependencies**
 
 - **Nothing is consumed before it is produced.** For every contract or piece of data a task consumes, an earlier task or an earlier milestone produces it.
-- **Dependencies are stated, not implied by the order.** A dependency exists only where there is a real one. "Depends on: none" is right only when everything the task needs already exists in the code.
+- **Dependencies are stated, not implied by the order.** A task that consumes something another task in this list produces depends on that task, directly or through another task. A dependency exists only where there is a real one. "Depends on: none" is right only when everything the task needs already exists in the code.
 - **A task depends only on merged work.** If it needs a sibling's unmerged code, it comes after that sibling, or the two are stacked because the person allowed it for this milestone (see [references/task-sizing.md](references/task-sizing.md)).
 - **Each contract has one producer.** This includes the milestone-level contracts from step 3.
 - **The order is a real order.** No cycles.
@@ -177,7 +177,7 @@ Run every check before showing the list, and report the result. The template has
 
 **Coverage, both ways**
 
-- Every entry on the coverage list is delivered by at least one task, or is deferred with a reason.
+- Every entry on the coverage list is delivered by at least one task, or is deferred with a reason. Deferring something the RFC places in this milestone changes the RFC's plan: it needs the person's agreement, and an RFC amendment when the entry moves to another milestone or is dropped.
 - Every task delivers at least one entry, or is an enabling task for one. A task that traces to nothing is scope the RFC did not ask for. Remove it, or turn it into an amendment proposal.
 
 **Tasks**
@@ -190,7 +190,7 @@ Run every check before showing the list, and report the result. The template has
 - The milestone starts with an end-to-end path and ends with the closing task, where they apply.
 - No task contains line numbers or step-by-step implementation.
 
-**Independent review.** When the list reaches the independent review setting and your tool can run a separate read-only session, have a reviewer that has not seen this conversation check the list against the RFC and the checks above. Before starting it, ask the person which model the reviewer should use, and name the options your tool offers. Use their answer for the rest of the session without asking again. Tell the reviewer to report only what affects correctness, coverage or parallel safety. Fix and re-check, up to the review rounds setting. If no such review is possible, say that the checks are a self-check only.
+**Independent review.** When the list reaches the independent review setting and your tool can run a separate read-only session, have a reviewer that has not seen this conversation check the list against the RFC and the checks above. Before starting it, unless the independent review model setting names one, ask the person which model the reviewer should use, and name the options your tool offers. Use their answer for the rest of the session without asking again. Tell the reviewer to report only what affects correctness, coverage or parallel safety. Fix and re-check, up to the review rounds setting. If no such review is possible, say that the checks are a self-check only.
 
 ### 8. Review the list with the person
 

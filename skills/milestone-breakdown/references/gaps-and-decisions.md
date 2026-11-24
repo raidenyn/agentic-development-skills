@@ -16,7 +16,7 @@ Name it under "Open choices" in the task when the agent might otherwise think it
 
 Use when a default is needed to draw task boundaries, the default is safe and reversible, and no behavior visible in the RFC depends on it. A page-size limit the RFC does not mention is an example.
 
-Each assumption has a short name, the default, why it is safe, and how to revisit it. Tasks that rely on it cite it by name. The person sees all assumptions in one list at review and can turn any of them into a question.
+Each assumption has a short name, the default, why it is safe, and how to revisit it. Tasks that rely on it cite it by name and repeat the default, because a copied task does not carry the table. The person sees all assumptions in one list at review and can turn any of them into a question.
 
 ### Ask a blocking question
 

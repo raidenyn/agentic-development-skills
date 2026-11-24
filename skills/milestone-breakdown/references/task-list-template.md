@@ -11,6 +11,8 @@ RFC: <link to the RFC file> · Milestone: <name> · Prepared: YYYY-MM-DD
 
 **Produces:** <contracts> · **Consumes:** <contracts, and the milestone that produced each>
 
+**Stacked pull requests:** <not needed so far / the person chose to split further / the person allowed them for this milestone>
+
 ## Coverage
 
 What the milestone must deliver, from the RFC, and which tasks deliver it.
@@ -36,9 +38,9 @@ Tasks that deliver no entry: none, or <enabling task name> enables <entry names>
 |---|---|---|---|
 | <short name> | <the default> | <reason, and how to revisit> | <task names> |
 
-## Open questions
+## Questions and answers
 
-None, or for each: the question, the possible readings, the recommendation, and the tasks that wait for the answer.
+None, or for each open question: the question, the possible readings, the recommendation, and the tasks that wait for the answer. For each answered one: the question, the answer, who gave it and when, and the tasks it shaped.
 
 ## Contracts between tasks
 
@@ -61,7 +63,7 @@ Dependencies
 
 - Start conditions met, or carried by the tasks they block: yes / no, with detail
 - Nothing is consumed before it is produced: yes / no
-- Every dependency is stated, and each is a real one: yes / no
+- Every task that consumes something produced in this list depends on its producer, directly or through another task, and every stated dependency is a real one: yes / no
 - Every task depends only on merged work, or is stacked with the person's agreement for this milestone: yes / no
 - Each contract has one producer: yes / no
 - No cycles: yes / no
@@ -93,7 +95,7 @@ None, or: what was found, which decision or contract it affects, and the propose
 
 ## Changes to the plan
 
-Empty at first. After each reconcile: date, what changed, why, and the merged task that caused it.
+Empty at first. After each reconcile: date, what changed, why, and the merged task or spike that caused it.
 
 ---
 
@@ -120,7 +122,7 @@ Empty at first. After each reconcile: date, what changed, why, and the merged ta
 
 **Ready to start when:** <conditions from the RFC that must hold first, such as a sign-off, or "no conditions">
 
-**Assumptions in force:** <assumption names, or none. If the code contradicts one, report it and do not change course on your own.>
+**Assumptions in force:** <each assumption's name and its default, or none. If the code contradicts one, report it and do not change course on your own.>
 
 **Starting points** (not the full list of files that may change):
 - <spec that describes the behavior, such as an OpenSpec spec>: <which requirement applies>
@@ -177,4 +179,4 @@ Never drop a criterion silently, change or delete existing tests to make them pa
 - **Acceptance criteria** always include the line about the standard checks and the main branch. It is what makes each task safe to merge on its own. Where the repo's practice allows, the tests for the other criteria fail before the task and pass after.
 - **Design constraints** is copied into the proposal of the OpenSpec change made from the task, or into the pull request description in a repo without OpenSpec. Its content does not change, apart from filling in the task link. Write its links as paths from the repository root or as full URLs, so they still resolve from the new place. If you use relative links, rewrite them for the destination and check them there.
 - **If it does not fit** and **The pull request reports** are the same text in every task. Keep them in each task anyway, because the implementing session sees only its own task.
-- A one-task milestone uses the same task format. Of the plan sections it needs only Coverage, Findings from the code, and Checks.
+- A one-task milestone uses the same task format. Of the plan sections it always needs Coverage, Findings from the code, and Checks. The others are kept when they have content.
