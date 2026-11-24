@@ -32,7 +32,7 @@
     {
       "name": "milestone-breakdown",
       "source": "./skills/milestone-breakdown",
-      "description": "Split one milestone of an accepted feature RFC into PR-sized tasks, check their dependencies against the RFC's contracts, and prepare each task for its own OpenSpec change or PR.",
+      "description": "Split one milestone of an accepted feature RFC into PR-sized tasks for coding agents: slice vertically, size for review, handle gaps in the RFC, check dependencies and coverage, then keep the remaining tasks current after each merge and close the milestone.",
       "category": "development",
       "tags": [
         "rfc",
