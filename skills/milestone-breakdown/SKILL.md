@@ -24,7 +24,7 @@ The last two are in [references/after-the-split.md](references/after-the-split.m
 - **Plan here, build elsewhere.** This skill writes no production code. Implementation starts in a fresh session per task, after the person has approved the list.
 - **Never fill a gap silently.** Every detail the RFC leaves out is left to the implementer on purpose, recorded as an assumption, asked as a question, or raised as an amendment.
 - **Review is the limit, not generation.** Size tasks by what can be reviewed well, by people with agents helping, and by what the checks can verify inside one pull request.
-- **Names, not numbers.** Refer to tasks, contracts, decisions and assumptions by short names with links, so a task still makes sense after it is copied or reordered.
+- **Names, not numbers.** Refer to tasks, contracts, decisions and assumptions by short names with links, so a task still makes sense after it is copied or reordered. Each task also has a key that never changes, so a tracker can recognize it after a rename.
 - **Where tasks are stored is the person's call.** An issue tracker, a project board, files in the repo: the skill does not assume one. It produces the tasks as Markdown that can be copied anywhere, and reads them back from wherever the person keeps them.
 - **English by default.** Write in another language only when the person explicitly asks.
 
@@ -82,6 +82,7 @@ Read the parts of the repository the milestone touches, as they are now, not as 
 - the modules and entry points involved;
 - the exact commands for build, tests, lint and type checks, and where the tests live;
 - the conventions in use that the tasks must follow;
+- the **areas** the milestone touches: the components, modules or repositories, named as the RFC's "What changes" table names them. Each task is assigned one;
 - **hotspot files** that many changes must touch: routers, registries, dependency wiring, index exports, shared config, numbered migrations;
 - **one existing example to copy** for each kind of thing the milestone adds (an endpoint, a worker, a migration, a screen). If there is none, the first task that adds one becomes the example and goes early;
 - anything that contradicts the RFC.
@@ -147,6 +148,10 @@ Write what must be true when the task is done and where to look. Do not write ho
 
 Points the template depends on:
 
+- **Key** is `<rfc-slug>/<milestone-slug>/<number>`, with the next unused number in the milestone when the task is first written. It is never reused and does not change when the task is renamed, reordered or copied to a tracker.
+- **Phase** says what kind of work the task is: Spike, Refactor, Foundation, Feature, Migration or Hardening. A Feature is a vertical slice of behavior. Refactor (preparation with no behavior change), Foundation (a contract, scaffolding or a missing check that others consume) and Migration (moving callers or data) are usually enabling tasks. Hardening is the closing task. Phase is a label for the board. Which checks apply depends on what the task delivers: a task with behavior of its own must pass the "what can be shown working" test whatever its Phase.
+- **Area** is the one component, module or repository the task mainly changes, from the areas found in step 2. A vertical slice touches several layers and still has one Area: the component whose behavior it delivers.
+
 - **Out of scope** is its own field in every task: neighboring behavior that belongs to another task (named), things that must not change, no new dependencies without asking.
 - **Acceptance criteria** are observable from outside, and each names the test or command that proves it. They describe behavior that is not true before the task. If the RFC already gives a checkable criterion, link it.
 - **Starting points** are references that stay true: the specs that describe the behavior (the OpenSpec specs, where the repo has them), the contracts, the entry points, and the example to copy. Links into the code go stale quickly, so keep them to entry points and the example, and do not list the files to change. Say they are starting points, not the list of files allowed to change. No line numbers.
@@ -164,7 +169,7 @@ Run every check before showing the list, and report the result. The template has
 
 **Dependencies**
 
-- **Nothing is consumed before it is produced.** For every contract or piece of data a task consumes, an earlier task or an earlier milestone produces it.
+- **Nothing is consumed before it is produced.** For every contract or piece of data a task consumes, an earlier task or an earlier milestone produces it. A task that produces a contract and uses it in the same change lists it under Produces only, so an interface can arrive together with its first use.
 - **Dependencies are stated, not implied by the order.** A task that consumes something another task in this list produces depends on that task, directly or through another task. A dependency exists only where there is a real one. "Depends on: none" is right only when everything the task needs already exists in the code.
 - **A task depends only on merged work.** If it needs a sibling's unmerged code, it comes after that sibling, or the two are stacked because the person allowed it for this milestone (see [references/task-sizing.md](references/task-sizing.md)).
 - **Each contract has one producer.** This includes the milestone-level contracts from step 3.
@@ -208,10 +213,19 @@ Nothing is created in a tracker before the person approves.
 
 ### 9. Hand over
 
-- Deliver the agreed list in the place and form the person asks for. If they name none, show it in your reply and ask where they keep tasks. Do not pick a place for them. Creating items in a tracker is their call and uses their tools.
+- Deliver the agreed list in the place and form the person asks for. If they name none, show it in your reply and ask where they keep tasks. Do not pick a place for them. Creating items in a tracker is their call and uses their tools. When the `task-publishing` skill is available, it is the way to put the tasks on a GitHub Project: write the plan to `00-plan.md` and each task to its own file in one folder for the milestone, and hand that folder over.
 - Whatever the place, the coverage list, the assumptions and answers, and the tasks must stay readable later, because reconciling and closing start from them.
 - Tell the person to come back after each merge so the remaining tasks can be reconciled, and after the last one so the milestone can be closed. Both are in [references/after-the-split.md](references/after-the-split.md).
 - Do not start implementing in the same step unless asked.
+
+## When the breakdown is part of a whole RFC
+
+The `rfc-breakdown` skill runs this skill once per milestone, often in a session that cannot reach the person. When the request says so:
+
+- run through the checks in step 7 and stop. Steps 8 and 9 are done once for all milestones by the session that started you;
+- where this skill says to ask the person, do not ask and do not guess. Return the question with the possible readings and your recommendation, and leave unwritten the tasks that wait on it;
+- use the Area values and the key format you were given, and report any Area you needed that was not on the list;
+- report whether the list reached the independent review setting, and do not start the review yourself.
 
 ## When the split contradicts the RFC
 

@@ -28,6 +28,7 @@ Tasks that deliver no entry: none, or <enabling task name> enables <entry names>
 
 - **Commands:** build `<…>` · tests `<…>` · lint and types `<…>`
 - **Entry points and modules:** <paths>
+- **Areas:** <the components, modules or repositories the milestone touches, named as in the RFC's "What changes" table>
 - **Hotspot files:** <paths, and which tasks touch each>
 - **Examples to copy:** <kind of thing> → <path>
 - **Differs from the RFC:** none, or <what, with paths>
@@ -48,10 +49,10 @@ None, or for each seam found during the breakdown: name, shape, the task that pr
 
 ## Order
 
-| # | Task | Kind | Depends on | Can run in parallel with | Size |
-|---|---|---|---|---|---|
-| 1 | <task name> | behavior / enabling / spike / closing | none | none | S / M / L, ~lines, ~files |
-| 2 | <task name> | | <task names> | <task names> | |
+| # | Task | Key | Phase | Area | Depends on | Can run in parallel with | Size |
+|---|---|---|---|---|---|---|---|
+| 1 | <task name> | <key> | Spike / Refactor / Foundation / Feature / Migration / Hardening | <area> | none | none | S / M / L, ~lines, ~files |
+| 2 | <task name> | | | | <task names> | <task names> | |
 
 The number is only the order. Refer to tasks by name.
 
@@ -99,9 +100,11 @@ Empty at first. After each reconcile: date, what changed, why, and the merged ta
 
 ---
 
+<!-- task: <rfc-slug>/<milestone-slug>/<number> -->
+
 ## <Task name>
 
-**Kind:** behavior / enabling / spike / closing · **Size:** S / M / L (<rough lines and files>)
+**Phase:** Spike / Refactor / Foundation / Feature / Migration / Hardening · **Area:** <one component, module or repository> · **Size:** S / M / L (<rough lines and files>)
 
 **Outcome:** <one behavior, in one sentence. What can be shown working after this merges.>
 
@@ -116,9 +119,11 @@ Empty at first. After each reconcile: date, what changed, why, and the merged ta
 - <what must not change>
 - No new dependencies without asking.
 
-**Produces:** <contracts or data, or none> · **Consumes:** <contracts or data, or none>
+**Produces:** <contracts or data, or none> · **Consumes:** <contracts or data, or none. Something this task produces and uses itself is listed under Produces only.>
 
-**Depends on:** <task names, or none. None only when everything the task needs already exists. If this task is stacked on another, say so.>
+**Contracts between tasks:** <for each one this task produces or consumes: its name and its shape, copied from the plan, because the implementing session does not see the plan. Or none.>
+
+**Depends on:** <task names with their keys, or none. None only when everything the task needs already exists. If this task is stacked on another, say so.>
 
 **Ready to start when:** <conditions from the RFC that must hold first, such as a sign-off, or "no conditions">
 
@@ -172,7 +177,10 @@ Never drop a criterion silently, change or delete existing tests to make them pa
 ## Notes on the fields
 
 - **Coverage** is filled before any task is written and checked after. An entry is named, not numbered.
-- **Kind** tells the reviewer what to expect. A behavior task shows something working. An enabling task creates something stable that others consume. A spike produces findings. A closing task proves the whole flow and removes temporary code.
+- **The key** is the comment line above the task's heading. It is given once and never changes. A tracker uses it to recognize the task after its name or order has changed, so copy it along with the task.
+- **Phase** tells the reviewer what to expect. A Spike produces findings. A Refactor prepares the code with no behavior change. A Foundation task creates something stable that others consume: a contract, scaffolding or a missing check. A Feature shows a behavior working. A Migration moves callers or data from the old form to the new. A Hardening task is the closing task: it proves the whole flow and removes temporary code. Refactor, Foundation and Migration tasks are usually enabling tasks and say what they enable.
+- **Area** is one value per task, taken from the areas listed in the plan, so that a board can group by it. It names the component whose behavior the task delivers, not every layer the task touches.
+- **Links** anywhere in a task are paths from the repository root or full URLs, so they still resolve when the task is copied into an issue.
 - **Size** is a rough signal for the reviewer, not an estimate to be held to. S is well under half the task size settings, M is within them, L is at or over one of them. A task marked L is split or states why it is an exception. See [task-sizing.md](task-sizing.md).
 - **Out of scope** is never empty. It is the main defense against a task growing.
 - **Starting points** point at things that stay true: specs, contracts and entry points first, then one example to copy. Links deep into the code are fragile. A full file list goes stale after the first refactor, and line numbers go stale sooner.
