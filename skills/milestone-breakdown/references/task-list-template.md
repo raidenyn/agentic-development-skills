@@ -62,7 +62,7 @@ Dependencies
 - Start conditions met, or carried by the tasks they block: yes / no, with detail
 - Nothing is consumed before it is produced: yes / no
 - Every dependency is stated, and each is a real one: yes / no
-- Every task depends only on merged work, or is stacked on purpose: yes / no
+- Every task depends only on merged work, or is stacked with the person's agreement for this milestone: yes / no
 - Each contract has one producer: yes / no
 - No cycles: yes / no
 - Tasks marked parallel do not depend on each other, share no open decision, and do not write to the same files, hotspot, migration sequence or local resource: yes / no
@@ -116,7 +116,7 @@ Empty at first. After each reconcile: date, what changed, why, and the merged ta
 
 **Produces:** <contracts or data, or none> · **Consumes:** <contracts or data, or none>
 
-**Depends on:** <task names, or none. None only when everything the task needs already exists.>
+**Depends on:** <task names, or none. None only when everything the task needs already exists. If this task is stacked on another, say so.>
 
 **Ready to start when:** <conditions from the RFC that must hold first, such as a sign-off, or "no conditions">
 

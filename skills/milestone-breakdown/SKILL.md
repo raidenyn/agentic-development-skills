@@ -42,6 +42,7 @@ The values below are defaults. If `openspec/design/README.md` (or the README of 
 | Independent review | from 6 tasks, or when the list marks any tasks as parallel |
 | Independent review model | ask the person, once per session |
 | Independent review rounds | at most 2 |
+| Stacked pull requests | ask the person, once per milestone |
 | Tasks in flight | 2 to 3 per reviewer |
 | Failed attempts before a task returns to planning | 2 |
 | Share of remaining tasks needing edits that triggers a new breakdown | about a quarter |
@@ -131,6 +132,8 @@ If the whole milestone has one outcome and fits the task size settings, it is on
 
 **Size each task** against the settings. The signs of a task that is too big or too small, how to count mechanical changes, and the cases where "one task, one pull request, one session" does not fit are in [references/task-sizing.md](references/task-sizing.md). A task that is too small is as much a defect as one that is too big: each task costs a review.
 
+**Ask before stacking.** When a behavior cannot be split below the size settings without losing the ability to verify each part, there are two ways out: split it further anyway, or allow a short chain of stacked pull requests. Which is better depends mostly on how many reviewers the team has. Ask the person which they want for this milestone, the first time the case comes up, and apply the answer to the rest of the milestone. Do not choose for them.
+
 If the split lands above the tasks-per-milestone setting, or far from the size the RFC estimated, tell the person. The milestone is probably two milestones, and that is an RFC change.
 
 ### 6. Describe each task
@@ -163,7 +166,7 @@ Run every check before showing the list, and report the result. The template has
 
 - **Nothing is consumed before it is produced.** For every contract or piece of data a task consumes, an earlier task or an earlier milestone produces it.
 - **Dependencies are stated, not implied by the order.** A dependency exists only where there is a real one. "Depends on: none" is right only when everything the task needs already exists in the code.
-- **A task depends only on merged work.** If it needs a sibling's unmerged code, it comes after that sibling, or the two are stacked on purpose (see [references/task-sizing.md](references/task-sizing.md)).
+- **A task depends only on merged work.** If it needs a sibling's unmerged code, it comes after that sibling, or the two are stacked because the person allowed it for this milestone (see [references/task-sizing.md](references/task-sizing.md)).
 - **Each contract has one producer.** This includes the milestone-level contracts from step 3.
 - **The order is a real order.** No cycles.
 - **Parallel tasks are safe.** Tasks marked parallel meet the three conditions in [references/task-sizing.md](references/task-sizing.md). If two tasks must touch the same hotspot, add a dependency or move the shared edit into one task.
@@ -197,7 +200,7 @@ Show the list and lead with what is expensive to get wrong:
 - open questions and the list of assumptions;
 - contracts between tasks, and the risky tasks (migrations, security, rollout);
 - what you claim can run in parallel;
-- anything outside the size settings, and where the count differs from the RFC's estimate.
+- anything outside the size settings, any stacked pull requests, and where the count differs from the RFC's estimate.
 
 Adjust until they agree, and run the affected checks again after each change. They decide the final split, including merging or splitting tasks. How many tasks run at once is also their call. The tasks-in-flight setting is a starting point, because unreviewed pull requests pile up faster than agents run out of work.
 

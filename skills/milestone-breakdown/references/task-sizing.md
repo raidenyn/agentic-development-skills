@@ -14,7 +14,7 @@ The numbers below are the defaults from the Settings table in SKILL.md. They are
 | Acceptance criteria | 2 to 5 | more than 5 |
 | Entries of the coverage list delivered | a few | so many that the task is the milestone |
 | Verification | one clear path inside this pull request | it needs a later task to prove it |
-| Dependencies | only on merged work | it needs a sibling's unmerged code and is not stacked on purpose |
+| Dependencies | only on merged work | it needs a sibling's unmerged code and the person has not allowed stacking |
 
 Count code and configuration, tests included. Leave out documents, generated files and process files such as an OpenSpec change's own files, task notes and changelogs.
 
@@ -56,10 +56,20 @@ Keep the rule as the default. Break it on purpose in these cases, and say in the
 | A migration of live data | Two or three sequential tasks (expand, then backfill or dual write, then contract), each its own pull request and deploy |
 | A large mechanical refactor | One script-driven task as above, or one task per module |
 | A spike | A task whose output is findings. Its pull request is optional or closed unmerged |
-| One behavior that cannot be split below the limit | Stacked pull requests: a short chain of dependent pull requests behind one guard, each reviewable alone. Prefer a merged contract between two tasks when that can decouple them |
+| One behavior that cannot be split below the limit | Ask the person: split further, or stacked pull requests (see below) |
 | A change across repositories | A pull request for the contract in the owning repository first, then the consumers, then cleanup |
 | UI or flows where passing tests do not prove it works | Allow two or three review rounds, or add an independent check that exercises the UI |
 | A first attempt that failed | A new session with a corrected task, not a continuation of the failed one |
+
+### Stacked pull requests are the person's choice
+
+A stack is a short chain of dependent pull requests behind one guard, each reviewable alone. It keeps a behavior together, but the chain has to be reviewed in order and a change low in the stack ripples upward. A team with few reviewers may prefer smaller independent tasks. A team with more review capacity may prefer the stack.
+
+So do not decide this yourself. The first time a milestone has a behavior that will not split cleanly below the size settings, ask the person whether to split it further or to allow stacked pull requests for this milestone. Give the trade-off in a sentence for the case at hand. Apply the answer to the whole milestone and ask again for the next one, unless the stacked pull requests setting already answers it.
+
+Before asking, check whether a merged contract between the two parts would decouple them. If it would, that is a plain split and no question is needed.
+
+In a stack, each task names the task it sits on, and the checks treat that as a dependency on unmerged work that was allowed on purpose.
 
 The reason behind the rule is the review boundary, and each alternative keeps it. The one to avoid is a single very large pull request because the agent was able to keep going.
 
