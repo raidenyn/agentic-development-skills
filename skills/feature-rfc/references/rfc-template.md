@@ -119,10 +119,10 @@ Every decision, "needs your call" first. Each contract is one decision here, lin
 
 ## Open questions
 
-| Question (short name) | Needs your call? | Blocks the decision? | Owner | Needed by |
-|---|---|---|---|---|
+| Question (short name) | Needs your call? | Blocks the decision? | Owner | Needed by | How it is checked |
+|---|---|---|---|---|---|
 
-Everything that could not be verified goes here instead of being guessed.
+Everything that could not be verified goes here instead of being guessed. A question that does not block the decision is an assumption the accepted RFC rests on. "Needed by" names the milestone that must check it, and "How it is checked" says by what: a test, a measurement, or a named person with what they need for it, such as a live account. The milestone does not close while it is unchecked.
 
 ## Decision outcome
 

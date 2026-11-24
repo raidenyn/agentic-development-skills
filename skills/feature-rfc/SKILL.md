@@ -31,6 +31,7 @@ The values below are defaults. If `openspec/design/README.md` (or the README of 
 | Standalone spike budget | one separate session, 1 to 2 hours of run time, or the cost cap the person sets |
 | Diagram size | about 12 nodes |
 | Milestone size | about 3 to 6 PRs |
+| Archive folder | `archive/` inside the design folder, one folder per feature named `YYYY-MM-<feature-name>` |
 | Document language | English |
 
 The main body runs from Summary through Open questions. Code and Mermaid blocks, Decision outcome, Review log and Appendix do not count. If the body cannot fit under the cap after cutting, tell the person the feature is probably two features, each with its own RFC.
@@ -48,6 +49,7 @@ openspec/design/archive/YYYY-MM-<feature-name>/     accepted: the whole feature 
 ```
 
 - If the repo has no `openspec/` folder, look for an existing design-records folder and follow it, with an `archive/` folder inside it. If there is none, ask where to put the RFC.
+- If the repo already keeps accepted design records somewhere else, that place is the archive: follow it, and write it as the archive folder setting so that later sessions find it. Wherever this skill says `openspec/design/archive/YYYY-MM-<feature-name>/`, the setting applies.
 - Use short descriptive names, not numbers.
 - Draft and review on a branch, usually with a pull request. Do not merge an RFC that is not accepted: the main branch holds only accepted RFCs, already archived. A rejected or withdrawn RFC stays on its branch and is never merged.
 - The folder moves exactly once, when the person accepts the RFC (step 8). `YYYY-MM` is the month of the acceptance. After the move the path never changes, so links from tasks, changes and other records stay valid.
@@ -150,7 +152,7 @@ When the person accepts, rejects or withdraws the RFC:
 
 1. Fill in the decision outcome: result, date, decider, and any conditions.
 2. Set the status in the header.
-3. On acceptance, archive the RFC: move the whole feature folder to `openspec/design/archive/YYYY-MM-<feature-name>/`, repair the links the move broke, and link this RFC and every record it replaces to each other, in both directions. [references/after-acceptance.md](references/after-acceptance.md) has the steps. The archived RFC is what gets merged to the main branch.
+3. On acceptance, archive the RFC: move the whole feature folder to `openspec/design/archive/YYYY-MM-<feature-name>/`, repair the links the move broke, and link this RFC and every record it replaces to each other, in both directions. [references/after-acceptance.md](references/after-acceptance.md) has the steps. The archived RFC is what gets merged to the main branch. Tasks and tracker items link to the RFC on the default branch, so tell the person that nothing can be published from a breakdown until this merge.
 4. From here the RFC is frozen. It is the record of what was discussed and decided, not documentation that is kept in step with the code. Its text is not changed again, not for progress, not for clarifications and not when the design turns out wrong. The only later edit is a link to the RFC that replaces it.
 5. On acceptance, offer the two follow-ups in [references/after-acceptance.md](references/after-acceptance.md): breaking down the first milestone, and adding the implementation rule to the repo.
 6. On rejection or withdrawal, commit the outcome on the RFC's branch and stop there. The RFC is not archived and is never merged to the main branch. Tell the person the branch or pull request can be closed without merging. Closing or deleting it is their call.

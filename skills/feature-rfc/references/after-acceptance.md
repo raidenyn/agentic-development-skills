@@ -18,7 +18,7 @@ Do this as soon as the person accepts the RFC, after the decision outcome and th
    If the archive already has a folder with that name, stop and ask the person for a different feature name. Never merge two features into one folder.
 
 2. **Repair the links the move broke.**
-   - Out of the folder: the folder is one level deeper now, so every relative link from its files to code, specs or other records needs one more `../`.
+   - Out of the folder: the folder is at another depth now, one level deeper with the default archive folder, so every relative link from its files to code, specs or other records is worked out again from the new place.
    - Into the folder: search the repository for the old path and update each hit: other design records, specs, OpenSpec changes, rules, the design folder's README.
 
    ```bash
@@ -53,7 +53,7 @@ Nothing else. In particular:
 
 ## Offer two follow-ups on acceptance
 
-1. **Break down the first milestone.** It is usually the riskiest, and splitting it early tests whether the plan and contracts hold. Use the `milestone-breakdown` skill if it is available. If it is not, say so, and split the milestone by the same rules: one task per PR, each leaving the main branch working, with dependencies checked against the contracts. Later milestones stay at milestone level until their turn.
+1. **Break down the first milestone.** It is usually the riskiest, and splitting it early tests whether the plan and contracts hold. Use the `milestone-breakdown` skill if it is available. If it is not, say so, and split the milestone by the same rules: one task per PR, each leaving the main branch working, with dependencies checked against the contracts, and each starting with a check of the task against the merged code before any design work. No task starts before the RFC is on the default branch. Later milestones stay at milestone level until their turn.
 2. **Add the implementation rule to the repo**, once per repo. Put it in a rule that loads only when relevant, not in the always-loaded instruction file, because most tasks have nothing to do with RFCs. Use whatever scoped-rule mechanism the agent host offers. For example, in Claude Code that is a file under `.claude/rules/` with a `paths:` list covering the changes folder and the design folder. Suggested text:
 
    > Changes made from a feature RFC follow its frozen contracts and agreed decisions, together with any follow-up RFC its header links. If one turns out wrong, stop and propose a follow-up RFC. Do not diverge in the change's own design. Link the RFC in every change made from it. Never edit a file under the design archive: a new decision is a new file.
