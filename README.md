@@ -8,7 +8,7 @@ Each release publishes versioned catalogs to [GitHub Pages](https://raidenyn.git
 
 | Skill | What it does |
 | --- | --- |
-| [`feature-rfc`](skills/feature-rfc/SKILL.md) | Write, review and amend a feature RFC: a system-level design with milestones and shared contracts, approved before the work is split into tasks, OpenSpec changes and PRs. |
+| [`feature-rfc`](skills/feature-rfc/SKILL.md) | Write and review a feature RFC: a system-level design with milestones and shared contracts, approved before the work is split into tasks, OpenSpec changes and PRs. An accepted RFC is frozen and archived, and a later change is a new RFC. |
 | [`harness-audit`](skills/harness-audit/SKILL.md) | Read-only audit of a repo's agentic-coding harness (AGENTS.md, specs, verify command, hooks, permissions, sandbox, evals). Walks a 57-item checklist and returns a prioritized TODO table in phases. |
 | [`milestone-breakdown`](skills/milestone-breakdown/SKILL.md) | Split one milestone of an accepted feature RFC into PR-sized tasks for coding agents: slice vertically, size for review, handle gaps in the RFC, check dependencies and coverage, then keep the remaining tasks current after each merge and close the milestone. |
 | [`rfc-breakdown`](skills/rfc-breakdown/SKILL.md) | Turn an accepted feature RFC into a backlog for all its milestones: sort the milestones into ready and later, run `milestone-breakdown` for the ready ones in parallel, write outline tasks for the rest, and check contracts and blockers across milestones. |

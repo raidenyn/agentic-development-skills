@@ -24,13 +24,13 @@ Use when the answer changes the task list, a contract, the data model, security,
 
 Ask as soon as you find it, together with other open questions where you can. Write the question with the possible readings and your recommendation. Do not write the tasks that depend on the answer until the person has answered. Tasks that do not depend on it can go ahead. Tasks written after the answer go through the same checks as the rest.
 
-### Propose an RFC amendment
+### Propose a follow-up RFC
 
 Use when the RFC is wrong or cannot work given the code, or when the choice would add, remove or change scope or contradict an approach the RFC chose.
 
-Quote the RFC text, state the problem with file paths, and propose the new text. Stop the part of the milestone it affects until the person decides. The `feature-rfc` skill covers how amendments are recorded.
+Quote the RFC text, state the problem with file paths, and propose the new text. Stop the part of the milestone it affects until the person decides. The RFC itself is frozen, so an approved change is written as a follow-up RFC (the `feature-rfc` skill covers it).
 
-An idea for a feature the RFC did not ask for is also an amendment proposal. It never becomes a task on its own.
+An idea for a feature the RFC did not ask for is also a proposal for a follow-up RFC. It never becomes a task on its own.
 
 ## Where a decision belongs
 
@@ -44,7 +44,7 @@ A simple test: if changing the decision later would mean editing more than one t
 
 | Decision | Where |
 |---|---|
-| Module boundaries, interfaces between milestones, the data model, auth and error conventions, shared library choices, rollout strategy | The RFC. If missing, it is an amendment or a blocking question |
+| Module boundaries, interfaces between milestones, the data model, auth and error conventions, shared library choices, rollout strategy | The RFC. If missing, it is a follow-up RFC or a blocking question |
 | An interface, event or config key shared by two tasks in this milestone | A milestone-level contract, written during the breakdown |
 | Acceptance criteria, verification commands, the order of migration steps, which guard covers which task | The breakdown |
 | Internal structure, algorithms, local names, test cases inside a module, where to log | The implementing agent |
@@ -72,7 +72,7 @@ If one is true, settle it first, in the lightest form that works:
 | A question about what is feasible | A spike |
 | A missing example | Make the first task that introduces the pattern the reference, and put it early |
 
-Keep the scope to this milestone. If the gap is in an RFC-level decision or a frozen contract, it is an amendment.
+Keep the scope to this milestone. If the gap is in an RFC-level decision or a frozen contract, it needs a follow-up RFC.
 
 When one person runs the tasks one after another, a lighter path is allowed for a seam: the producing task defines it, and the consuming tasks are written after it merges.
 

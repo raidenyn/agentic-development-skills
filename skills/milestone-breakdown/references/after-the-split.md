@@ -11,7 +11,7 @@ Both modes start by getting the current task list. If you cannot reach the place
 Do this after each task merges, after a spike reports, or when the person asks for it. A spike may report without a merged pull request. Then its findings stand in for the pull request in step 1: record them under "Findings from the code", and write the tasks that waited for the spike, with the checks from the breakdown.
 
 1. Read the merged pull request: its description, especially the part that reports what differed from the task, and the change itself.
-2. Read the task list as it stands now, and the RFC's amendments since the list was written.
+2. Read the task list as it stands now, and any follow-up RFC accepted since the list was written.
 3. Find the remaining tasks that rely on what changed: a contract, a file or area, an assumption, a dependency.
 4. Update only those tasks. If one of them has already been started, tell the person what changed and let them decide whether to stop it. Do not edit a started task silently. Typical edits: a starting point moved, a dependency was added or removed, an assumption was replaced by a fact, a criterion needs rewording, a proposed follow-up becomes a new task.
 5. Re-run the checks from the breakdown that the edits could affect. Coverage and dependencies always.
@@ -21,7 +21,7 @@ Do this after each task merges, after a spike reports, or when the person asks f
 
 If a change touches something outside this milestone, such as a contract that another milestone consumes or a task that another milestone's tasks are blocked by, say so to the person before anything is published. This skill looks at one milestone and cannot settle the effect on the others.
 
-Work that a pull request discovered but did not need in order to finish becomes a proposed new task. It traces to an entry on the coverage list, or it is an amendment proposal. It is never silently added.
+Work that a pull request discovered but did not need in order to finish becomes a proposed new task. It traces to an entry on the coverage list, or it is a proposal for a follow-up RFC. It is never silently added.
 
 If a merged task changed something the RFC decided, that is a finding for the person, not an edit to the list.
 
@@ -31,13 +31,13 @@ Stop patching tasks and split the remaining work again when any of these happens
 
 - A contract or data shape that several remaining tasks use has changed.
 - An assumption that several remaining tasks rely on proved false.
-- An RFC amendment that affects the remaining tasks was accepted.
+- An follow-up RFC that affects the remaining tasks was accepted.
 - A spike answered differently than planned.
 - A pull request was rejected because the plan's picture of the code was wrong.
 - Two tasks in a row ran over their size, had to be split, or collided on files.
 - The share of remaining tasks that need edits passes the setting for a new breakdown.
 
-Breaking down again means running the main procedure on what is left: redo the code reading for the affected areas, keep the coverage list, mark what is already delivered (after an amendment, first update the list's entries from the amended RFC and check that earlier evidence still proves the changed ones), and re-slice the rest. Keep the names of tasks that do not change.
+Breaking down again means running the main procedure on what is left: redo the code reading for the affected areas, keep the coverage list, mark what is already delivered (after a follow-up RFC, first update the list's entries from both RFCs and check that earlier evidence still proves the changed ones), and re-slice the rest. Keep the names of tasks that do not change.
 
 ## When a task fails
 
@@ -52,8 +52,8 @@ Do this when the last task has merged.
 1. Go through the coverage list against the code as it is now. For each entry: delivered and verified (say by what), or not.
 2. Check that every contract the milestone produces exists in the shape the RFC states, because later milestones consume it.
 3. Check that temporary flags, scaffolding and compatibility code introduced by the milestone are removed, or name where their removal is planned.
-4. List anything carried forward, with the reason and where it goes: a later milestone, a follow-up task, or an amendment proposal. Something the RFC requires of this milestone can be carried forward only by an RFC amendment the person has approved. A follow-up task is enough only for work the RFC did not require here.
-5. Tell the person the result. When they agree, set the milestone to done in the RFC's milestone table yourself, or hand them the edit if you cannot change the file. If this was the last milestone, also update the RFC's status as the `feature-rfc` skill describes. Add a closing entry to the "Changes to the plan" notes.
+4. List anything carried forward, with the reason and where it goes: a later milestone, a follow-up task, or a proposal for a follow-up RFC. Something the RFC requires of this milestone can be carried forward only by a follow-up RFC the person has approved. A follow-up task is enough only for work the RFC did not require here.
+5. Tell the person the result. When they agree, add a closing entry to the "Changes to the plan" notes: the date, that the milestone is done, and what was carried forward and where. This entry is the record that the milestone is done. The RFC is frozen and is not edited. When the tasks are published in a tracker, tell the person to close the tracker's milestone too, or close it when they ask. If this was the last milestone, say that the RFC is fully built.
 6. Say what the next milestone is and whether its start conditions are now met. Do not break it down in the same step unless asked. If the RFC was broken down as a whole and the next milestone has outline tasks, the `rfc-breakdown` skill's Continue mode replaces them.
 
-If an entry on the coverage list is not delivered, the milestone is not done until the entry is delivered or an approved amendment moves or removes it.
+If an entry on the coverage list is not delivered, the milestone is not done until the entry is delivered or an accepted follow-up RFC moves or removes it.

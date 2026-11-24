@@ -21,7 +21,7 @@ Everything below holds for every target. The reference has the commands.
 
 ## Input
 
-- The RFC file.
+- The RFC file, at its path in the design archive. That path is final, so the links published to the tracker stay valid.
 - A tasks folder with one folder per milestone: `00-plan.md` and one file per task or outline.
 - Every task and outline starts with its key: `<!-- task: <rfc-slug>/<milestone-slug>/<number> -->`. The key is how a published item is recognized later. It does not change when the task is renamed or reordered.
 

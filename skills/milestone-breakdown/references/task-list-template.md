@@ -90,13 +90,13 @@ Tasks
 
 Independent review: done by a separate session (<model the person chose>), with findings settled / not available, self-check only
 
-## Findings that need an RFC amendment
+## Findings that need a follow-up RFC
 
-None, or: what was found, which decision or contract it affects, and the proposed amendment.
+None, or: what was found, which decision or contract it affects, and the proposed change.
 
 ## Changes to the plan
 
-Empty at first. After each reconcile: date, what changed, why, and the merged task or spike that caused it.
+Empty at first. After each reconcile: date, what changed, why, and the merged task or spike that caused it. When the milestone is closed: the closing entry, with the date and what was carried forward.
 
 ---
 
@@ -151,7 +151,7 @@ Empty at first. After each reconcile: date, what changed, why, and the merged ta
 - **Decisions this task implements:** <decision names, each linked to the RFC>
 - **Contracts:** <name (frozen or provisional), produced or consumed, each linked>
 - **Conditions:** <conditions from the RFC's decision outcome or decisions that apply to implementing or releasing this task, or none>
-- **Rule:** Follow the frozen contracts and agreed decisions as written. If one turns out wrong, stop and propose an RFC amendment. Do not diverge in this change's own design.
+- **Rule:** Follow the frozen contracts and agreed decisions as written. If one turns out wrong, stop and propose a follow-up RFC. Do not diverge in this change's own design.
 
 ### If it does not fit
 
