@@ -17,6 +17,9 @@ Do this after each task merges, after a spike reports, or when the person asks f
 5. Re-run the checks from the breakdown that the edits could affect. Coverage and dependencies always.
 6. Write a "Changes to the plan" note: the date, what changed, why, and which merged task or spike caused it. It is kept with the list.
 7. Show the person what changed. They approve changes that add, remove or reorder tasks.
+8. When the tasks are published in a tracker, the approved changes go there too (the `task-publishing` skill does this for a GitHub Project). A new task gets a new key. A changed task keeps its key.
+
+If a change touches something outside this milestone, such as a contract that another milestone consumes or a task that another milestone's tasks are blocked by, say so to the person before anything is published. This skill looks at one milestone and cannot settle the effect on the others.
 
 Work that a pull request discovered but did not need in order to finish becomes a proposed new task. It traces to an entry on the coverage list, or it is an amendment proposal. It is never silently added.
 
@@ -51,6 +54,6 @@ Do this when the last task has merged.
 3. Check that temporary flags, scaffolding and compatibility code introduced by the milestone are removed, or name where their removal is planned.
 4. List anything carried forward, with the reason and where it goes: a later milestone, a follow-up task, or an amendment proposal. Something the RFC requires of this milestone can be carried forward only by an RFC amendment the person has approved. A follow-up task is enough only for work the RFC did not require here.
 5. Tell the person the result. When they agree, set the milestone to done in the RFC's milestone table yourself, or hand them the edit if you cannot change the file. If this was the last milestone, also update the RFC's status as the `feature-rfc` skill describes. Add a closing entry to the "Changes to the plan" notes.
-6. Say what the next milestone is and whether its start conditions are now met. Do not break it down in the same step unless asked.
+6. Say what the next milestone is and whether its start conditions are now met. Do not break it down in the same step unless asked. If the RFC was broken down as a whole and the next milestone has outline tasks, the `rfc-breakdown` skill's Continue mode replaces them.
 
 If an entry on the coverage list is not delivered, the milestone is not done until the entry is delivered or an approved amendment moves or removes it.

@@ -40,6 +40,30 @@
         "task-breakdown",
         "openspec"
       ]
+    },
+    {
+      "name": "rfc-breakdown",
+      "source": "./skills/rfc-breakdown",
+      "description": "Turn an accepted feature RFC into a backlog for all its milestones: full tasks for the milestones that can start now, outline tasks for the rest, parallel milestone breakdowns and a consistency check across milestones.",
+      "category": "development",
+      "tags": [
+        "rfc",
+        "planning",
+        "task-breakdown",
+        "subagents"
+      ]
+    },
+    {
+      "name": "task-publishing",
+      "source": "./skills/task-publishing",
+      "description": "Publish the task files of a milestone or RFC breakdown to a tracker and keep it in step: a GitHub Project with issues, milestones, blocked-by links, sub-issues and Status, Phase and Area fields.",
+      "category": "development",
+      "tags": [
+        "github-projects",
+        "issues",
+        "planning",
+        "task-breakdown"
+      ]
     }
   ]
 }
