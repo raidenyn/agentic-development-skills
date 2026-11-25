@@ -70,7 +70,7 @@
   - with only the shipped tools installed, capture one child's start, its blocked turn end, its resume, its finish, and another child's cancellation (`ctx.session.interrupt`); record whether the parent sees the child's completion before the child's block; save them as fixtures; show the root's notice while a child runs and its block after both have stopped;
   - record the host version
 - [ ] 7.2 Claude Code: the same runs, plus a background subagent's blocked turn end and the root's notice; record the host version
-- [ ] 7.3 Measure the no-change turn end on both hosts against 300 ms, reported separately: the bench's host-to-outcome and in-runtime times, and live host-to-outcome (OpenCode from the event's `created`; Claude Code from Node process start, which excludes the host's own spawn time, as stated)
+- [x] 7.3 Measure the no-change turn end on both hosts against 300 ms, reported separately: the bench's host-to-outcome and in-runtime times, and live host-to-outcome (OpenCode from the event's `created`; Claude Code from Node process start, which excludes the host's own spawn time, as stated)
 - [ ] 7.4 Write the PR report:
   - each acceptance criterion with its evidence;
   - the contracts and areas changed;
