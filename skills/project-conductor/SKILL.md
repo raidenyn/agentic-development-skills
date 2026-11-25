@@ -1,17 +1,17 @@
 ---
 name: project-conductor
-description: "Use when a GitHub Project board and its repository must be prepared for unattended task runs, for example \"onboard this board\", \"set up the conductor for this repo\" or \"check that the board is ready for the loop\". Sets PROJECT_URL, creates the Run phase, Attempt and Run thread fields, proposes the conductor settings and model file, keys the board's open issues and checks the approval rule, with a dry-run form. Not for publishing tasks or running them."
+description: "Use when a GitHub Project board and its repository must be prepared for unattended task runs, for example \"onboard this board\", \"set up the conductor for this repo\" or \"check that the board is ready for the loop\", or when a message asks to run one wake: start Ready tasks, handle phase reports, switch a task thread's model, for example \"Run one wake of the project-conductor skill for this repository.\" Onboarding sets PROJECT_URL, creates the Run phase, Attempt and Run thread fields, proposes the conductor settings and model file, keys the board's open issues and checks the approval rule, with a dry-run form. A wake claims Ready tasks and launches their threads on the plan model, answers phase reports and switches a planned thread to the implement model. Not for publishing tasks."
 ---
 
 # Project conductor
 
 The conductor runs the tasks of a GitHub Project board unattended, from Ready to merged. Before it can run a board, the board and the one repository it serves must be prepared.
 
-This version holds one procedure: **Onboard a board**. The loop itself comes later. Nothing reads these settings yet, but every later part of the conductor does, so the names below are frozen.
+This skill holds two procedures: **Onboard a board** prepares the board and the repository, and **Run one wake** starts Ready tasks, answers phase reports and switches a task thread's model. The names below are frozen: the wake reads them.
 
-All commands are in [references/onboarding-github.md](references/onboarding-github.md). Every step below names the section that holds its commands and the requirement of the spec it meets.
+The onboarding commands are in [references/onboarding-github.md](references/onboarding-github.md), and the wake's commands are in [references/run-github.md](references/run-github.md). Every step below names the section that holds its commands and the requirement of the spec it meets.
 
-## Inputs
+## Onboarding inputs
 
 | Input | Default | Notes |
 |---|---|---|
@@ -42,7 +42,7 @@ These are frozen. Write them verbatim.
 
 A field is never renamed. A released name is never changed.
 
-## Rules
+## Onboarding rules
 
 - **Survey first, then show the plan.** Every run first reads the current state of every step, and writes nothing while it does. Then it shows a plan that marks each item as **create**, **change** (a write over an existing value, such as a different `PROJECT_URL`), **reuse** or **cannot do**, with the reason and, for cannot do, the owner's exact step. Show every file and body that would change as its full content or a diff. (Spec: Survey before any write.)
 - **Wait for agreement.** Write only after the person agrees to the plan. When the person said to proceed without asking, show the plan and write at once, except for what needs their choice: an implement model id that is neither given nor in an existing `repo-run-models.md`, and edits to files that refer to the old roster. Those new choices are left out of this run and reported. What an earlier, approved run already put on the onboarding branch is not a new choice: it stays planned, so a repeated run reuses it instead of calling it a conflict. (Spec: Survey before any write.)
@@ -150,7 +150,7 @@ Survey:
    - anything else: **keyless**.
 3. Read every task key in the repository, open and closed, on and off the board, every page. A key held by two issues stops the keying step: report both.
 4. For each keyless issue, find its slugs. `<rfc-slug>` comes from the board readme's marker `<!-- rfc: <rfc-slug> -->`. `<milestone-slug>` comes from the marker `<!-- rfc: <rfc-slug>/<milestone-slug> -->` in the description of the issue's milestone. No readme marker, no milestone, no marker in the milestone, or an RFC slug in the milestone that differs from the readme's: no key, reported with the reason.
-5. Check trust for each keyless issue (see Rules). Untrusted: no key, reported with the reason.
+5. Check trust for each keyless issue (see [Onboarding rules](#onboarding-rules)). Untrusted: no key, reported with the reason.
 6. Allocate the numbers in one pass, in ascending issue number: for each prefix `<rfc-slug>/<milestone-slug>`, start from the highest number used under it in any issue of the repository, open or closed, and give each issue the next one. Numbers given in one run are distinct.
 
 The plan lists each proposed key with its issue, and every malformed, untrusted and unmarked issue with its reason.
@@ -187,7 +187,7 @@ Do not create a webhook. On every run, list this line under Pending, verbatim:
 Webhook: pending. Created by the task "Repair claims, settle merged work and wake on events".
 ```
 
-## Report
+## Onboarding report
 
 Every run ends with this report, a dry run included. (Spec: Report and repeatability.)
 
@@ -223,3 +223,102 @@ Keys: <n> identified, <n> keyed in this run, <n> without a key (listed above wit
 - Pending and Could not do are listed on every run, also when nothing changed: the webhook, the unmerged settings pull request ("Merge <PR link>"), a deferred roster migration with each reference, the variable command, a case-only field collision, a field of the wrong type, the approval rule when it is not "yes", every plan item the person dropped, and every open issue without a key with its reason (malformed, untrusted, no marked milestone, RFC slugs differ, changed during the run, key taken meanwhile).
 - In a dry run, the plan's creates and changes are listed under Pending as "would create" and "would change".
 - End with the line `Nothing changed.` exactly when the run made no successful write. A dry run always ends with it. A run that wrote anything never does.
+
+## Run one wake
+
+One wake runs three steps once, in this order: Repair, Advance, Start. Then it ends with the wake report. All commands are in [references/run-github.md](references/run-github.md). (Spec: Wake procedure exists.)
+
+### Wake inputs
+
+| Input | Notes |
+|---|---|
+| The wake message | A message to the conductor thread that ends with the sentence "Run one wake of the project-conductor skill for this repository.", optionally preceded by one phase report line. A message with only the sentence is a manual wake. |
+| The served repository | The repository of the conductor thread's own project checkout. It is never taken from the message. |
+
+(Spec: Wake message.)
+
+### Before the steps
+
+Reference: [Preflight](references/run-github.md#preflight), [Models](references/run-github.md#models) and [Board](references/run-github.md#board). Spec: Settings and board preflight; Stop label exists; Models are resolved, never substituted; Board read in one query.
+
+1. **Preflight.** Read the repository, the agent's login and the conductor's own thread id, `PROJECT_URL`, the `project-conductor` key of `.agents/harness.json` and `.agents/hooked-rules/repo-run-models.md` from the default branch, and the board's fields, names matched exactly, case included. Run every read, so one report lists every gap. A gap means Advance and Start write nothing in this wake; the report names it with the owner's step.
+2. **The label `blocked`.** Create it when it is missing, as [The label `blocked`](references/run-github.md#the-label-blocked) says. This is the only write before the steps, and it is made even when another item is a gap. When it cannot be created, every stop of this wake is reported for the owner, never written.
+3. **Models.** Resolve only the role a step uses: plan for Start, implement for Advance, never review. A bare name, no match or an unsupported effort stops that step only, and is reported with the cell as written.
+4. **Board.** Read every page of the board once, into one file. A failed page means Start writes nothing; a partial board is never judged.
+
+### Wake rules
+
+- **No state of its own.** The wake keeps nothing between wakes. Everything it needs is on the board, on the issues and in the threads, and it reads it again on every wake. The files in `<work>` are for this wake only.
+- **Act only on the filter's `start`.** The [Ready filter](references/run-github.md#ready-filter) prints one verdict per item. Start claims only the items it prints `start` for. Never start an item from your own reading of the board, and never start a `skip`.
+- **Never substitute a model.** Use exactly the resolved cell of `repo-run-models.md`. No other model of the provider, no model of the conductor's own thread and no other effort. A role that does not resolve stops its step.
+- **One wake at a time.** Do not start a wake while another wake of this conductor is in progress.
+- **Read back every write.** Write in the order the reference gives, and read each write back before the next. A failed write or read-back stops that item, never the wake; the writes that completed stay and are reported.
+- **English by default.** Write in another language only when the person explicitly asks.
+
+**Ready is exactly three conditions:** the item is a task in the monitored project (an open issue of the served repository on the `PROJECT_URL` board, whose whole first line is a task key and whose Phase is not Planning or Outline), it has no open blocker, and its Status is "Ready". Nothing else decides readiness. The start guards are separate and apply only to a Ready item: it is not taken, and its body is trusted. (Spec: Ready rule; Taken items are left alone; Trusted issues only.)
+
+### 1. Repair
+
+Not done yet: the task "Repair claims, settle merged work and wake on events" adds it. Half-made claims are listed in the report.
+
+### 2. Advance
+
+Reference: [Reports](references/run-github.md#reports), [Switch](references/run-github.md#switch) and [Stop](references/run-github.md#stop). Spec: Which reports are judged; Blocked items are not advanced; Answer order; and the requirements of each answer.
+
+Advance runs only when Preflight has no gap and the implement model resolves.
+
+1. **Collect** the phase reports: lines of incoming messages from another thread, with the sender from host metadata, as in [Collect](references/run-github.md#collect). A `phase-done` line typed by a person is not a report.
+2. **Judge** them with the [Judge](references/run-github.md#judge) script: drop the reports whose stop is already [recorded](references/run-github.md#recorded-stops), keep only the newest per item from its "Run thread" for the current "Attempt", and route the rest. An item labelled `blocked` is not advanced: "blocked, waiting for the owner".
+3. **Answer** each judged report, one at a time, with the first answer that applies, in this order:
+   1. `finish-switch`: a [half-done switch](references/run-github.md#1-a-half-done-switch). Write "Run phase" implement; nothing is switched or sent.
+   2. `stop`: a foreign sender or a wrong attempt, whatever the phase.
+   3. `handled`: the phase is earlier than "Run phase". Nothing is written or sent.
+   4. `act`: a matching plan report on a thread that is idle within 5 minutes. Find the one change folder, switch the model, send the apply instruction, write "Run phase" implement, as in [Act](references/run-github.md#5-act).
+   5. `not-idle`: everything for `act` matches, but the thread still runs after [5 minutes](references/run-github.md#4-wait-for-the-thread), or the switch is refused. Nothing is written.
+   6. `stop`: another mismatch: `seq`, `head`, a later phase, or no or several change folders.
+   7. `report-only`: a malformed line, an issue that is not a task on this board or whose claim is incomplete, or a matching report for a phase other than plan ("not handled in M1"). Nothing is written.
+
+   Every `stop` adds the label `blocked` and the agent comment of [Stop](references/run-github.md#stop). An item that an answer of this wake stopped is not advanced by a later line of the same wake.
+
+### 3. Start
+
+Reference: [Ready filter](references/run-github.md#ready-filter) and [Claim](references/run-github.md#claim). Spec: Ready rule; Items that are not tasks; Waiting for Ready is reported; Trusted issues only; Taken items are left alone; Parallel limit; Look before claiming; Claim order; Start instruction.
+
+Start runs only when Preflight has no gap, the board was read whole and the plan model resolves.
+
+1. **Filter.** Run the [Ready filter](references/run-github.md#ready-filter) on the board read. It decides Ready by the three conditions, then applies the start guards: overflow, taken, trust. Keep its line for every item: the report gives the reason of each `skip`.
+2. **Slots.** Count the items in use and the free slots, as in [Slots](references/run-github.md#slots). Take the `start` items in ascending issue number while a slot is free. A candidate left over stays Ready and is reported.
+3. **Look before claiming.** For each candidate, read it again and search for a thread titled exactly with its launch key, as in [Look before claiming](references/run-github.md#look-before-claiming). Anything changed, a verdict other than `start`, or such a thread: skip it and report it.
+4. **Claim.** Write the seven [writes](references/run-github.md#writes) in order, reading each back: assign the agent, Status "In progress", "Attempt" 1, "Run phase" plan, the linked branch, the thread launched on the plan model with the [start instruction](references/run-github.md#start), and "Run thread". A failed write stops this item's claim: report it as a half-made claim, and go on with the next candidate.
+
+### Wake report
+
+Every wake ends with this report, a wake with nothing to do included. (Spec: Wake report.)
+
+```markdown
+## Wake: <repo>, board <board URL>
+
+Trigger: <manual wake | report line "<line>">
+
+### Started
+- #<issue> <title>: thread <threadId>, branch <branch>
+
+### Not started
+- #<issue> <title>: <reason, from the filter's verdict, the slots or the claim's look>
+
+### Report answers
+- #<issue> <message id> from <sender id>: <finish-switch | stop | handled | act | not-idle | report-only | recorded | superseded | blocked>, <reason; for act the thread id and the change folder; for stop the reason and the phase to resume in>
+
+### Half-made claims
+- #<issue>: <the writes that completed, and the write that failed with its error>
+
+### Gaps (owner step)
+- <what is missing or invalid, and the owner's exact step>
+
+Repair: not done yet.
+```
+
+- Every list is printed, with "none" when it is empty.
+- Under Not started, list every board item the filter did not print `start` for, with the wording of its reason in [Ready filter](references/run-github.md#ready-filter), and every candidate a slot, the look or the thread search held back.
+- Under Gaps, list every gap of the steps before, every model that did not resolve, a board read that failed, and every stop that was reported in place of being written.
+- When no item was started and no report was answered, say so above the lists: "Nothing to do in this wake."

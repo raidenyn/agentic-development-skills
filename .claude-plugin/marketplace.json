@@ -56,7 +56,7 @@
     {
       "name": "project-conductor",
       "source": "./skills/project-conductor",
-      "description": "Prepare a GitHub Project board and its repository for unattended task runs: the PROJECT_URL variable, three run fields, conductor settings, a model file and task keys, with a dry run and owner steps.",
+      "description": "Prepare a GitHub Project board and its repository for unattended task runs, and run one wake: start Ready tasks, handle phase reports and switch a task thread's model.",
       "category": "development",
       "tags": [
         "github-projects",
@@ -88,6 +88,12 @@
         "planning",
         "task-breakdown"
       ]
+    },
+    {
+      "name": "task-run",
+      "source": "./skills/task-run",
+      "description": "Use when a thread was started by the project-conductor with a start instruction or an apply instruction naming task-run: reconcile the task, plan by the repository's process, send the phase report, and after the model switch implement from the saved change folder through to the pull request.",
+      "category": "development"
     }
   ]
 }
