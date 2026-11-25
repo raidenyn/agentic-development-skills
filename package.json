@@ -12,7 +12,7 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.tests.json",
     "lint": "biome check src scripts tests",
     "format": "biome check --write src scripts tests",
-    "test": "node --test scripts/test-build.mts scripts/test-release-rules.mjs scripts/test-release-lifecycle.mjs scripts/test-project-ready.mjs \"tests/agent-harness/*.test.mjs\"",
+    "test": "node --test scripts/test-build.mts scripts/test-verify.mts scripts/test-release-rules.mts scripts/test-release-lifecycle.mts scripts/test-project-ready.mts \"tests/agent-harness/*.test.mjs\"",
     "check": "pnpm run build:check && pnpm run typecheck && pnpm run lint && pnpm test",
     "harness:update": "pnpm run build && node skills/agent-harness-hook-runtime/assets/hook-runtime/cli.mjs update && node skills/agent-harness-verify-gate/assets/verify-gate/cli.mjs update"
   },

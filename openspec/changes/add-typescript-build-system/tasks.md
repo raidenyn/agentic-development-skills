@@ -32,9 +32,9 @@
 
 ## 5. Convert the repo scripts
 
-- [ ] 5.1 `git mv` `scripts/project-ready.mjs`, `scripts/verify.mjs` and the three `scripts/test-*.mjs` files to `.mts`, and move `tests/agent-harness/repo-verify.test.mjs` to `scripts/test-verify.mts` (it imports the verify script, and its old folder runs on Node 22.0.0); annotate them to strict, and add `scripts/untyped-modules.d.ts` for the two semantic-release plugins that ship no types
-- [ ] 5.2 Update every reference in the same step as the rename, because hooks call the verify script by path: `package.json`, `.github/workflows/project-ready.yml`, `.agents/harness.json`, `AGENTS.md`, `README.md`
-- [ ] 5.3 Extend `scripts/verify.mts` (TDD, in `scripts/test-verify.mts`): full checks include `pnpm run check`; edit trigger runs Biome on a non-generated `.mts` or `.mjs` file, the build for a file under `src/`, and `build --check` for a generated file
+- [x] 5.1 `git mv` `scripts/project-ready.mjs`, `scripts/verify.mjs` and the three `scripts/test-*.mjs` files to `.mts`, and move `tests/agent-harness/repo-verify.test.mjs` to `scripts/test-verify.mts` (it imports the verify script, and its old folder runs on Node 22.0.0); annotate them to strict, and add `scripts/untyped-modules.d.ts` for the two semantic-release plugins that ship no types
+- [x] 5.2 Update every reference in the same step as the rename, because hooks call the verify script by path: `package.json`, `.github/workflows/project-ready.yml`, `.agents/harness.json`, `AGENTS.md`, `README.md`
+- [x] 5.3 Extend `scripts/verify.mts` (TDD, in `scripts/test-verify.mts`): full checks include `pnpm run check`; edit trigger runs Biome on a non-generated `.mts` or `.mjs` file, the build for a file under `src/`, and `build --check` for a generated file
 
 ## 6. Lint and format the rest
 

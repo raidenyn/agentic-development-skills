@@ -4,32 +4,61 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { editChecks, FULL_CHECKS } from '../../scripts/verify.mjs';
-import { runNode } from './helpers.mjs';
+import { editChecks, FULL_CHECKS } from './verify.mts';
+import { runNode } from '../tests/agent-harness/helpers.mjs';
 
-const script = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'scripts', 'verify.mjs');
+const script = resolve(dirname(fileURLToPath(import.meta.url)), 'verify.mts');
 const VALIDATE = ['python3', 'scripts/skills.py', 'validate'];
 
+const BIOME = 'node_modules/.bin/biome';
+const BUILD = ['node', 'scripts/build.mts'];
+
 test('editChecks maps a file to its argv list', () => {
-  assert.deepEqual(editChecks('a.mjs'), [['node', '--check', 'a.mjs']]);
   assert.deepEqual(editChecks('scripts/x.py'), [['python3', '-m', 'py_compile', 'scripts/x.py']]);
   assert.deepEqual(editChecks('skills/feature-rfc/SKILL.md'), [VALIDATE]);
   assert.deepEqual(editChecks('.claude-plugin/marketplace.json'), [VALIDATE]);
   assert.deepEqual(editChecks('README.md'), []);
 });
 
-test('skills files add the validator to the per-type checks', () => {
-  assert.deepEqual(editChecks('skills/x/assets/t/a.mjs'), [['node', '--check', 'skills/x/assets/t/a.mjs'], VALIDATE]);
+test('edit of a source file lints it and builds', () => {
+  assert.deepEqual(editChecks('src/verify-gate/lib/run.mts'), [[BIOME, 'check', 'src/verify-gate/lib/run.mts'], BUILD]);
+});
+
+test('edit of a data file under src builds', () => {
+  assert.deepEqual(editChecks('src/hook-runtime/tool.json'), [BUILD]);
+});
+
+test('edit of a repo script lints it', () => {
+  assert.deepEqual(editChecks('scripts/build.mts'), [[BIOME, 'check', 'scripts/build.mts']]);
+});
+
+test('edit of a harness test lints it', () => {
+  assert.deepEqual(editChecks('tests/agent-harness/run.test.mjs'), [[BIOME, 'check', 'tests/agent-harness/run.test.mjs']]);
+});
+
+test('edit of a recorded fixture is not linted', () => {
+  assert.deepEqual(editChecks('tests/agent-harness/fixtures/capability-handler/handler.mjs'), []);
+});
+
+test('edit of a generated file runs the build check', () => {
+  const checks = editChecks('skills/agent-harness-verify-gate/assets/verify-gate/cli.mjs');
+  assert.deepEqual(checks, [[...BUILD, '--check'], VALIDATE]);
+  assert.ok(!checks.some((c) => c[0] === BIOME));
+});
+
+test('edit of an installed copy is not linted', () => {
+  assert.ok(!editChecks('.agents/harness/verify-gate/cli.mjs').some((c) => c[0] === BIOME));
 });
 
 test('FULL_CHECKS is the full list', () => {
   assert.deepEqual(FULL_CHECKS, [
     VALIDATE,
     ['python3', '-m', 'unittest', 'discover', '-s', 'scripts', '-p', 'test_*.py'],
-    ['pnpm', 'test'],
+    ['pnpm', 'run', 'check'],
     ['node', '.agents/harness/hook-runtime/cli.mjs', 'check'],
     ['node', '.agents/harness/verify-gate/cli.mjs', 'check'],
   ]);
+  assert.ok(!FULL_CHECKS.some((c) => c.join(' ') === 'pnpm test'));
 });
 
 test('an invalid .json file fails the edit run', async () => {

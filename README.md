@@ -104,8 +104,8 @@ scripts/skills.py                  # `new` scaffolds; `validate`, `build-pages`,
 scripts/pages_release.py           # picks the published release the Pages job deploys
 scripts/test_pages_release.py      # tests for pages_release.py
 scripts/test_skills.py             # Python tests for skills.py and this repo's docs
-scripts/test-release-rules.mjs     # Node tests: bump rules and release notes
-scripts/test-release-lifecycle.mjs # Node tests: semantic-release runs against a scratch bare remote
+scripts/test-release-rules.mts     # Node tests: bump rules and release notes
+scripts/test-release-lifecycle.mts # Node tests: semantic-release runs against a scratch bare remote
 .githooks/commit-msg               # local commit-msg hook (`install-hooks` enables it)
 .releaserc.json                    # semantic-release: bump rules, notes sections, catalog check
 .nvmrc                             # Node version for the release toolchain

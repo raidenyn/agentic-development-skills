@@ -8,18 +8,34 @@
 // was closed without being completed. Items in any other Status, and items
 // whose issue is closed, are left alone.
 //
-// Usage: PROJECT_OWNER=<login> PROJECT_NUMBERS=5,6 GH_TOKEN=<token> node scripts/project-ready.mjs [--dry-run]
+// Usage: PROJECT_OWNER=<login> PROJECT_NUMBERS=5,6 GH_TOKEN=<token> node scripts/project-ready.mts [--dry-run]
 
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const MANAGED = new Set(["backlog", "ready"]);
 
+export interface Blocker {
+  state: string;
+  stateReason: string | null;
+}
+export interface Item {
+  status: string | null;
+  state: string;
+  body: string | null;
+  blockers: Blocker[];
+  [field: string]: unknown;
+}
+export interface Decision {
+  status: "Backlog" | "Ready";
+  reason: string;
+}
+
 /** True when the issue body names a condition that a person must confirm. */
-export function hasStartCondition(body) {
+export function hasStartCondition(body: string | null | undefined): boolean {
   const match = /\*\*Ready to start when:\*\*([^\n]*(?:\n(?!\n)[^\n]*)*)/.exec(body ?? "");
   if (!match) return false;
-  const text = match[1].trim().toLowerCase().replace(/[.\s]+$/, "");
+  const text = (match[1] as string).trim().toLowerCase().replace(/[.\s]+$/, "");
   return !(text === "" || text === "no conditions" || text === "none");
 }
 
@@ -27,7 +43,7 @@ export function hasStartCondition(body) {
  * Decide the Status an item should have.
  * Returns { status, reason }, or null when the item is not managed here.
  */
-export function decide(item) {
+export function decide(item: Item): Decision | null {
   const current = (item.status ?? "").toLowerCase();
   if (item.state !== "OPEN" || !MANAGED.has(current)) return null;
   const open = item.blockers.filter((b) => b.state !== "CLOSED");
@@ -68,21 +84,21 @@ query($owner: String!, $number: Int!, $cursor: String) {
   }
 }`;
 
-function gh(args, input) {
+function gh(args: string[], input?: string): string {
   return execFileSync("gh", args, { input, encoding: "utf8", stdio: ["pipe", "pipe", "inherit"] });
 }
 
-function graphql(query, variables) {
+function graphql(query: string, variables: Record<string, unknown>): any {
   const out = gh(["api", "graphql", "--input", "-"], JSON.stringify({ query, variables }));
   const parsed = JSON.parse(out);
   if (parsed.errors) throw new Error(JSON.stringify(parsed.errors));
   return parsed.data;
 }
 
-function readProject(owner, number) {
-  const items = [];
-  let cursor = null;
-  let project;
+function readProject(owner: string, number: number): any {
+  const items: Item[] = [];
+  let cursor: string | null = null;
+  let project: any;
   do {
     project = graphql(QUERY, { owner, number, cursor }).user.projectV2;
     if (!project) throw new Error(`project ${owner}/${number} not found or not readable`);
@@ -117,7 +133,7 @@ function main() {
   let failed = false;
   for (const n of numbers) {
     const project = readProject(owner, Number(n));
-    const option = (name) => project.field?.options.find((o) => o.name.toLowerCase() === name.toLowerCase());
+    const option = (name: string) => project.field?.options.find((o: { name: string }) => o.name.toLowerCase() === name.toLowerCase());
     if (!option("Backlog") || !option("Ready")) {
       console.error(`project ${n}: Status has no Backlog or no Ready option; skipped`);
       failed = true;

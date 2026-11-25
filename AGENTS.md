@@ -18,4 +18,4 @@ This repo publishes Agent Skills. Each skill lives in `skills/<name>/` and is li
 2. Write the skill. Add it to the Skills table in `README.md`.
 3. `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'` and `pnpm test` must all pass (`pnpm install --frozen-lockfile` and `pip install -r requirements-dev.txt` first; pnpm is the only package manager).
 
-Agent hooks run `node scripts/verify.mjs` on edits, ticked tasks and turn end (`.agents/harness/`); run it by hand with `node .agents/harness/verify-gate/cli.mjs run`.
+Agent hooks run `node scripts/verify.mts` on edits, ticked tasks and turn end (`.agents/harness/`); run it by hand with `node .agents/harness/verify-gate/cli.mjs run`.

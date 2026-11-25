@@ -19,7 +19,7 @@ The hook runtime must be installed first. The gate's `install` refuses without i
 
 ## The one command
 
-`verify-gate.command` in `.agents/harness.json` is an argv list, not a shell string, for example `["node", "scripts/verify.mjs"]` or `["make", "verify"]`. It runs from the repo root, in its own process group, with these variables:
+`verify-gate.command` in `.agents/harness.json` is an argv list, not a shell string, for example `["node", "scripts/verify.js"]` or `["make", "verify"]`. It runs from the repo root, in its own process group, with these variables:
 
 | Variable | Value |
 |---|---|

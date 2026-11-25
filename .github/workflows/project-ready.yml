@@ -39,4 +39,4 @@ jobs:
             echo "::notice::PROJECT_TOKEN or PROJECT_NUMBERS is not set; nothing to do."
             exit 0
           fi
-          node scripts/project-ready.mjs
+          node scripts/project-ready.mts

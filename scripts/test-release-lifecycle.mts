@@ -1,25 +1,34 @@
 import { execFile } from "node:child_process";
+import type { ExecFileOptions } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SEMANTIC_RELEASE = path.join(ROOT, "node_modules", ".bin", "semantic-release");
 const CONFIG_FILE = path.join(ROOT, ".releaserc.json");
 
+interface Run {
+  code: number;
+  stdout: string;
+  stderr: string;
+}
+type Ref = { ref: string; objectname: string };
+
 /** Run a command without rejecting, so tests can assert on the exit code. */
-function exec(command, args, options) {
+function exec(command: string, args: string[], options: ExecFileOptions): Promise<Run> {
   return new Promise((resolve) => {
     execFile(command, args, options, (error, stdout, stderr) => {
-      resolve({ code: error ? (typeof error.code === "number" ? error.code : 1) : 0, stdout, stderr });
+      resolve({ code: error ? (typeof error.code === "number" ? error.code : 1) : 0, stdout: String(stdout), stderr: String(stderr) });
     });
   });
 }
 
-function gitEnv(home, extra = {}) {
+function gitEnv(home: string, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   return {
     PATH: process.env.PATH,
     HOME: home,
@@ -35,24 +44,24 @@ function gitEnv(home, extra = {}) {
   };
 }
 
-async function git(cwd, args, env) {
+async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv): Promise<string> {
   const { code, stdout, stderr } = await exec("git", args, { cwd, env });
   assert.equal(code, 0, `git ${args.join(" ")} failed: ${stderr}`);
   return stdout.trim();
 }
 
-async function remoteRefs(bare, env) {
+async function remoteRefs(bare: string, env: NodeJS.ProcessEnv): Promise<Ref[]> {
   const output = await git(bare, ["for-each-ref", "--format=%(refname) %(objectname)"], env);
   return output
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [ref, objectname] = line.split(" ");
+      const [ref, objectname] = line.split(" ") as [string, string];
       return { ref, objectname };
     });
 }
 
-function describeRun(result) {
+function describeRun(result: Run): string {
   return `semantic-release exited ${result.code}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`;
 }
 
@@ -62,7 +71,10 @@ function describeRun(result) {
  * GitHub plugin removed, `repositoryUrl` pointing at the bare remote and the
  * exec commands pointing at scripts this test can make fail.
  */
-async function createRepositories(t, { failVerify = false, failPrepare = false } = {}) {
+async function createRepositories(
+  t: TestContext,
+  { failVerify = false, failPrepare = false }: { failVerify?: boolean; failPrepare?: boolean } = {},
+): Promise<{ bare: string; clone: string; env: NodeJS.ProcessEnv }> {
   const directory = await mkdtemp(path.join(tmpdir(), "release-lifecycle-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
 
@@ -94,10 +106,10 @@ async function createRepositories(t, { failVerify = false, failPrepare = false }
 
   const config = JSON.parse(await readFile(CONFIG_FILE, "utf8"));
   const plugins = config.plugins.filter(
-    (plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) !== "@semantic-release/github",
+    (plugin: unknown) => (Array.isArray(plugin) ? plugin[0] : plugin) !== "@semantic-release/github",
   );
   assert.equal(plugins.length, config.plugins.length - 1, "the committed config should list @semantic-release/github");
-  const execPlugin = plugins.find((plugin) => plugin[0] === "@semantic-release/exec");
+  const execPlugin = plugins.find((plugin: unknown[]) => plugin[0] === "@semantic-release/exec");
   assert.ok(execPlugin, "the committed config should list @semantic-release/exec");
   execPlugin[1] = {
     ...execPlugin[1],
@@ -120,7 +132,7 @@ async function createRepositories(t, { failVerify = false, failPrepare = false }
   return { bare, clone, env };
 }
 
-function runSemanticRelease(clone, env) {
+function runSemanticRelease(clone: string, env: NodeJS.ProcessEnv): Promise<Run> {
   return exec(SEMANTIC_RELEASE, ["--no-ci"], { cwd: clone, env });
 }
 

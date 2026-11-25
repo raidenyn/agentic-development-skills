@@ -12,13 +12,13 @@ const REPOSITORY_URL = "https://github.com/raidenyn/agentic-development-skills.g
 const config = JSON.parse(await readFile(CONFIG_URL, "utf8"));
 
 /** The config for one plugin from the explicit `plugins` array (never `{}` by accident). */
-function pluginConfig(name) {
-  const entry = config.plugins.find((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) === name);
+function pluginConfig(name: string): Record<string, unknown> {
+  const entry = config.plugins.find((plugin: unknown) => (Array.isArray(plugin) ? plugin[0] : plugin) === name);
   assert.ok(entry, `${name} is configured in .releaserc.json`);
   return Array.isArray(entry) ? (entry[1] ?? {}) : {};
 }
 
-function context(messages) {
+function context(messages: string[]) {
   return {
     cwd: process.cwd(),
     env: {},
@@ -26,7 +26,7 @@ function context(messages) {
     options: { repositoryUrl: REPOSITORY_URL },
     lastRelease: { gitTag: "v0.0.0", version: "0.0.0" },
     nextRelease: { gitTag: "v0.1.0", version: "0.1.0" },
-    commits: messages.map((message, index) => ({ hash: `hash-${index}`, message })),
+    commits: messages.map((message: string, index: number) => ({ hash: `hash-${index}`, message })),
   };
 }
 
@@ -42,7 +42,7 @@ const analyzerCases = [
 test("commit-analyzer maps commits to the documented release types", async () => {
   const analyzer = pluginConfig("@semantic-release/commit-analyzer");
 
-  for (const [messages, expected] of analyzerCases) {
+  for (const [messages, expected] of analyzerCases as [string[], string | null][]) {
     assert.equal(
       await analyzeCommits(analyzer, context(messages)),
       expected,
