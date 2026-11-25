@@ -26,7 +26,7 @@ The canonical closeout (merge an implementation worktree branch into the feature
 
 ## PR comment
 
-- **Comment status**: `failed: GitHub API errors on three attempts (2026-11-25 15:54-15:55 UTC); retried while the PR is watched`
+- **Comment status**: `posted` (after GitHub API errors on the first three attempts)
 
 ---
 

@@ -310,7 +310,7 @@ Accepted on 2026-11-25 by the repository owner (raidenyn), with no conditions. A
   - **Reason (owner, 2026-11-25).** A lot of Node code is about to be written, in parallel worktrees, and it needs better checking, tests and lints; the owner asked for TypeScript as the source language.
   - **What it does not change.** The Goals line "The copied code has no npm dependencies and runs on Node 22 or newer" still holds. No contract changes. The only effect on onboarded repositories is that the next `update` brings files with a one-line "generated" header and reformatted code, under a patch version.
   - **Approved by:** the repository owner (raidenyn), 2026-11-25, wording approved as written.
-  - **Implemented by:** OpenSpec change `add-typescript-build-system` (`openspec/changes/add-typescript-build-system/`).
+  - **Implemented by:** OpenSpec change `add-typescript-build-system` (`openspec/changes/archive/2026-11-25-add-typescript-build-system/`).
 
 ## Appendix
 

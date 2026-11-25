@@ -1,7 +1,7 @@
 // Builds the shipped harness tools: src/<tool>/*.mts → skills/<skill>/assets/<tool>/*.mjs.
 // Each module is type-stripped, has its relative .mts specifiers rewritten to .mjs, is formatted
 // with Biome and gets a "generated" header. The output is committed; `--check` fails when it
-// differs from a fresh build. See openspec/changes/add-typescript-build-system/design.md (D2, D3).
+// differs from a fresh build. See openspec/changes/archive/2026-11-25-add-typescript-build-system/design.md (D2, D3).
 //
 // Usage: node scripts/build.mts [--check]
 import { spawnSync } from 'node:child_process';
