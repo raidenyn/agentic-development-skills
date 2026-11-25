@@ -209,7 +209,7 @@ fragment Value on ProjectV2ItemFieldValue {
   ... on ProjectV2ItemFieldNumberValue { number }
 }
 fragment RunFields on ProjectV2Item {
-  id type
+  id type isArchived
   status: fieldValueByName(name: "Status") { ...Value }
   phase: fieldValueByName(name: "Phase") { ...Value }
   runPhase: fieldValueByName(name: "Run phase") { ...Value }
@@ -267,7 +267,7 @@ done
 
 No `board read` line: the read failed. Start writes nothing in this wake, and the report names the error. A partial board is never judged.
 
-Each item holds its `id` (the item id that `gh project item-edit --id` takes), its `type`, the five field values (`status`, `phase`, `runPhase`, `attempt`, `runThread`; `null` when unset) and its `content`. A draft item has `content.__typename` `DraftIssue` and no number. Every nested list has `totalCount` beside its `nodes`, so a list longer than its page is seen.
+Each item holds its `id` (the item id that `gh project item-edit --id` takes), its `type`, `isArchived` (true for an item archived on the board; a missing value counts as false), the five field values (`status`, `phase`, `runPhase`, `attempt`, `runThread`; `null` when unset) and its `content`. A draft item has `content.__typename` `DraftIssue` and no number. Every nested list has `totalCount` beside its `nodes`, so a list longer than its page is seen.
 
 Blockers are read with their `stateReason`, but the reason is not used: a blocker closed as not planned counts as closed, like one closed as completed.
 
@@ -289,7 +289,8 @@ def condition:
          | . != "" and . != "no conditions" and . != "none" end;
 def not_ready($repo):
   .content as $c
-  | if $c == null or $c.__typename != "Issue" then "not-task"
+  | if .isArchived == true then "not-task"
+    elif $c == null or $c.__typename != "Issue" then "not-task"
     elif $c.repository.nameWithOwner != $repo then "other-repo"
     elif $c.state != "OPEN" then "closed"
     elif ($c | firstline | test("^<!-- plan: [a-z0-9-]+/[a-z0-9-]+ -->$")) then "plan-item"
@@ -338,7 +339,7 @@ Reasons, and what the report says for each:
 
 | Reason | Report |
 |---|---|
-| `not-task` | Not a task: a pull request, a draft item, or an issue without a task key. Not handled. |
+| `not-task` | Not a task: an item archived on the board (`isArchived` true; say "archived"), a pull request, a draft item, or an issue without a task key. Not handled. |
 | `plan-item` | A plan item. Not handled yet. |
 | `planning`, `outline` | Phase Planning or Outline. Planning items are not handled yet. |
 | `other-repo` | An issue of another repository. Not handled. |
@@ -369,10 +370,10 @@ Claim the `start` lines of the filter in ascending issue number, while a slot is
 
 ### Slots
 
-In use is every open board issue that is assigned to `<agent>` or has a non-empty "Run thread", whatever its Status and repository. An issue whose assignees overflow their page counts as in use:
+In use is every open board issue that is not archived on the board and is assigned to `<agent>` or has a non-empty "Run thread", whatever its Status and repository. An issue whose assignees overflow their page counts as in use:
 
 ```bash
-jq -r --arg agent <agent> '[.[] | select(.content.__typename == "Issue" and .content.state == "OPEN")
+jq -r --arg agent <agent> '[.[] | select(.isArchived != true and .content.__typename == "Issue" and .content.state == "OPEN")
   | select(any(.content.assignees.nodes[]; .login == $agent)
            or .content.assignees.totalCount > (.content.assignees.nodes | length)
            or ((.runThread.text // "") != ""))] | length' <work>/board.json      # <in use>
@@ -504,9 +505,291 @@ jq -r '.[0] | "assignees=\([.content.assignees.nodes[].login] | join(",")) statu
 
 `<item id>` is the item's `id` in `claim-<issue>.json`. A claimed item ends with the agent as assignee, Status "In progress", "Attempt" 1, "Run phase" plan, a linked branch, and the thread id in "Run thread". The report lists it with its thread id.
 
+## Reports
+
+Advance judges phase reports. Collect them, drop the ones already stopped, keep the newest per item, then answer each one by [Switch](#switch). Anchor: `#reports`.
+
+Advance runs only when Preflight has no gap and the implement model resolves by [Models](#models). Otherwise it answers no report and writes and sends nothing: its report line names the gap, and every report is judged again at the next wake.
+
+### What a report is
+
+A report is a line of an incoming message from another thread. In `t3_thread_read` with `view: "activity"`, such a message is an item with `type` `user_message` and a `senderThreadId`. `senderThreadId` is the sender. `sourceThreadId` is the thread that holds the item, not the sender, and is never used. A message without `senderThreadId` (typed by a person) holds no report, and neither does a message whose `senderThreadId` is `<conductor id>`.
+
+Each line of the text is trimmed of white space at both ends, then matched whole against:
+
+```text
+^phase-done ([^/ ]+/[^# ]+)#([0-9]+) attempt=([0-9]+) phase=(plan|implement|closeout|care) seq=([0-9]+) head=([0-9a-f]{40})\r?$
+```
+
+The groups are the repository, the issue, the attempt, the phase, `seq` and `head`. Any other line that contains `phase-done` is malformed: it is answered `report-only`, with the reason malformed, and is never matched in part. So a `head` of 7 characters, two spaces between fields, or the fields in another order is malformed; a line with a trailing CR, or with spaces around it, matches.
+
+A report is named by its message id and its line. One message may hold more than one report line.
+
+### The items in a run
+
+An item in a run is an open board issue that is not archived on the board and has a non-empty "Run thread". Its claim time is the latest `assigned` event by `<agent>` that assigned `<agent>`, from the issue's timeline. Write the claim times to `<work>/claims.json`; an issue whose timeline holds no such event gets an empty time:
+
+```bash
+set -o pipefail
+jq -r '.[] | select(.isArchived != true and .content.__typename == "Issue" and .content.state == "OPEN"
+  and ((.runThread.text // "") != "")) | .content.number' <work>/board.json > <work>/running.txt
+for i in $(cat <work>/running.txt); do
+  gh api repos/<repo>/issues/$i/timeline --paginate \
+    --jq '.[] | select(.event == "assigned" and .actor.login == "<agent>" and .assignee.login == "<agent>") | .created_at' \
+    > <work>/timeline-$i.txt || { echo "unreadable timeline #$i" >&2; continue; }
+  jq -n --arg i "$i" --arg t "$(sort <work>/timeline-$i.txt | tail -n 1)" '{($i): $t}'
+done | jq -s 'add // {}' > <work>/claims.json
+```
+
+An issue with an empty time, or an `unreadable timeline` line, has no kept reports in this wake; say so in the report. Only the triggering message can still name it.
+
+### Collect
+
+Read the conductor's own incoming messages: call `t3_thread_read` with `threadId` `<conductor id>`, `view` `"activity"`, `limit` 100 and `maxCharsPerItem` 20000. Write each answer's `items` to `<work>/inbox-<k>.json`, with `<k>` 1, 2, …. The answer is newest first: for the next page, call again with `beforePosition` set to the answer's `earlierPosition`. Stop when `earlierPosition` is null, or when the oldest item of the page has an `updatedAt` earlier than the earliest time in `claims.json`. With no time in `claims.json`, read only the first page. An item with `textTruncated` true is read on with `itemId` and `textOffset` set to its `nextTextOffset`, and its text is joined before the parse.
+
+The triggering message is the `user_message` that started this wake, normally the newest one. Note its `messageId` as `<trigger>`. Then parse every report line:
+
+```bash
+cat > <work>/reports.jq <<'EOF'
+def report_re: "^phase-done ([^/ ]+/[^# ]+)#([0-9]+) attempt=([0-9]+) phase=(plan|implement|closeout|care) seq=([0-9]+) head=([0-9a-f]{40})\r?$";
+[ .[] | select(.type == "user_message" and (.senderThreadId // "") != "" and .senderThreadId != $me)
+  | . as $m | (.text // "") | split("\n") | to_entries[]
+  | (.value | gsub("^\\s+|\\s+$"; "")) as $line
+  | select($line | contains("phase-done"))
+  | {messageId: $m.messageId, position: $m.position, at: $m.updatedAt, sender: $m.senderThreadId,
+     index: .key, line: $line, trigger: ($m.messageId == $trigger)}
+    + ([$line | match(report_re)]
+       | if length == 0 then {malformed: true}
+         else .[0].captures | map(.string) as [$r, $n, $a, $p, $s, $h]
+           | {malformed: false, repo: $r, issue: ($n | tonumber), attempt: ($a | tonumber),
+              phase: $p, seq: ($s | tonumber), head: $h} end) ]
+EOF
+jq -s 'add | unique_by(.position)' <work>/inbox-*.json > <work>/inbox.json
+jq --arg me <conductor id> --arg trigger <trigger> -f <work>/reports.jq <work>/inbox.json > <work>/reports.json
+```
+
+A `phase-done` line typed by a person in the triggering message is not a report: the wake's report says so, and nothing else is done with it.
+
+### Recorded stops
+
+A stop is recorded by its comment (see [Stop](#stop)). Read the agent's comments on every issue the reports name:
+
+```bash
+set -o pipefail
+for i in $(jq -r '[.[] | select(.malformed == false and .repo == "<repo>") | .issue] | unique[]' <work>/reports.json); do
+  gh api repos/<repo>/issues/$i/comments --paginate --jq '.[] | select(.user.login == "<agent>") | {body}' \
+    | jq -s --argjson i "$i" 'map({issue: $i, body: (.body | gsub("\r"; ""))})' \
+    || echo "unreadable comments #$i" >&2
+done | jq -s 'add // []' > <work>/stops.json
+```
+
+An `unreadable comments` line means no report of that issue is judged in this wake, because a second stop comment could follow; say so in the report.
+
+### Judge
+
+The script keeps, drops and routes the reports, in this order:
+
+1. **Collect.** It keeps the reports of the triggering message, and every well-formed report that names an item in a run and is not older than that item's claim time. Every other report is left out, without a line.
+2. **Drop recorded stops.** A report whose stop an agent comment records, by its message id, sender and line, is `recorded`, whether or not the label is still there. It is not judged again.
+3. **Newest per item.** Of the reports from an item's "Run thread" whose attempt equals its "Attempt", only the newest (the highest `position`, then the latest line) is judged. The others are `superseded`: reported, never stopped. This holds for the triggering message too.
+4. **Judge the rest, one at a time.** That includes the reports from other senders, and the reports from the "Run thread" with another attempt.
+
+```bash
+cat > <work>/judge.jq <<'EOF'
+def val: if . == null then null else .name // .text // .number end;
+def rank: {"plan": 1, "implement": 2, "closeout": 3, "care": 4}[. // ""];
+def epoch: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601;
+($board[0]) as $items
+| ($filter | split("\n") | map(select(. != "") | split(" ") | {key: .[0], value: (.[2] // .[1])}) | from_entries) as $verdict
+| def item: . as $r | first($items[] | select(.isArchived != true and .content.__typename == "Issue"
+      and .content.repository.nameWithOwner == $r.repo and .content.number == $r.issue)) // null;
+  def complete: any(.content.assignees.nodes[]; .login == $agent)
+      and (.runThread | val | . != null and . != "") and (.attempt | val) != null
+      and (.runPhase | val | rank) != null and .content.linkedBranches.totalCount == 1;
+  def recorded: . as $r | any($stops[0][] | select(.issue == $r.issue);
+      .body | contains("Report: \($r.messageId) from \($r.sender)\n> \($r.line)\n"));
+  def route($i):
+    if .malformed then "report-only malformed"
+    elif .repo != $repo or $i == null
+      or ($verdict["\(.issue)"] // "not-task" | IN("not-task", "other-repo", "closed", "plan-item", "planning", "outline"))
+      then "report-only not-a-task"
+    elif ($i | complete | not) then "report-only incomplete-claim"
+    elif $i.content.labels.totalCount > ($i.content.labels.nodes | length) then "blocked overflow:labels"
+    elif any($i.content.labels.nodes[]; .name == "blocked") then "blocked"
+    elif .sender != ($i.runThread | val) then "stop foreign-sender"
+    elif .attempt != ($i.attempt | val) then "stop wrong-attempt"
+    elif (.phase | rank) < ($i.runPhase | val | rank) then "handled"
+    else "check" end;
+  [ .[] | . as $r | (if .malformed then null else item end) as $i
+    | ($claims[0]["\(.issue)"] // "") as $since
+    | select(.trigger or ($i != null and $since != "" and (.at | epoch) >= ($since | epoch)))
+    | . + {own: ($i != null and .sender == ($i.runThread | val) and .attempt == ($i.attempt | val)),
+           answer: (if $i != null and recorded then "recorded" else route($i) end)} ]
+  | (map(select(.own and .answer != "recorded")) | group_by(.issue) | map(max_by([.position, .index]) | [.messageId, .index])) as $newest
+  | .[] | if .own and .answer != "recorded" and (. as $r | any($newest[]; . == [$r.messageId, $r.index]) | not)
+          then .answer = "superseded" else . end
+  | [.answer, (.issue // "-"), .messageId, .sender, .line] | @tsv
+EOF
+jq -r --arg repo <repo> --arg agent <agent> --slurpfile board <work>/board.json --slurpfile stops <work>/stops.json \
+  --slurpfile claims <work>/claims.json --rawfile filter <work>/filter.txt -f <work>/judge.jq <work>/reports.json > <work>/judged.tsv
+```
+
+Each line is the route, the issue, the message id, the sender id and the line. A task is an item the filter does not call `not-task`, `other-repo`, `closed`, `plan-item`, `planning` or `outline`. A complete claim is an item assigned to `<agent>`, with "Run thread" and "Attempt" set, a "Run phase" of plan, implement, closeout or care, and exactly one linked branch. The routes:
+
+| Route | Next |
+|---|---|
+| `recorded` | Its stop is already recorded. One report line, nothing else. |
+| `superseded` | A newer report from the "Run thread" for this attempt exists. One report line, nothing else. |
+| `report-only malformed`, `report-only not-a-task`, `report-only incomplete-claim` | Answer `report-only`, with that reason. |
+| `blocked`, `blocked overflow:labels` | The item is labelled `blocked`, or its labels overflow their page. Advance does not act on it: "blocked, waiting for the owner". The report stays kept, and is judged at the first wake after the label is gone. |
+| `stop foreign-sender`, `stop wrong-attempt` | Answer `stop` by [Stop](#stop). |
+| `handled` | Answer `handled`. |
+| `check` | Go on in [Switch](#switch). |
+
+Answer the lines one at a time, in the order of `judged.tsv`. An item that an answer of this wake stopped is not advanced by a later line of the same wake.
+
+## Switch
+
+Answer each judged report with the first answer that applies, in this order. Anchor: `#switch`.
+
+| # | Answer | Applies when |
+|---|---|---|
+| 1 | `finish-switch` | The report is from the "Run thread" for the current "Attempt", "Run phase" is plan, and the thread already holds the apply message for this launch key and the report's `head`. |
+| 2 | `stop` | The report names a complete claim, and its sender is not the "Run thread", or its attempt is not "Attempt", whatever the phase. |
+| 3 | `handled` | The report is from the "Run thread" for the current "Attempt", and its phase is earlier than "Run phase". |
+| 4 | `act` | Only a plan report while "Run phase" is plan, from the "Run thread" for the current "Attempt", with `seq` 1 and `head` equal to the remote head of the linked branch, on a thread that is idle within 5 minutes. |
+| 5 | `not-idle` | Everything for `act` matches, but the thread still runs after 5 minutes, or the switch is refused. |
+| 6 | `stop` | The report is from the "Run thread" for the current "Attempt", and its `seq` or `head` does not match, or its phase is later than "Run phase". |
+| 7 | `report-only` | The line is malformed; it names an issue that is not a task on this board, or whose claim is incomplete; or it matches but its phase is not plan: "not handled in M1". |
+
+`judged.tsv` already gives answers 2, 3 and 7 where the board read decides them. Answer 1 cannot apply to those routes: it needs the "Run thread", the current "Attempt" and a "Run phase" of plan, so no report is earlier than "Run phase". A `check` report is from the "Run thread" for the current "Attempt", and its phase is not earlier than "Run phase". For it, take these steps in order. `<run thread>`, `<attempt>`, `<branch>` (the one linked branch) and `<item id>` come from the item in `<work>/board.json`; `<head>`, `<phase>` and `<seq>` from the report. The launch key is `<repo>#<issue> attempt <attempt>`.
+
+### 1. A half-done switch
+
+Only when "Run phase" is plan. Read the run thread's activity, as in [Collect](#collect) but with `threadId` `<run thread>`, back to the item's claim time, into `<work>/thread-<issue>-<k>.json`. Then:
+
+```bash
+jq -s 'add' <work>/thread-<issue>-*.json > <work>/thread-<issue>.json
+jq -e --arg me <conductor id> --arg key "<repo>#<issue> attempt <attempt>" --arg head <head> '
+  any(.[]; .type == "user_message" and .senderThreadId == $me
+      and ((.text // "") | split("\n") | map(rtrimstr("\r"))
+           | index("Launch key: \($key)") != null and index("Head: \($head)") != null))' <work>/thread-<issue>.json
+```
+
+`true`: an earlier wake sent the apply message and stopped before its last write. Answer `finish-switch`: write "Run phase" implement and read it back, as in [Act](#5-act), step 4. Nothing is waited for, switched or sent.
+
+### 2. The phase and `seq`
+
+- The phase is later than "Run phase": answer `stop`, with the reason "phase <phase> is later than Run phase <Run phase>".
+- The phase equals "Run phase", and `seq` is not the phase's place in `plan, implement, closeout, care` (plan 1, implement 2, closeout 3, care 4): answer `stop`, with the reason "seq=<seq>, but phase <phase> expects seq=<place>".
+
+### 3. The head
+
+Read the remote head of the linked branch:
+
+```bash
+gh api repos/<repo>/git/ref/heads/<branch> --jq .object.sha      # <remote head>
+```
+
+It must equal `<head>`. Otherwise answer `stop`, with the reason "head <head> is not the remote head <remote head> of <branch>". A 404 is the reason "<branch> has no remote head". Any other failed read is answered `report-only`, with the reason "the head could not be read", and the report is judged again at the next wake.
+
+Then, when the phase is not plan (it equals a "Run phase" of implement or later), answer `report-only`, "not handled in M1". Nothing is written.
+
+### 4. Wait for the thread
+
+The report is sent from inside the reporting thread's own turn, so wait up to 5 minutes for the turn to end. Note the start:
+
+```bash
+date +%s%3N      # <t0>, in milliseconds
+```
+
+Then loop:
+
+1. Call `t3_thread_read` with `threadId` `<run thread>` and `limit` 1. The thread is idle when `thread.activeRunId` is null, `thread.pendingBackgroundTasks` is empty and `thread.pendingRequestCount` is 0. Idle: leave the loop.
+2. The remaining wait is 300000 minus (`date +%s%3N` minus `<t0>`). When it is 0 or less, answer `not-idle`.
+3. Call `t3_thread_wait` with `threadId` `<run thread>` and `timeoutMs` set to the remaining wait. It may return early, with or without `timedOut`, so go back to 1 until 300000 ms have passed in total.
+
+`not-idle` writes nothing and sends nothing. The report stays kept and is judged again at the next wake.
+
+When the thread is idle, read the remote head again as in step 3. A moved head answers `stop`, with the reason of step 3.
+
+### 5. Act
+
+Do these in order. A failure stops the item here: report it with the steps that completed. The order leaves every state for a later wake to finish: before the send, it acts again; after the send, it finishes the switch.
+
+1. **The change folder.** List the folders under `openspec/changes/` that the branch adds at `<head>`, leaving out `archive`:
+
+   ```bash
+   set -o pipefail
+   gh api repos/<repo>/compare/<default>...<head> --paginate --jq '.files[] | select(.status=="added") | .filename' \
+     | sed -nE 's#^openspec/changes/([^/]+)/.+#\1#p' | grep -vx archive | sort -u
+   ```
+
+   It must print exactly one `<name>`. No line: answer `stop`, with the reason "the branch adds no change folder under openspec/changes/ at <head>". Several: answer `stop`, with the reason "the branch adds several change folders at <head>: <names>". Either stop comes before any switch. A failed `gh api` (the exit status is not 0 or 1) is reported, and nothing is written.
+
+2. **Switch the model.** Call `t3_thread_configure` with `threadId` `<run thread>` and `modelSelection` `<implement model>`. T3 refuses while a turn is active or a background command runs: a refusal answers `not-idle`, and nothing is written. Read back with `t3_thread_configure` with only `threadId`: its `modelSelection` has the `instanceId`, `model` and `options` of `<implement model>`.
+
+3. **Send the apply instruction.** Call `t3_thread_send`:
+
+   ```json
+   {"threadId": "<run thread>", "message": "<the apply instruction>", "mode": "queue", "freshContext": true}
+   ```
+
+   The apply instruction is in [Instructions](#instructions), with the change folder `openspec/changes/<name>/`. Read back with the check of [step 1](#1-a-half-done-switch), which must print `true`.
+
+4. **"Run phase" implement.** The ids come from `<work>/fields.json`:
+
+   ```bash
+   jq -r '.fields[] | select(.name == "Run phase") | .id, (.options[] | select(.name == "implement") | .id)' <work>/fields.json   # <run phase field>, <implement>
+   gh project item-edit --id <item id> --project-id <project id> --field-id <run phase field> --single-select-option-id <implement>
+   ```
+
+   Read back with `reread <issue> <work>/after-<issue>.json` and the state print of [Claim](#claim): `run-phase=implement`.
+
+Answer `act`. The report lists the item with its thread id and the change folder.
+
+## Stop
+
+A stop puts the label `blocked` on the issue and an agent comment that records the report. Anchor: `#stop`.
+
+`<message id>`, `<sender id>` and `<report line>` are the report's message id, sender and trimmed line, as in `judged.tsv`. `<Run phase>` is the item's "Run phase": the phase to resume in. `<reason>` is the answer's reason, with no full stop at its end:
+
+| Case | Reason |
+|---|---|
+| foreign sender | sent by thread <sender id>, not by the Run thread <run thread> |
+| wrong attempt | attempt=<attempt of the report>, but Attempt is <Attempt> |
+| later phase | phase <phase> is later than Run phase <Run phase> |
+| `seq` | seq=<seq>, but phase <phase> expects seq=<place> |
+| head | head <head> is not the remote head <remote head> of <branch>; or <branch> has no remote head |
+| change folder | the branch adds no change folder under openspec/changes/ at <head>; or the branch adds several change folders at <head>: <names> |
+
+Add the label first, then the comment:
+
+```bash
+gh issue edit <issue> --repo <repo> --add-label blocked
+printf 'Run stopped by the conductor.\nReport: %s from %s\n> %s\nReason: %s. Resume in phase: %s.\n' \
+  '<message id>' '<sender id>' '<report line>' '<reason>' '<Run phase>' > <work>/stop-<issue>.md
+gh issue comment <issue> --repo <repo> --body-file <work>/stop-<issue>.md
+```
+
+The comment reads:
+
+```text
+Run stopped by the conductor.
+Report: <message id> from <sender id>
+> <report line>
+Reason: <reason>. Resume in phase: <Run phase>.
+```
+
+Read both back: the labels hold `blocked` (`gh issue view <issue> --repo <repo> --json labels --jq '.labels[].name'`), and the comments read of [Recorded stops](#recorded-stops), run again for this issue, makes the judge script print the report as `recorded`. The comment is the record: a later wake drops this report, whether or not the label is still there. When only the label was written, a later wake sees the item as blocked; after the owner removes the label, it judges the report again and writes the comment.
+
+When Preflight could not create the label `blocked`, write neither: report the stop with its comment text, for the owner.
+
+The report lists every stop with the issue, the reason and the phase to resume in.
+
 ## Instructions
 
-The texts sent to a task thread, verbatim. Replace only the placeholders. Anchor: `#instructions`.
+The texts sent to a task thread, verbatim. Replace only the placeholders. `<sha of your pushed commit>` in the start instruction is not a placeholder of the conductor: leave it as written, for the thread to fill. Anchor: `#instructions`.
 
 ### Start
 
@@ -526,3 +809,24 @@ This worktree is on the branch <branch>. Work only on it, and push with `git pus
 phase-done <repo>#<issue> attempt=1 phase=plan seq=1 head=<sha of your pushed commit>
 Run one wake of the project-conductor skill for this repository.
 ```
+
+### Apply
+
+Sent with `t3_thread_send` in [Switch](#switch), in queue mode with a fresh context. `<attempt>` is the item's "Attempt", `<head>` the report's `head`, and `<name>` the change folder found at that head:
+
+```text
+Use the task-run skill to run the phase implement of this task.
+
+Issue: https://github.com/<repo>/issues/<issue>
+Launch key: <repo>#<issue> attempt <attempt>
+Phase: implement
+Branch: <branch>
+Head: <head>
+Conductor thread: <conductor id>
+Change folder: openspec/changes/<name>/
+
+Start from these files; nothing from earlier turns is available.
+This worktree is on the branch <branch>, at <head> or later. Read the change folder, implement it by the repository's own process through to its pull request, and push with `git push -u origin HEAD`.
+```
+
+[Switch](#switch) finds this message again by its lines `Launch key:` and `Head:`, so send them exactly as written.
