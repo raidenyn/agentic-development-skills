@@ -86,7 +86,7 @@ export function fakeOpencodeCtx(dir, { sessions = {}, synthetic } = {}) {
     },
   };
   const emit = (type, sessionID, data = {}) => {
-    queue.push({ id: `evt_${++evtCounter}`, type, data: { sessionID, ...data } });
+    queue.push({ id: `evt_${++evtCounter}`, created: Date.now(), type, data: { sessionID, ...data } });
     wake?.();
   };
   return { ctx, hooks, calls, emit };
