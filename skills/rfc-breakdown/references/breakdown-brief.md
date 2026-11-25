@@ -8,6 +8,7 @@ Break down one milestone of an accepted feature RFC into tasks. Use the `milesto
 **RFC:** <path to the RFC file>
 **Milestone:** <name, exactly as in the RFC's milestone table>
 **Write to:** <tasks folder>/<milestone-slug>/
+**Start conditions:** <for each milestone under this milestone's "Depends on": the closing entry that shows it is done. Or "depends on nothing">
 
 **Decided for the whole RFC**
 - Stacked pull requests: <allowed / not allowed / not decided>
@@ -28,6 +29,7 @@ Break down one milestone of an accepted feature RFC into tasks. Use the `milesto
 5. If you need an Area value or a shared name that is not on the list, do not invent one. Report it.
 6. If the number of tasks passes the skill's milestone size overrun setting, do not merge tasks to get under it. Write the list as one milestone and report the count against the RFC's estimate.
 7. Do not change the RFC, and do not write production code.
+8. Check the skill's "Before you start" yourself before you write anything. If a milestone under "Depends on" has no closing entry, or a contract this milestone consumes is not in the code, write no files and report only that, with what you found. Being asked to break the milestone down is not evidence that it can start.
 
 **Files to write**
 - `00-plan.md`: the first part of the skill's task list template, from the title through "Changes to the plan". If the folder already has a `00-plan.md` that is an outline plan, replace it with the full plan and copy its "Outlines" table into a section "Replaced by" at the end. The session that started you fills in the replacements.
