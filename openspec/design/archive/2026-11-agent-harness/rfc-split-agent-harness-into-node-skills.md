@@ -2,18 +2,18 @@
 
 | Field | Value |
 |---|---|
-| Status | In review |
+| Status | Accepted |
 | Author | Claude, drafted with the decider |
 | Decider | Repository owner (raidenyn) |
 | Review by | 2026-12-02 |
 | Created / Updated | 2026-11-25 / 2026-11-25 |
-| Links | Source harness: `veles-android` at `a86633dc`. First adopter: `line-mcp` at `a56f130`. Existing skill: [`harness-audit`](../../../skills/harness-audit/SKILL.md) |
+| Links | Source harness: `veles-android` at `a86633dc`. First adopter: `line-mcp` at `a56f130`. Existing skill: [`harness-audit`](../../../../skills/harness-audit/SKILL.md) |
 
 Reading order: [Summary](#summary) and [What changes](#what-changes) (2 min) · add [How it works today](#how-it-works-today), [Proposal](#proposal), [Contracts](#contracts), [Milestones](#milestones), [Drawbacks and risks](#drawbacks-and-risks) (10 min) · [Decisions to approve](#decisions-to-approve) last.
 
 ## Summary
 
-The agent harness built in `veles-android` (rules delivered by hooks, a fast verifier, an instruction-file check, commit checks) is extracted into this repository as separate skills, rewritten in dependency-free Node, and copied into each repo that wants it. The audit skill becomes the entry point that decides which of them a repo needs. One shared hook runtime connects every agent host to the tools: as a command where the host runs commands, as an import where it only loads JavaScript plugins. The result is the same harness code and behavior in this repository, `veles-android` and `line-mcp`, on OpenCode and Claude Code. The work is capped at ten PRs across the three repositories. All fifteen decisions are agreed, including the three contracts; acceptance of the RFC as a whole is still open.
+The agent harness built in `veles-android` (rules delivered by hooks, a fast verifier, an instruction-file check, commit checks) is extracted into this repository as separate skills, rewritten in dependency-free Node, and copied into each repo that wants it. The audit skill becomes the entry point that decides which of them a repo needs. One shared hook runtime connects every agent host to the tools: as a command where the host runs commands, as an import where it only loads JavaScript plugins. The result is the same harness code and behavior in this repository, `veles-android` and `line-mcp`, on OpenCode and Claude Code. The work is capped at ten PRs across the three repositories. All fifteen decisions are agreed, including the three contracts.
 
 ## Problem and context
 
@@ -123,7 +123,7 @@ Settled in discussion on 2026-11-24 and 2026-11-25, and in review comments on 20
 
 - <a id="shared-runtime"></a>**Shared runtime.** A third skill owns the host wiring: one hook entry per host, calling every installed handler. That gives one process per event, one adapter per host and one place to check parity. The rejected alternative, each tool wiring itself, doubles process starts and duplicates every adapter.
 - <a id="push-gate-owner"></a>**Proof owner.** The proof stays in the rule engine, as in veles: a rule gates a command and names the proof it requires. The owner's reasons: the rule text delivered with the denial can carry other instructions for that moment, so the model does not forget them at the end of a session; and the push matters less once verification happens at the commit steps, with CI as the backstop. The verify gate only registers the proof `verify-pass`. It holds for the current content of the working tree, so it is the same before and after a commit, and each repo's rule file chooses whether `git commit`, `git push` or both are gated.
-- <a id="veles-switch"></a>**Three onboardings.** A milestone is done when its skill is onboarded in three repositories, in this order: this one, `veles-android`, `line-mcp`. The three onboardings are the evidence. In veles the Python copy is deleted in the same PR.
+- <a id="veles-switch"></a>**Three onboardings.** A milestone is done when its skill is onboarded in three repositories, in this order: this one, `veles-android`, `line-mcp`. The three onboardings are the evidence. In veles the Python copy is deleted in the same PR. In `line-mcp`, onboarding the commit checks replaces husky and npm commitlint (owner, 2026-11-25).
 - <a id="host-order"></a>**Host order.** OpenCode first, Claude Code second. Codex, Antigravity and Pi are out of scope.
 - <a id="pr-budget"></a>**PR budget.** At most ten PRs in total. Each milestone is therefore one PR here, carrying the skill and this repository's onboarding, plus one onboarding PR in veles and one in `line-mcp`.
 
@@ -283,11 +283,10 @@ All are assumptions the RFC rests on; none blocks the decision.
 | OpenCode plugin path | no | no | agent | M1 | Load the plugin from a folder under `.agents/harness/` |
 | Rule regexes in JavaScript | no | no | agent | M2 | Run veles's rule cases against the Node handler |
 | No-change baseline | no | no | agent | M1 | Time a no-change turn end in veles today and with the wrapper |
-| Commit checks in line-mcp | yes | no | owner | M3 | Onboarding there replaces husky and npm commitlint; confirm, or exempt line-mcp from that part of M3 |
 
 ## Decision outcome
 
-Not decided yet.
+Accepted on 2026-11-25 by the repository owner (raidenyn), with no conditions. All fifteen decisions are agreed. The Hook handler interface stays provisional until M1's live runs on OpenCode and Claude Code. The open questions that remain are assumptions, each checked by the milestone named in its row. Work starts with the breakdown of M1 once this RFC is on the default branch.
 
 ## Review log
 
@@ -300,6 +299,8 @@ Not decided yet.
 - **2026-11-25, third round.** Onboarding inside each skill and its three test levels: agreed. The owner accepted the main body staying above the word cap (about 3,600 words against 2,500), so the RFC is not split.
 
 - **2026-11-25, fourth round.** Skill names, Vendored tool layout and Hook handler interface: approved as written. The interface stays provisional until M1's live runs, as its contract says. Every decision is now agreed; the RFC itself is not yet accepted.
+
+- **2026-11-25, acceptance.** Commit checks in line-mcp: the owner confirmed that onboarding replaces husky and npm commitlint; folded into Three onboardings and removed from the open questions. Diagrams: the owner confirmed that the three Mermaid diagrams render. The owner accepted the RFC; status set to Accepted and the folder moved to the archive.
 
 ## Appendix
 
