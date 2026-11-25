@@ -56,7 +56,7 @@
     {
       "name": "rfc-breakdown",
       "source": "./skills/rfc-breakdown",
-      "description": "Turn an accepted feature RFC into a backlog for all its milestones: full tasks for the milestones that can start now, outline tasks for the rest, parallel milestone breakdowns and a consistency check across milestones.",
+      "description": "Turn an accepted feature RFC into a backlog that covers all its milestones: full tasks only for the milestones that can start now, usually the first, outline tasks for the rest and a consistency check across milestones.",
       "category": "development",
       "tags": [
         "rfc",
