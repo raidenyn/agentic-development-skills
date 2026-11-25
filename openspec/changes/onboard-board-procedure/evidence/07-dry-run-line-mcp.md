@@ -31,7 +31,7 @@ Models: plan Opus-5.5, review GPT-6.2-Sol (defaults), implement: not given for t
 | 4 | branch `chore/project-conductor-onboarding` + PR | create | no branch, no PR |
 | 5 | plan issues #127, #128, #129, #130 | identified | plan markers `expense-ledger/m1-ledger`, `m2-classification`, `m3-analytics`, `m4-agent-skills` |
 | 5 | task issues #132–#160 (29) | identified | task keys; no duplicates (30 keys in the repo incl. closed #131) |
-| 6 | Approval rule | yes | rulesets require 1 approving review (classic protection not readable without admin) |
+| 6 | Approval rule | yes | the `pull_request` rule of ruleset 18411140 has `required_approving_review_count` 1 (see the approval reads below; classic protection not readable without admin) |
 | 7 | Webhook | pending | |
 
 Planned `.agents/harness.json` (new file):
@@ -185,6 +185,8 @@ duplicates:
 4	expense-ledger/m4-agent-skills
 ## Approval
 rulesets: 1
+$ gh api repos/raidenyn/line-mcp/rules/branches/main --jq '.[] | select(.type == "pull_request") | {type, ruleset_id, ruleset_source, parameters: {required_approving_review_count: .parameters.required_approving_review_count}}'
+{"parameters":{"required_approving_review_count":1},"ruleset_id":18411140,"ruleset_source":"raidenyn/line-mcp","type":"pull_request"}
 exit=0
 not read: {"message":"Not Found","documentation_url":"https://docs.github.com/rest/branches/branch-protection#get-branch-protection","status":"404"}gh: Not Found (HTTP 404)
 ````

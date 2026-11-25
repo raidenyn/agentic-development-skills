@@ -51,6 +51,8 @@ Nothing changed.
 
 #### Preflight, variable, fields, first (failing) branch read
 
+The lines from `fields:` on were copied from the terminal output of the same command: the saved `preflight.out` held only its first part.
+
 ````text
 raidenyn-shadow
 raidenyn-shadow/task-run-scratch
@@ -60,6 +62,14 @@ true
 true
 PVT_kwHOD4ARxs4BtKTK https://github.com/users/raidenyn-shadow/projects/5 task-run scratch
 PROJECT_URL: https://github.com/users/raidenyn-shadow/projects/5
+fields: same as run 2 (all three reused, no option missing)
+main .agents/harness.json present
+main .agents/hooked-rules/repo-run-models.md absent
+main .agents/hooked-rules/repo-review-models.md present
+branch sha=74530ed18f651a5873f9d7ac898fcc7ad5df1423
+-- read from the onboarding branch by name, as 'from the onboarding branch when it exists' reads:
+<scratchpad>/bin/rd.sh: line 5: <scratchpad>/run3/chore/project-conductor-onboarding/harness.json: No such file or directory
+chore/project-conductor-onboarding .agents/harness.json unreadable
 ````
 
 #### Settings survey at the PR head (after the fix)

@@ -1,6 +1,9 @@
 # Run 5b: bad markers and changes after the survey
 
-Brief step 5b. Created milestone 2 "M1 other" (`<!-- rfc: other-rfc/m1-other -->`), and on board 5: #9 M (first line `<!-- task: scratch-rfc/m1-scratch -->`), #10 X (keyless, milestone 2), #11 W (keyless, milestone 1), #12 V (keyless, milestone 1). Run with the wait. While the plan waited: W's body edited as `raidenyn-shadow`; #13 Y created off the board holding V's proposed key `scratch-rfc/m1-scratch/12`. Then the person agreed (D's key again left out, as in run 5).
+Brief step 5b. Created milestone 2 "M1 other" (`<!-- rfc: other-rfc/m1-other -->`), and on board 5: #9 M (first line `<!-- task: scratch-rfc/m1-scratch -->`), #10 X (keyless, milestone 2), #11 W (keyless, milestone 1), #12 V (keyless, milestone 1). Run with the wait. While the plan waited: W's body edited as `raidenyn-shadow`; #13 Y created off the board holding V's proposed key `scratch-rfc/m1-scratch/12`. Then the implementing agent, playing the person, agreed (D's key again left out, as in run 5).
+
+> **Who agreed.** No human took part in this run. On the scratch ground the implementing agent played the person, under the coordinator's pre-agreement for the scratch runs. Agreeing, and leaving D's key out again, was the implementing agent's own decision, not a human approval. Agreeing to a plan except one item is not covered by the procedure: SKILL.md only knows agreement to the whole plan. This is an open gap.
+
 
 | Expected | Actual |
 |---|---|
@@ -44,7 +47,7 @@ $ create Y off the board with V's proposed key
 #### Key writes after agreement
 
 ````text
-Person agrees (except #7, left out as in run 5).
+Implementing agent, playing the person, agrees (except #7, left out as in run 5; partial agreement is not covered by the procedure).
 cmp: EOF on ‘<scratchpad>/run5b/keys/11.survey.body’ after byte 22, line 1
 #11 SKIP: body changed during the run
 exit=2
@@ -79,7 +82,7 @@ Mode: written after agreement
 - Webhook: pending. Created by the task "Repair claims, settle merged work and wake on events".
 - #11 (W): changed during the run (body edited after the survey); keyed by the next run
 - #12 (V): key `scratch-rfc/m1-scratch/12` was taken by #13 during the run; not renumbered, keyed by the next run
-- #7 (D): key `scratch-rfc/m1-scratch/10` planned, left out of this run by the person in the plan
+- #7 (D): key `scratch-rfc/m1-scratch/10` planned, left out of this run in the plan by the implementing agent playing the person (partial agreement: not covered by the procedure, open gap)
 
 ### Could not do (owner step)
 - #8 (E): no key, no milestone. Put it in a milestone whose description holds `<!-- rfc: scratch-rfc/<milestone-slug> -->`, then run the onboarding again

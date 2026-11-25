@@ -11,6 +11,8 @@ One transient GitHub error (HTTP 500 "diff temporarily unavailable") on the read
 | `.agents/harness.json` holds only the `project-conductor` key | `jq keys` = `["project-conductor"]` |
 | `repo-run-models.md` with no presets section | `grep -c "Reviewer presets"` = 0 |
 
+Open follow-up: PR #1's body still describes only `.agents/harness.json`, because the procedure does not say to update the body when it completes a partial pull request.
+
 #### Report
 
 ````markdown
@@ -116,7 +118,6 @@ added .agents/hooked-rules/repo-run-models.md
 $ gh pr list --state all
 [{"headRefOid":"8b48807470beecc27dd0ff4075d99f7f2b02d8a6","number":1,"state":"OPEN","title":"chore: onboard project-conductor settings"}]
 $ gh pr view 1 commits
-    gh event listen --resource https://github.com/raidenyn-shadow/task-run-scratch-bare/pull/1 --event com.github.pull_request.review.submitted.v1,com.github.pull_request.state.changed.v1
 5aa65c4 chore: onboard project-conductor settings
 8b48807 chore: onboard project-conductor settings
 $ gh pr diff 1
