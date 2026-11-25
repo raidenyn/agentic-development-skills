@@ -531,17 +531,18 @@ An item in a run is an open board issue that is not archived on the board and ha
 
 ```bash
 set -o pipefail
+: > <work>/unreadable.txt
 jq -r '.[] | select(.isArchived != true and .content.__typename == "Issue" and .content.state == "OPEN"
   and ((.runThread.text // "") != "")) | .content.number' <work>/board.json > <work>/running.txt
 for i in $(cat <work>/running.txt); do
   gh api repos/<repo>/issues/$i/timeline --paginate \
     --jq '.[] | select(.event == "assigned" and .actor.login == "<agent>" and .assignee.login == "<agent>") | .created_at' \
-    > <work>/timeline-$i.txt || { echo "unreadable timeline #$i" >&2; continue; }
+    > <work>/timeline-$i.txt || { echo "unreadable timeline #$i" >&2; echo "$i" >> <work>/unreadable.txt; continue; }
   jq -n --arg i "$i" --arg t "$(sort <work>/timeline-$i.txt | tail -n 1)" '{($i): $t}'
 done | jq -s 'add // {}' > <work>/claims.json
 ```
 
-An issue with an empty time, or an `unreadable timeline` line, has no kept reports in this wake; say so in the report. Only the triggering message can still name it.
+An issue with an empty time has no kept reports in this wake; only the triggering message can still name it. An `unreadable timeline` line also puts the issue in `<work>/unreadable.txt`: none of its reports is judged in this wake (see [Judge](#judge)). Say both in the report.
 
 ### Collect
 
@@ -579,11 +580,11 @@ set -o pipefail
 for i in $(jq -r '[.[] | select(.malformed == false and .repo == "<repo>") | .issue] | unique[]' <work>/reports.json); do
   gh api repos/<repo>/issues/$i/comments --paginate --jq '.[] | select(.user.login == "<agent>") | {body}' \
     | jq -s --argjson i "$i" 'map({issue: $i, body: (.body | gsub("\r"; ""))})' \
-    || echo "unreadable comments #$i" >&2
+    || { echo "unreadable comments #$i" >&2; echo "$i" >> <work>/unreadable.txt; }
 done | jq -s 'add // []' > <work>/stops.json
 ```
 
-An `unreadable comments` line means no report of that issue is judged in this wake, because a second stop comment could follow; say so in the report.
+An `unreadable comments` line puts the issue in `<work>/unreadable.txt`. No report of that issue is judged in this wake, because a second stop comment could follow: the judge script routes them `report-only unreadable`. Say so in the report.
 
 ### Judge
 
@@ -591,7 +592,7 @@ The script keeps, drops and routes the reports, in this order:
 
 1. **Collect.** It keeps the reports of the triggering message, and every well-formed report that names an item in a run and is not older than that item's claim time. Every other report is left out, without a line.
 2. **Drop recorded stops.** A report whose stop an agent comment records, by its message id, sender and line, is `recorded`, whether or not the label is still there. It is not judged again.
-3. **Newest per item.** Of the reports from an item's "Run thread" whose attempt equals its "Attempt", only the newest (the highest `position`, then the latest line) is judged. The others are `superseded`: reported, never stopped. This holds for the triggering message too.
+3. **Newest per item.** Of the reports from an item's "Run thread" whose attempt equals its "Attempt", only the newest (the highest `position`, then the latest line) is judged. The others are `superseded`: reported, never stopped. This holds for the triggering message too. When the newest is `recorded`, the next older one becomes the newest and is judged; this is intended: the stop comment names only the report it stopped, and the owner removing `blocked` is the decision to resume, so that report may act at the next wake.
 4. **Judge the rest, one at a time.** That includes the reports from other senders, and the reports from the "Run thread" with another attempt.
 
 ```bash
@@ -610,6 +611,7 @@ def epoch: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601;
       .body | contains("Report: \($r.messageId) from \($r.sender)\n> \($r.line)\n"));
   def route($i):
     if .malformed then "report-only malformed"
+    elif IN($skip[]; .issue) then "report-only unreadable"
     elif .repo != $repo or $i == null
       or ($verdict["\(.issue)"] // "not-task" | IN("not-task", "other-repo", "closed", "plan-item", "planning", "outline"))
       then "report-only not-a-task"
@@ -631,7 +633,7 @@ def epoch: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601;
   | [.answer, (.issue // "-"), .messageId, .sender, .line] | @tsv
 EOF
 jq -r --arg repo <repo> --arg agent <agent> --slurpfile board <work>/board.json --slurpfile stops <work>/stops.json \
-  --slurpfile claims <work>/claims.json --rawfile filter <work>/filter.txt -f <work>/judge.jq <work>/reports.json > <work>/judged.tsv
+  --slurpfile claims <work>/claims.json --slurpfile skip <work>/unreadable.txt --rawfile filter <work>/filter.txt -f <work>/judge.jq <work>/reports.json > <work>/judged.tsv
 ```
 
 Each line is the route, the issue, the message id, the sender id and the line. A task is an item the filter does not call `not-task`, `other-repo`, `closed`, `plan-item`, `planning` or `outline`. A complete claim is an item assigned to `<agent>`, with "Run thread" and "Attempt" set, a "Run phase" of plan, implement, closeout or care, and exactly one linked branch. The routes:
@@ -640,7 +642,7 @@ Each line is the route, the issue, the message id, the sender id and the line. A
 |---|---|
 | `recorded` | Its stop is already recorded. One report line, nothing else. |
 | `superseded` | A newer report from the "Run thread" for this attempt exists. One report line, nothing else. |
-| `report-only malformed`, `report-only not-a-task`, `report-only incomplete-claim` | Answer `report-only`, with that reason. |
+| `report-only malformed`, `report-only unreadable`, `report-only not-a-task`, `report-only incomplete-claim` | Answer `report-only`, with that reason. `unreadable`: the issue's timeline or comments could not be read; the report is judged again at the next wake. |
 | `blocked`, `blocked overflow:labels` | The item is labelled `blocked`, or its labels overflow their page. Advance does not act on it: "blocked, waiting for the owner". The report stays kept, and is judged at the first wake after the label is gone. |
 | `stop foreign-sender`, `stop wrong-attempt` | Answer `stop` by [Stop](#stop). |
 | `handled` | Answer `handled`. |
@@ -688,10 +690,10 @@ jq -e --arg me <conductor id> --arg key "<repo>#<issue> attempt <attempt>" --arg
 Read the remote head of the linked branch:
 
 ```bash
-gh api repos/<repo>/git/ref/heads/<branch> --jq .object.sha      # <remote head>
+gh api repos/<repo>/git/ref/heads/<branch> --jq .object.sha 2> <work>/err      # <remote head>
 ```
 
-It must equal `<head>`. Otherwise answer `stop`, with the reason "head <head> is not the remote head <remote head> of <branch>". A 404 is the reason "<branch> has no remote head". Any other failed read is answered `report-only`, with the reason "the head could not be read", and the report is judged again at the next wake.
+`gh api` exits 1 for a 404 and for every other failure alike, so tell them apart by its error output. Exit 0: the output must equal `<head>`; otherwise answer `stop`, with the reason "head <head> is not the remote head <remote head> of <branch>". A failure whose `<work>/err` holds `HTTP 404` (`grep -q 'HTTP 404' <work>/err`): answer `stop`, with the reason "<branch> has no remote head". Any other failure (a 5xx, a rate limit, the network) is never a stop: answer `report-only`, with the reason "the head could not be read", write nothing, and judge the report again at the next wake.
 
 Then, when the phase is not plan (it equals a "Run phase" of implement or later), answer `report-only`, "not handled in M1". Nothing is written.
 
@@ -720,12 +722,17 @@ Do these in order. A failure stops the item here: report it with the steps that 
 1. **The change folder.** List the folders under `openspec/changes/` that the branch adds at `<head>`, leaving out `archive`:
 
    ```bash
-   set -o pipefail
    gh api repos/<repo>/compare/<default>...<head> --paginate --jq '.files[] | select(.status=="added") | .filename' \
-     | sed -nE 's#^openspec/changes/([^/]+)/.+#\1#p' | grep -vx archive | sort -u
+     > <work>/added-<issue>.txt; echo "exit $?"
    ```
 
-   It must print exactly one `<name>`. No line: answer `stop`, with the reason "the branch adds no change folder under openspec/changes/ at <head>". Several: answer `stop`, with the reason "the branch adds several change folders at <head>: <names>". Either stop comes before any switch. A failed `gh api` (the exit status is not 0 or 1) is reported, and nothing is written.
+   First the read alone. An exit other than 0 is a failed read (a 404, a 5xx, a rate limit, the network): report it, write nothing, answer `report-only` with the reason "the compare could not be read", and judge the report again at the next wake. It is never a stop. Only after `exit 0`, filter the saved list:
+
+   ```bash
+   sed -nE 's#^openspec/changes/([^/]+)/.+#\1#p' <work>/added-<issue>.txt | grep -vx archive | sort -u
+   ```
+
+   It must print exactly one `<name>`. No line: answer `stop`, with the reason "the branch adds no change folder under openspec/changes/ at <head>". Several: answer `stop`, with the reason "the branch adds several change folders at <head>: <names>". Either stop comes before any switch.
 
 2. **Switch the model.** Call `t3_thread_configure` with `threadId` `<run thread>` and `modelSelection` `<implement model>`. T3 refuses while a turn is active or a background command runs: a refusal answers `not-idle`, and nothing is written. Read back with `t3_thread_configure` with only `threadId`: its `modelSelection` has the `instanceId`, `model` and `options` of `<implement model>`.
 
