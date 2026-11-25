@@ -100,3 +100,71 @@ export async function until(fn, ms = 4000, what = 'condition') {
   }
   throw new Error(`timed out waiting for ${what}`);
 }
+
+// A direct child_process implementation of the supervisor's `context.spawn` (Task 5): same
+// arguments and result shape, each child in its own process group (`detached: true`). On abort or
+// timeout the group gets SIGTERM, then SIGKILL after 5 s if it is still alive. Rejects on a spawn
+// error.
+export function directSpawn(argv, { cwd, env, timeoutMs, signal, maxBytes = Infinity } = {}) {
+  return new Promise((resolvePromise, reject) => {
+    let child;
+    try {
+      child = spawn(argv[0], argv.slice(1), {
+        cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (err) {
+      reject(err);
+      return;
+    }
+    const out = { stdout: [], stderr: [] };
+    const size = { stdout: 0, stderr: 0 };
+    let truncated = false;
+    const keep = (stream) => (chunk) => {
+      out[stream].push(chunk);
+      size[stream] += chunk.length;
+      while (size[stream] > maxBytes) {
+        truncated = true;
+        const first = out[stream][0];
+        const excess = size[stream] - maxBytes;
+        if (first.length <= excess) {
+          out[stream].shift();
+          size[stream] -= first.length;
+        } else {
+          out[stream][0] = first.subarray(excess);
+          size[stream] -= excess;
+        }
+      }
+    };
+    child.stdout.on('data', keep('stdout'));
+    child.stderr.on('data', keep('stderr'));
+    const pgid = child.pid;
+    let timedOut = false;
+    let killTimer;
+    const kill = () => {
+      if (!pgid) return;
+      try { process.kill(-pgid, 'SIGTERM'); } catch {}
+      killTimer ??= setTimeout(() => { try { process.kill(-pgid, 'SIGKILL'); } catch {} }, 5000);
+      killTimer.unref();
+    };
+    const timer = timeoutMs > 0 ? setTimeout(() => { timedOut = true; kill(); }, timeoutMs) : null;
+    const onAbort = () => kill();
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener('abort', onAbort, { once: true });
+    let done = false;
+    const finish = () => {
+      done = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    child.on('error', (err) => { if (done) return; finish(); reject(err); });
+    child.on('close', (code, sig) => {
+      if (done) return;
+      finish();
+      resolvePromise({
+        code, signal: sig, pgid, timedOut, truncated,
+        stdout: Buffer.concat(out.stdout).toString('utf8'),
+        stderr: Buffer.concat(out.stderr).toString('utf8'),
+      });
+    });
+  });
+}
