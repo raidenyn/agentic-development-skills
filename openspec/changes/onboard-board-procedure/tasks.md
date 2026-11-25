@@ -26,4 +26,4 @@
 
 ## 5. Pull request
 
-- [ ] 5.1 Open the PR with each acceptance criterion and its evidence, contracts changed, differences from the task, effects on later tasks, and discovered work
+- [x] 5.1 Open the PR with each acceptance criterion and its evidence, contracts changed, differences from the task, effects on later tasks, and discovered work
