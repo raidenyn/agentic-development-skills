@@ -1,0 +1,40 @@
+name: Project ready
+
+# Moves board items between Backlog and Ready as their blockers close or reopen.
+# Needs the repository secret PROJECT_TOKEN: a classic personal access token with
+# the `project` and `repo` scopes. GITHUB_TOKEN cannot write a user-owned project.
+# The repository variable PROJECT_NUMBERS lists the boards, for example "5,6".
+
+on:
+  issues:
+    types: [closed, reopened]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-ready
+  cancel-in-progress: false
+
+jobs:
+  ready:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Update Status from blockers
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          PROJECT_OWNER: ${{ github.repository_owner }}
+          PROJECT_NUMBERS: ${{ vars.PROJECT_NUMBERS }}
+        run: |
+          if [ -z "$GH_TOKEN" ] || [ -z "$PROJECT_NUMBERS" ]; then
+            echo "::notice::PROJECT_TOKEN or PROJECT_NUMBERS is not set; nothing to do."
+            exit 0
+          fi
+          node scripts/project-ready.mjs
