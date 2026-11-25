@@ -46,6 +46,7 @@ A field is never renamed. A released name is never changed.
 
 - **Survey first, then show the plan.** Every run first reads the current state of every step, and writes nothing while it does. Then it shows a plan that marks each item as **create**, **change** (a write over an existing value, such as a different `PROJECT_URL`), **reuse** or **cannot do**, with the reason and, for cannot do, the owner's exact step. Show every file and body that would change as its full content or a diff. (Spec: Survey before any write.)
 - **Wait for agreement.** Write only after the person agrees to the plan. When the person said to proceed without asking, show the plan and write at once, except for what needs their choice: an implement model id that is neither given nor in an existing `repo-run-models.md`, and edits to files that refer to the old roster. Those new choices are left out of this run and reported. What an earlier, approved run already put on the onboarding branch is not a new choice: it stays planned, so a repeated run reuses it instead of calling it a conflict. (Spec: Survey before any write.)
+- **Agreeing to part of the plan.** The person may drop items from the plan. A dropped item is not written; list it under Pending as "<item>: dropped by the person". Write the rest as planned. (Spec: Survey before any write.)
 - **A dry run writes nothing.** It stops after the plan and prints the report, with every owner step and the exact commands. Nothing on GitHub changes: no variable, field, file, branch, pull request or issue. Reading into a local clone in the scratchpad is allowed. (Spec: Survey before any write.)
 - **Look before every write.** Read the thing again just before writing it. If it changed since the survey, do not write it: report it. A step that already holds the planned value is reused. A run right after a completed run writes nothing. (Spec: Report and repeatability.)
 - **Change only what this procedure manages:** the variable `PROJECT_URL`, the three fields and the missing options of "Run phase", the two settings files, and the first line of keyless issue bodies. Keep every other key, option, field, file and byte.
@@ -134,7 +135,7 @@ Survey:
 | the branch's changes are a strict subset of the expected ones, each equal to its planned content, and the roster swap is either whole or absent on it | change: one more commit on the same branch adding the rest |
 | anything else, such as a change to another file, other content, or only one half of the roster swap (the added `repo-run-models.md` without the removal of `repo-review-models.md`, or the other way round) | cannot do: conflict, report it, do not push. The add and the removal must be in one commit |
 
-Write: as the reference describes, through a local clone in the scratchpad, never with force. Before reusing as is, check the pull request's head is still the commit you compared. Merging the pull request is the owner's step: report it.
+Write: as the reference describes, through a local clone in the scratchpad, never with force. Before reusing as is, check the pull request's head is still the commit you compared. The pull request's body lists its current changes: after completing a partial branch, replace the body; when reusing an open pull request whose body differs from the planned one, plan the body as change and replace it. Merging the pull request is the owner's step: report it.
 
 ### 5. Keys
 
@@ -145,7 +146,7 @@ Survey:
 1. Read every item of the board, page by page, to the end. If a page fails, stop the keying step. Keep only open issues of the repository. Pull requests, draft items and issues of other repositories are never keyed.
 2. Take each issue's first line, the whole line, a CR at its end tolerated:
    - a full task key `<!-- task: <rfc-slug>/<milestone-slug>/<number> -->` or a full plan marker `<!-- plan: <rfc-slug>/<milestone-slug> -->`: **identified**, left unchanged;
-   - starts with `<!-- task:` or `<!-- plan:` but does not match its whole form: **malformed**, reported, left unchanged;
+   - matches `^\s*<!--\s*(task|plan):` (leading spaces or no space allowed) but is not the exact marker form: **malformed**, reported, left unchanged;
    - anything else: **keyless**.
 3. Read every task key in the repository, open and closed, on and off the board, every page. A key held by two issues stops the keying step: report both.
 4. For each keyless issue, find its slugs. `<rfc-slug>` comes from the board readme's marker `<!-- rfc: <rfc-slug> -->`. `<milestone-slug>` comes from the marker `<!-- rfc: <rfc-slug>/<milestone-slug> -->` in the description of the issue's milestone. No readme marker, no milestone, no marker in the milestone, or an RFC slug in the milestone that differs from the readme's: no key, reported with the reason.
@@ -219,6 +220,6 @@ Keys: <n> identified, <n> keyed in this run, <n> without a key (listed above wit
 
 - Every list is printed, with "none" when it is empty.
 - Under Created, Changed and Reused, name each item of steps 2 to 5: `PROJECT_URL`, each field and the options added, `.agents/harness.json`, `repo-run-models.md`, the removal of `repo-review-models.md`, the branch, the pull request with its link, and each key with its issue.
-- Pending and Could not do are listed on every run, also when nothing changed: the webhook, the unmerged settings pull request ("Merge <PR link>"), a deferred roster migration with each reference, the variable command, a case-only field collision, a field of the wrong type, the approval rule when it is not "yes", and every open issue without a key with its reason (malformed, untrusted, no marked milestone, RFC slugs differ, changed during the run, key taken meanwhile).
+- Pending and Could not do are listed on every run, also when nothing changed: the webhook, the unmerged settings pull request ("Merge <PR link>"), a deferred roster migration with each reference, the variable command, a case-only field collision, a field of the wrong type, the approval rule when it is not "yes", every plan item the person dropped, and every open issue without a key with its reason (malformed, untrusted, no marked milestone, RFC slugs differ, changed during the run, key taken meanwhile).
 - In a dry run, the plan's creates and changes are listed under Pending as "would create" and "would change".
 - End with the line `Nothing changed.` exactly when the run made no successful write. A dry run always ends with it. A run that wrote anything never does.

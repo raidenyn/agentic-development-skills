@@ -262,6 +262,16 @@ gh pr view <number> --repo <repo> --json headRefOid --jq .headRefOid   # still <
 
 When the branch is reused and no pull request is open, open one as below.
 
+When an open pull request is reused as is, compare its body with the planned one (`pr-body.md`, below, built from the whole expected set):
+
+```bash
+set -o pipefail
+gh api "repos/<repo>/pulls/<number>" | jq -j '.body // ""' > <work>/pr-body.now.md
+cmp <work>/pr-body.md <work>/pr-body.now.md    # prints nothing when the body is current
+```
+
+A different body, such as one an earlier run wrote before it completed a partial branch, is planned as **change**: the pull request body, shown as a diff. Write it with `gh pr edit <number> --repo <repo> --body-file <work>/pr-body.md`, then read it back the same way; `cmp` must print nothing. An equal body is reused.
+
 ### Write
 
 Work in the clone. Never force-push.
@@ -297,9 +307,10 @@ git -C <work>/clone switch -q --detach <sha>
 # copy, remove and add only the expected changes the branch does not hold yet
 git -C <work>/clone commit -q -m "chore: onboard project-conductor settings"
 git -C <work>/clone push origin HEAD:refs/heads/chore/project-conductor-onboarding   # HEAD is the new commit
+gh pr edit <number> --repo <repo> --body-file <work>/pr-body.md
 ```
 
-The push is not forced, so it is rejected if the remote head moved after the compare. Then report the conflict and push nothing else.
+The push is not forced, so it is rejected if the remote head moved after the compare. Then report the conflict and push nothing else, and leave the body as it is. After the push, replace the pull request's body: `pr-body.md` (below) lists the pull request's current changes, the whole expected set, not only the commit just added.
 
 The pull request, when none is open:
 
@@ -320,7 +331,7 @@ Settings for the project-conductor loop on <board URL>, written by the onboardin
 Nothing reads these settings until the loop exists.
 ```
 
-Read the pull request's files back with the compare command, at its new head.
+Read the pull request's files back with the compare command, at its new head, and its body with the `cmp` above.
 
 ## The model file
 
@@ -435,12 +446,12 @@ Pull requests, draft items and issues of other repositories drop out here. Sort 
 ```bash
 jq -r '((.body // "") | (split("\n")[0] // "") | rtrimstr("\r")) as $l
   | (if ($l | test("^<!-- task: [a-z0-9-]+/[a-z0-9-]+/[0-9]+ -->$")) or ($l | test("^<!-- plan: [a-z0-9-]+/[a-z0-9-]+ -->$")) then "identified"
-     elif ($l | startswith("<!-- task:")) or ($l | startswith("<!-- plan:")) then "malformed"
+     elif ($l | test("^\\s*<!--\\s*(task|plan):")) then "malformed"
      else "keyless" end) as $class
   | "\(.number)\t\($class)\t\($l)"' <work>/items.jsonl
 ```
 
-A malformed issue is reported with its first line and left unchanged. An identified issue is counted and left unchanged.
+Any other first line that matches `^\s*<!--\s*(task|plan):`, such as `  <!-- task: a/b/1 -->` or `<!--task:a/b/1-->`, is malformed, not keyless, so no second key is put above it. A malformed issue is reported with its first line and left unchanged. An identified issue is counted and left unchanged.
 
 ### Read every key in the repository
 
@@ -466,8 +477,11 @@ gh project view <n> --owner <board owner> --format json \
 
 # each milestone's marker: exactly one per milestone, else its issues get no key
 gh api --paginate "repos/<repo>/milestones?state=all&per_page=100" \
-  --jq '.[] | "\(.number)\t\([.description // "" | match("<!-- rfc: ([a-z0-9-]+/[a-z0-9-]+) -->"; "g") | .captures[0].string] | unique | join(" "))"'
+  --jq '.[] | "\(.number)\t\([.description // "" | match("<!-- rfc: ([a-z0-9-]+/[a-z0-9-]+) -->"; "g") | .captures[0].string] | unique | join(" "))"' \
+  > <work>/milestones.tsv
 ```
+
+Save this milestones read as `<work>/milestones.tsv`: the re-check before each write compares against it.
 
 The issue's milestone number comes from the trust query below. Reasons for no key: "no RFC marker in the board readme", "no milestone", "milestone has no RFC marker", "milestone's RFC slug `<x>` differs from the board's `<y>`".
 
@@ -540,7 +554,7 @@ grep "^<milestone number>"$'\t' <work>/milestones.tsv
 grep "^<milestone number>"$'\t' <work>/milestones.now.tsv    # must print the same line
 ```
 
-Save the survey's milestones read as `<work>/milestones.tsv` for this. Any difference: skip the issue, and list it under Pending as "changed during the run".
+Any difference: skip the issue, and list it under Pending as "changed during the run".
 
 Then read every key in the repository again, with the command above, into `keys.now.tsv`. A duplicate now stops the keying step. If another issue holds the planned key, skip this issue and report it as "key `<key>` was taken by #<other> during the run". Do not give it another number in this run.
 
@@ -563,8 +577,8 @@ A difference after the write is reported with both files, and the keying step st
 Rulesets that apply to the default branch. A writer can read them, as checked on `line-mcp`:
 
 ```bash
-gh api "repos/<repo>/rules/branches/<default>" \
-  --jq '[.[] | select(.type == "pull_request") | .parameters.required_approving_review_count] | max // 0'
+gh api --paginate "repos/<repo>/rules/branches/<default>?per_page=100" \
+  | jq -s '[.[][] | select(.type == "pull_request") | .parameters.required_approving_review_count] | max // 0'
 ```
 
 Classic branch protection:

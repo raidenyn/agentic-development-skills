@@ -66,8 +66,8 @@ token can create and write the three fields on a board it owns (scratch board, p
 7. **Approval check.** Read rulesets (`repos/<repo>/rules/branches/<default>`) and classic protection.
    "yes" when either requires an approval; "no" only when both were read and neither does (a classic
    404 "Branch not protected" counts as read only with admin rights); otherwise "unknown".
-8. **Webhook.** Always listed as "pending — created by 'Repair claims, settle merged work and wake on
-   events'".
+8. **Webhook.** Never created. Every run lists, verbatim under Pending: "Webhook: pending. Created by the
+   task "Repair claims, settle merged work and wake on events"."
 
 9. **Report.** Five lists: created, changed, reused, pending, could not do (with owner steps). "Nothing
    changed" exactly when no write succeeded; pending and owner items repeat on every run.
