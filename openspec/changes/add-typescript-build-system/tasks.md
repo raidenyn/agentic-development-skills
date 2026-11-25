@@ -51,7 +51,7 @@
 
 ## 8. Final checks
 
-- [ ] 8.1 `pnpm run check`, `python3 scripts/skills.py validate`, `claude plugin validate .` and the Python unit tests all pass
-- [ ] 8.2 `grep -rn "npm ci\|npm test\|npm run\|npx \|package-lock"` over `.github/`, `scripts/*.mts`, `AGENTS.md` and the README's development sections finds nothing (the README's `npx skills add` lines for users stay)
-- [ ] 8.3 `grep` for `scripts/[a-z-]*\.mjs` outside `openspec/` and `pnpm-lock.yaml` finds nothing
-- [ ] 8.4 A fresh clone with only Node 22.0.0 runs `node --test "tests/agent-harness/*.test.mjs"` green
+- [x] 8.1 `pnpm run check`, `python3 scripts/skills.py validate`, `claude plugin validate .` and the Python unit tests all pass
+- [x] 8.2 `grep -rn "npm ci\|npm test\|npm run\|npx \|package-lock"` over `.github/`, `scripts/*.mts`, `AGENTS.md` and the README's development sections finds nothing (the README's `npx skills add` lines for users stay)
+- [x] 8.3 `grep` for `scripts/[a-z-]*\.mjs` outside `openspec/` and `pnpm-lock.yaml` finds nothing
+- [x] 8.4 A fresh clone with only Node 22.0.0 runs `node --test "tests/agent-harness/*.test.mjs"` green
