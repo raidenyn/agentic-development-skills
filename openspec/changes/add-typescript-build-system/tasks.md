@@ -16,9 +16,9 @@
 
 ## 3. Build script
 
-- [ ] 3.1 Write `scripts/test-build.mts` first: fixtures in a temp folder covering the scenarios of `specs/harness-source-build/spec.md` (mapping, data-file copy, unknown tool, shared files, collision, specifier rewrite, non-specifier string, unresolved specifier, npm-package specifier, cross-tool import, type-only file, header, layout, `--check` with `differs`, `missing` and `stale`, deterministic second run). Watch it fail
-- [ ] 3.2 Write `scripts/build.mts`: read `src/build.json`, strip types, rewrite specifiers, format with Biome, prepend the header, verify specifiers, write or check (design D3). Make 3.1 pass
-- [ ] 3.3 Add `src/build.json` with the two tools and their three shared files
+- [x] 3.1 Write `scripts/test-build.mts` first: fixtures in a temp folder covering the scenarios of `specs/harness-source-build/spec.md` (mapping, data-file copy, unknown tool, shared files, collision, specifier rewrite, non-specifier string, unresolved specifier, npm-package specifier, cross-tool import, type-only file, header, layout, `--check` with `differs`, `missing` and `stale`, deterministic second run). Watch it fail
+- [x] 3.2 Write `scripts/build.mts`: read `src/build.json`, strip types, rewrite specifiers, format with Biome, prepend the header, verify specifiers, write or check (design D3). Make 3.1 pass
+- [x] 3.3 Add `src/build.json` with the two tools and their three shared files
 
 ## 4. Convert the shipped harness code
 
