@@ -1,9 +1,10 @@
 name: Project ready
 
 # Moves board items between Backlog and Ready as their blockers close or reopen.
-# Needs the repository secret PROJECT_TOKEN: a classic personal access token with
-# the `project` and `repo` scopes. GITHUB_TOKEN cannot write a user-owned project.
-# The repository variable PROJECT_NUMBERS lists the boards, for example "5,6".
+# Reads the secret PROJECT_TOKEN and the variable PROJECT_NUMBERS from the
+# environment `project-actions`. The token is a classic personal access token with
+# the `project` and `repo` scopes; GITHUB_TOKEN cannot write a user-owned project.
+# PROJECT_NUMBERS lists the boards, for example "5,6".
 
 on:
   issues:
@@ -22,6 +23,7 @@ concurrency:
 jobs:
   ready:
     runs-on: ubuntu-latest
+    environment: project-actions
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
