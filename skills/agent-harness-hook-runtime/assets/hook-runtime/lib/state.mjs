@@ -23,8 +23,14 @@ const clean = (id) => {
   return s === '' || /^\.+$/.test(s) ? '_' + s : s;
 };
 
+export function rootSessionStateDir({ repoRoot, tool, host, sessionId }) {
+  const dir = join(toolStateDir(repoRoot, tool), 'sessions', `${clean(host)}-${clean(sessionId)}`);
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 export function sessionStateDir({ repoRoot, tool, host, sessionId, agentId }) {
-  const dir = join(toolStateDir(repoRoot, tool), 'sessions', clean(host), clean(sessionId), clean(agentId ?? 'main'));
+  const dir = join(rootSessionStateDir({ repoRoot, tool, host, sessionId }), clean(agentId ?? 'main'));
   mkdirSync(dir, { recursive: true });
   return dir;
 }

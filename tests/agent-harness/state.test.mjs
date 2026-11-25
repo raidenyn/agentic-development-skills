@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ASSETS, tempRepo } from './helpers.mjs';
 
 const S = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'state.mjs')).href);
-const { acquireGateLock, writeJsonAtomic, sessionStateDir, gitDir, toolStateDir, updateGateLock } = S;
+const { acquireGateLock, writeJsonAtomic, sessionStateDir, rootSessionStateDir, gitDir, toolStateDir, updateGateLock } = S;
 
 const dir = () => mkdtempSync(join(tmpdir(), 'gate-'));
 const locks = (d) => readdirSync(d).filter((f) => /^gate\.lock\.\d+$/.test(f)).sort((a, b) => Number(a.split('.')[2]) - Number(b.split('.')[2]));
@@ -27,6 +27,10 @@ test('sessionStateDir differs per agent', async () => {
   const base = join(gitDir(r.dir), 'agent-harness', 'verify-gate', 'sessions');
   assert.ok(a.startsWith(base) && b.startsWith(base));
   assert.ok(a.startsWith(toolStateDir(r.dir, 'verify-gate')));
+  const root = rootSessionStateDir({ repoRoot: r.dir, tool: 'verify-gate', host: 'claude', sessionId: 's/1' });
+  assert.equal(root, join(base, 'claude-s_1'));
+  assert.equal(a, join(root, 'main'));
+  assert.equal(b, join(root, 'a1'));
   assert.ok(!a.slice(base.length).includes('s/1'));
   await r.cleanup();
 });
@@ -112,7 +116,7 @@ test('variant: pruned low number is linked, then the contender backs off', () =>
   c.release();
 });
 
-test('a reader never sees a half-written owner, and update rewrites the file', () => {
+test('a new lock file has its full content and update rewrites it', () => {
   const d = dir();
   const h = acquireGateLock(d);
   const body = JSON.parse(readFileSync(h.path, 'utf8'));
@@ -153,14 +157,70 @@ test('writeJsonAtomic leaves no partial file (reader never sees invalid JSON)', 
     import { writeJsonAtomic } from ${JSON.stringify(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'state.mjs')).href)};
     for (let i = 1; i <= 200; i++) writeJsonAtomic(${JSON.stringify(f)}, { n: i, big: ${JSON.stringify(big)} });
   `);
-  const child = spawn(process.execPath, [script], { stdio: 'ignore' });
-  let done = false;
-  child.on('close', () => (done = true));
-  let reads = 0;
-  while (!done) {
-    JSON.parse(readFileSync(f, 'utf8'));
-    reads++;
+  const child = spawn(process.execPath, [script], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let stderr = '';
+  child.stderr.on('data', (c) => (stderr += c));
+  let code = null;
+  child.on('close', (c) => (code = c));
+  let valid = 0;
+  let invalid = 0;
+  while (code === null) {
+    try {
+      JSON.parse(readFileSync(f, 'utf8'));
+      valid++;
+    } catch {
+      invalid++;
+    }
     await new Promise((r) => setImmediate(r));
   }
-  assert.ok(reads > 0);
+  assert.equal(code, 0);
+  assert.equal(stderr, '');
+  assert.ok(valid > 0);
+  assert.equal(invalid, 0);
+  assert.deepEqual(JSON.parse(readFileSync(f, 'utf8')), { n: 200, big });
+  assert.deepEqual(readdirSync(d).sort(), ['writer.mjs', 'y.json']);
+});
+
+test('two real processes: exactly one acquires the same lock dir', async () => {
+  const { spawn } = await import('node:child_process');
+  const d = dir();
+  const go = join(d, 'go');
+  const script = join(d, 'contender.mjs');
+  const url = pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'state.mjs')).href;
+  writeFileSync(script, `
+    import { existsSync } from 'node:fs';
+    import { acquireGateLock } from ${JSON.stringify(url)};
+    const lockDir = ${JSON.stringify(join(d, 'locks'))};
+    while (!existsSync(${JSON.stringify(go)})) {}
+    const h = acquireGateLock(lockDir);
+    console.log(h ? h.path : 'null');
+    if (h) { await new Promise((r) => setTimeout(r, 1000)); h.release(); }
+  `);
+  const run = () => {
+    const c = spawn(process.execPath, [script], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const r = { out: '', err: '', ready: null };
+    r.done = new Promise((res) => c.on('close', (code) => res({ code, out: r.out.trim(), err: r.err })));
+    r.first = new Promise((res) => c.stdout.once('data', () => res()));
+    c.stdout.on('data', (x) => (r.out += x));
+    c.stderr.on('data', (x) => (r.err += x));
+    return r;
+  };
+  const a = run();
+  const b = run();
+  await new Promise((r) => setTimeout(r, 400)); // let both reach the spin loop
+  writeFileSync(go, '');
+  await Promise.all([a.first, b.first]);
+  const [ra, rb] = await Promise.all([a.done, b.done]);
+  assert.equal(ra.err + rb.err, '');
+  const outs = [ra.out, rb.out].sort();
+  assert.equal(outs[0], join(d, 'locks', 'gate.lock.1'));
+  assert.equal(outs[1], 'null');
+  // the owner released before exiting; a third acquire now succeeds as the next generation
+  const third = acquireGateLock(join(d, 'locks'));
+  assert.equal(third.path, join(d, 'locks', 'gate.lock.2'));
+  assert.equal(acquireGateLock(join(d, 'locks')), null);
+  third.release();
+  const fourth = acquireGateLock(join(d, 'locks'));
+  assert.equal(fourth.path, join(d, 'locks', 'gate.lock.3'));
+  fourth.release();
 });
