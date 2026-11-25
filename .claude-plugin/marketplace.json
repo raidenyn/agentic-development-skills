@@ -6,6 +6,18 @@
   "description": "Agent Skills for agentic software development. Each skill is installable as its own plugin.",
   "plugins": [
     {
+      "name": "agent-harness-hook-runtime",
+      "source": "./skills/agent-harness-hook-runtime",
+      "description": "Use when wiring agent hooks for Claude Code or OpenCode into a repo, writing a hook handler, or checking which hook events and capabilities the host supports.",
+      "category": "development"
+    },
+    {
+      "name": "agent-harness-verify-gate",
+      "source": "./skills/agent-harness-verify-gate",
+      "description": "Use when running a repo's verify command on edit, on a ticked task and at turn end, or when onboarding or updating the verify gate in a repo.",
+      "category": "development"
+    },
+    {
       "name": "feature-rfc",
       "source": "./skills/feature-rfc",
       "description": "Write, review and amend a feature RFC: a system-level design with milestones and shared contracts, approved before the work is split into tasks, OpenSpec changes and PRs.",

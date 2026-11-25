@@ -6,7 +6,7 @@
     "node": ">=26.13"
   },
   "scripts": {
-    "test": "node --test scripts/test-release-rules.mjs scripts/test-release-lifecycle.mjs"
+    "test": "node --test scripts/test-release-rules.mjs scripts/test-release-lifecycle.mjs \"tests/agent-harness/*.test.mjs\""
   },
   "devDependencies": {
     "@semantic-release/exec": "7.1.0",
