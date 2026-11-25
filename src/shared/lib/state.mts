@@ -4,42 +4,56 @@ import {
 } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
+export interface SessionKey {
+  repoRoot: string;
+  tool: string;
+  host: string;
+  sessionId?: unknown;
+  agentId?: unknown;
+}
+
+export interface GateLockHandle {
+  path: string;
+  release(): void;
+  update(fields: Record<string, unknown>): void;
+}
+
 const LOCK_RE = /^gate\.lock\.(\d+)$/;
 const PRUNE_AGE_MS = 3600 * 1000;
 let tmpCounter = 0;
 
-export function gitDir(repoRoot) {
+export function gitDir(repoRoot: string): string {
   return execFileSync('git', ['rev-parse', '--absolute-git-dir'], {
     cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
 }
 
-export function toolStateDir(repoRoot, tool) {
+export function toolStateDir(repoRoot: string, tool: string): string {
   return join(gitDir(repoRoot), 'agent-harness', tool);
 }
 
-const clean = (id) => {
+const clean = (id: unknown): string => {
   const s = String(id ?? '').replace(/[^A-Za-z0-9._-]/g, '_');
   return s === '' || /^\.+$/.test(s) ? '_' + s : s;
 };
 
-export function rootSessionStateDir({ repoRoot, tool, host, sessionId }) {
+export function rootSessionStateDir({ repoRoot, tool, host, sessionId }: SessionKey): string {
   const dir = join(toolStateDir(repoRoot, tool), 'sessions', `${clean(host)}-${clean(sessionId)}`);
   mkdirSync(dir, { recursive: true });
   return dir;
 }
 
-export function sessionStateDir({ repoRoot, tool, host, sessionId, agentId }) {
+export function sessionStateDir({ repoRoot, tool, host, sessionId, agentId }: SessionKey): string {
   const dir = join(rootSessionStateDir({ repoRoot, tool, host, sessionId }), clean(agentId ?? 'main'));
   mkdirSync(dir, { recursive: true });
   return dir;
 }
 
-function tmpName(dir) {
+function tmpName(dir: string): string {
   return join(dir, `.tmp-${process.pid}-${Date.now()}-${tmpCounter++}`);
 }
 
-export function writeJsonAtomic(path, value) {
+export function writeJsonAtomic(path: string, value: unknown): void {
   const tmp = tmpName(dirname(path));
   writeFileSync(tmp, JSON.stringify(value));
   try {
@@ -50,25 +64,27 @@ export function writeJsonAtomic(path, value) {
   }
 }
 
-function listLocks(dir) {
-  return readdirSync(dir)
-    .map((f) => LOCK_RE.exec(f))
-    .filter(Boolean)
+function listLocks(dir: string): number[] {
+  return (
+    readdirSync(dir)
+      .map((f) => LOCK_RE.exec(f))
+      .filter(Boolean) as RegExpExecArray[]
+  )
     .map((m) => Number(m[1]))
     .sort((a, b) => a - b);
 }
 
-function pidAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
+function pidAlive(pid: unknown): boolean {
+  if (!Number.isInteger(pid) || (pid as number) <= 0) return false;
   try {
-    process.kill(pid, 0);
+    process.kill(pid as number, 0);
     return true;
   } catch (err) {
-    return err.code !== 'ESRCH';
+    return (err as NodeJS.ErrnoException).code !== 'ESRCH';
   }
 }
 
-function readLock(path) {
+function readLock(path: string): Record<string, unknown> | null {
   try {
     const v = JSON.parse(readFileSync(path, 'utf8'));
     return v && typeof v === 'object' ? v : null;
@@ -77,18 +93,18 @@ function readLock(path) {
   }
 }
 
-function isFree(path) {
-  let body;
+function isFree(path: string): boolean {
+  let body: { released?: unknown; pid?: unknown } | null;
   try {
     body = JSON.parse(readFileSync(path, 'utf8'));
   } catch (err) {
-    return err.code === 'ENOENT' || err instanceof SyntaxError;
+    return (err as NodeJS.ErrnoException).code === 'ENOENT' || err instanceof SyntaxError;
   }
   if (!body || typeof body !== 'object') return true;
   return body.released === true || !pidAlive(body.pid);
 }
 
-function prune(dir, own) {
+function prune(dir: string, own: number): void {
   const now = Date.now();
   const all = listLocks(dir);
   const highest = all[all.length - 1];
@@ -101,12 +117,12 @@ function prune(dir, own) {
   }
 }
 
-export function updateGateLock(handle, fields) {
+export function updateGateLock(handle: { path: string }, fields: Record<string, unknown>): void {
   const current = readLock(handle.path) ?? {};
   writeJsonAtomic(handle.path, { ...current, ...fields });
 }
 
-export function acquireGateLock(dir, { beforeLink } = {}) {
+export function acquireGateLock(dir: string, { beforeLink }: { beforeLink?: () => void } = {}): GateLockHandle | null {
   mkdirSync(dir, { recursive: true });
   const all = listLocks(dir);
   const h = all.length ? all[all.length - 1] : 0;
@@ -120,7 +136,7 @@ export function acquireGateLock(dir, { beforeLink } = {}) {
   try {
     linkSync(tmp, path);
   } catch (err) {
-    if (err.code === 'EEXIST') return null;
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return null;
     throw err;
   } finally {
     try { unlinkSync(tmp); } catch {}
@@ -137,7 +153,7 @@ export function acquireGateLock(dir, { beforeLink } = {}) {
     release() {
       updateGateLock({ path }, { released: true });
     },
-    update(fields) {
+    update(fields: Record<string, unknown>) {
       updateGateLock({ path }, fields);
     },
   };
