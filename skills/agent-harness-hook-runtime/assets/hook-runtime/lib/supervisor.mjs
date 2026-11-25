@@ -55,6 +55,21 @@ export async function killGroups(pgids, { cleanupDeadline } = {}) {
   }
 }
 
+// Resolves with the promise, or rejects once `signal` aborts. Checks `aborted` before listening,
+// because a listener added to an already aborted signal never fires.
+function untilAborted(promise, signal, message) {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new Error(message));
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(new Error(message));
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (v) => { signal.removeEventListener('abort', onAbort); resolve(v); },
+      (e) => { signal.removeEventListener('abort', onAbort); reject(e); },
+    );
+  });
+}
+
 function contextData(ctx) {
   const { repoRoot, host, sessionId, agentId, deadline, stateDir, config } = ctx;
   return { repoRoot, host, sessionId, agentId, deadline, stateDir, config };
@@ -127,7 +142,14 @@ class WorkerRecord {
     return new Promise((resolve, reject) => {
       this.pending.set(`${kind}:${requestId}`, { requestId, kind, ctx, resolve, reject });
       this.refresh();
-      this.post({ ...msg, requestId });
+      if (this.dead) return;
+      try {
+        this.worker.postMessage({ workerGen: this.gen, ...msg, requestId });
+      } catch (err) {
+        this.pending.delete(`${kind}:${requestId}`);
+        this.refresh();
+        reject(new Error(`could not be sent to the worker (${errText(err)})`));
+      }
     });
   }
 
@@ -135,7 +157,9 @@ class WorkerRecord {
     const key = `${kind}:${requestId}`;
     const p = this.pending.get(key);
     this.pending.delete(key);
-    if (!this.isActive(requestId) && [...this.locks.values()].some((l) => l.requestId === requestId)) {
+    const owns = [...this.locks.values()].some((l) => l.requestId === requestId)
+      || [...this.groups.values()].includes(requestId);
+    if (!this.isActive(requestId) && owns) {
       this.cleanup({ requestId }).catch(() => {});
     }
     return p;
@@ -280,9 +304,13 @@ class WorkerRecord {
     const mine = (r) => requestId === undefined || r === requestId;
     const pgids = [...this.groups].filter(([, r]) => mine(r)).map(([p]) => p);
     await killGroups(pgids, { cleanupDeadline });
-    for (const p of pgids) this.groups.delete(p);
+    const survivors = new Set(pgids.filter(groupAlive));
+    for (const p of pgids) if (!survivors.has(p)) this.groups.delete(p);
     for (const [id, lock] of this.locks) {
       if (!mine(lock.requestId)) continue;
+      // A group that survived SIGKILL (a process stuck in the kernel) keeps its lock held: the lock
+      // is never released before its groups are gone (design D3).
+      if (lock.pgids.some((p) => survivors.has(p))) continue;
       this.locks.delete(id);
       try {
         lock.handle.release();
@@ -364,21 +392,31 @@ class HandlerPool {
         rec.busy = 'reserved';
         rec.refresh();
         try {
-          await rec.ready;
+          await untilAborted(rec.ready, ctx.signal, 'no worker was ready before the deadline');
         } catch (err) {
+          this.unreserve(rec);
+          if (ctx.signal?.aborted) throw err;
           throw new Error(`the handler did not load: ${errText(err)}`);
         }
         return rec;
       }
-      await new Promise((resolve) => {
-        this.waiters.push(resolve);
-        ctx.signal?.addEventListener('abort', resolve, { once: true });
-      });
+      await untilAborted(new Promise((resolve) => this.waiters.push(resolve)), ctx.signal, 'no worker was free before the deadline');
     }
+  }
+
+  unreserve(rec) {
+    if (rec.busy !== 'reserved') return;
+    rec.busy = null;
+    rec.refresh();
+    this.wake();
   }
 
   async handle(event, ctx, { cleanupDeadline } = {}) {
     const rec = await this.acquire(ctx);
+    if (ctx.signal?.aborted) {
+      this.unreserve(rec);
+      throw new Error('no worker was ready before the deadline');
+    }
     const requestId = ++idCounter;
     rec.busy = requestId;
     const onAbort = () => rec.retire('deadline', { cleanupDeadline }).then(() => this.replenish());
@@ -396,8 +434,9 @@ class HandlerPool {
       ?? this.workers.find((w) => !w.dead && w.loaded);
     if (!rec) {
       rec = this.workers.length < POOL_SIZE ? this.spawnWorker() : this.workers[0];
-      await rec.ready;
+      await untilAborted(rec.ready, ctx.signal, 'timed out');
     }
+    if (ctx.signal?.aborted) throw new Error('timed out');
     const requestId = ++idCounter;
     const onAbort = () => {
       const p = rec.finish('proof', requestId);

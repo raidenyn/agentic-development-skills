@@ -176,3 +176,15 @@ test('loadHandlers loads an installed handler into a worker', async () => {
     await r.cleanup();
   }
 });
+
+test('a proof called without a signal is aborted at its deadline', async () => {
+  let aborted = false;
+  const owner = {
+    name: 'hang', events: [],
+    proofs: { slow: (c) => new Promise((resolve) => c.signal.addEventListener('abort', () => { aborted = true; resolve(null); })) },
+    handle: () => null,
+  };
+  const text = await rt([owner]).proof('slow', { ...ids, deadline: Date.now() + 80 });
+  assert.match(text, /proof slow timed out/);
+  assert.equal(aborted, true);
+});

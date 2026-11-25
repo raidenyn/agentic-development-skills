@@ -25,7 +25,8 @@ const JOIN = '\n\n';
 const byName = (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
 const errText = (err) => (err instanceof Error ? err.message : String(err));
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const positive = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined);
+const MAX_TIMER_MS = 2 ** 31 - 1; // setTimeout fires at once above this
+const positive = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.min(v, MAX_TIMER_MS) : undefined);
 
 export function failureNotice(name, event, reason, manual) {
   const r = String(reason ?? 'unknown error').replace(/[.\s]+$/, '');
@@ -93,21 +94,31 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
     try {
       config = readHarnessConfig(repoRoot)[toolOf(owner)] ?? {};
     } catch {}
+    // The proof's own signal aborts at its deadline, also when the caller passed none.
+    const controller = new AbortController();
+    const forward = () => controller.abort(ctx.signal.reason);
+    if (ctx.signal?.aborted) forward();
+    else ctx.signal?.addEventListener('abort', forward, { once: true });
     const ownerCtx = {
       ...ctx, repoRoot, host, deadline, config,
-      signal: ctx.signal ?? new AbortController().signal,
+      signal: controller.signal,
       trace() {},
     };
     ownerCtx.proof = (n) => proof(n, ownerCtx);
     try {
       ownerCtx.stateDir = stateDirFor(owner, ctx);
       const value = await within(Promise.resolve(owner.proofs[name](ownerCtx)), deadline, now);
-      if (value === TIMED_OUT) return `proof ${name} timed out`;
+      if (value === TIMED_OUT) {
+        controller.abort(new Error('deadline'));
+        return `proof ${name} timed out`;
+      }
       if (value === null || value === undefined) return null;
       if (typeof value !== 'string') return `proof ${name} returned an invalid value`;
       return value;
     } catch (err) {
       return `proof ${name} failed: ${errText(err)}`;
+    } finally {
+      ctx.signal?.removeEventListener('abort', forward);
     }
   }
 

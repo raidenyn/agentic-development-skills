@@ -255,3 +255,39 @@ test('spawn runs through the supervisor and returns exit status and output', asy
     main: false, code: 3, stdout: 'out\n', stderr: 'err\n', pgid: 'number', timedOut: true, tsig: 'SIGTERM',
   });
 });
+
+test('a deadline that passes while the event waits for a worker to load: no post, no leak, lock free', async () => {
+  const dir = scratch('loadwait');
+  const p = await proxy('loadwait', `
+    import { writeFileSync } from 'node:fs';
+    export default {
+      name: 'loadwait', events: ['prompt'],
+      async handle(ev, c) {
+        if (ev.mode === 'spin') { while (true) {} }
+        writeFileSync(ev.marker, 'ran');
+        await c.lock.acquire(ev.gate);
+        await new Promise(() => {});
+      },
+    };
+  `);
+  const r = rt([p]);
+  const ev = { type: 'prompt', mode: 'hang', gate: join(dir, 'gate'), marker: join(dir, 'ran') };
+  const o1 = await r.dispatch({ type: 'prompt', mode: 'spin' }, { ...ids, workDeadline: Date.now() + 200, hostDeadline: Date.now() + 5000 });
+  assert.match(o1.notices[0], /timed out/);
+  // The replacement worker is still loading now; this event's deadline passes before it is ready.
+  const start = Date.now();
+  const o2 = await r.dispatch(ev, { ...ids, workDeadline: Date.now() + 5, hostDeadline: Date.now() + 5000 });
+  const elapsed = Date.now() - start;
+  assert.ok(elapsed < 1000, `returned after ${elapsed} ms, not at the cleanup deadline`);
+  assert.match(o2.notices[0], /hook loadwait failed on prompt: timed out/);
+  await new Promise((res) => setTimeout(res, 800));
+  assert.equal(existsSync(ev.marker), false, 'the event was not posted to the worker');
+  const held = existsSync(ev.gate)
+    ? readdirSync(ev.gate).filter((f) => /^gate\.lock\.\d+$/.test(f))
+      .filter((f) => JSON.parse(readFileSync(join(ev.gate, f), 'utf8')).released !== true)
+    : [];
+  assert.deepEqual(held, [], 'no gate lock is held');
+  assert.equal(p.workerGens().length, 1, 'one live worker, none leaked');
+  const o3 = await r.dispatch({ type: 'prompt', mode: 'spin' }, { ...ids, workDeadline: Date.now() + 300, hostDeadline: Date.now() + 5000 });
+  assert.match(o3.notices[0], /timed out/);
+});
