@@ -141,6 +141,15 @@ function listFiles(dir: string): string[] {
 }
 
 const assetsDir = (skill: string, tool: string) => posix.join('skills', skill, 'assets', tool);
+// Only .mts modules are emitted and only .json data is copied: any other file (a .ts, a hand-written
+// .mjs, a declaration file) would ship unchecked, so it is an error. *.types.mts is never emitted.
+function buildable(rel: string, source: string): boolean {
+  if (rel.endsWith('.types.mts')) return false;
+  if (rel.endsWith('.mts') && !rel.endsWith('.d.mts')) return true;
+  if (rel.endsWith('.json')) return true;
+  throw new BuildError(`${source}: only .mts modules and .json data can be built; rename it or move it out of src/`);
+}
+
 const outName = (rel: string) => (rel.endsWith('.mts') ? `${rel.slice(0, -4)}.mjs` : rel);
 
 // Every relative specifier must name a file emitted into the same tool; any other must be a node: built-in.
@@ -201,11 +210,15 @@ export function planBuild(root: string, opts: BuildOptions = {}): Map<string, Bu
       }
       sources.set(out, source);
     };
-    for (const rel of listFiles(toolDir)) if (!rel.endsWith('.types.mts')) add(rel, posix.join('src', tool, rel));
+    for (const rel of listFiles(toolDir)) {
+      const source = posix.join('src', tool, rel);
+      if (buildable(rel, source)) add(rel, source);
+    }
     for (const rel of [...shared].sort()) {
       if (!existsSync(join(srcDir, SHARED, rel)))
         throw new BuildError(`${tool} lists shared ${rel}, but src/shared/${rel} does not exist`);
-      if (!rel.endsWith('.types.mts')) add(rel, posix.join('src', SHARED, rel));
+      const source = posix.join('src', SHARED, rel);
+      if (buildable(rel, source)) add(rel, source);
     }
 
     const files = new Map<string, { text: string; source: string }>();

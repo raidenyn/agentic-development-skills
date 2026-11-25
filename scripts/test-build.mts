@@ -58,6 +58,30 @@ test('copies a data file byte for byte', () => {
   assert.deepEqual(planBuild(root).get('skills/s1/assets/t1/tool.json'), Buffer.from(text));
 });
 
+test('fails on a TypeScript file that is not .mts', () => {
+  const root = fixture({ 'src/t1/a.mts': 'export const a = 1;\n', 'src/t1/b.ts': 'export const b: number = 1;\n' });
+  throwsBuild(() => planBuild(root), 'src/t1/b.ts');
+});
+
+test('fails on a hand-written JavaScript file', () => {
+  const root = fixture({ 'src/t1/c.mjs': "import x from 'lodash';\nexport default x;\n" });
+  throwsBuild(() => planBuild(root), 'src/t1/c.mjs');
+});
+
+test('fails on a declaration file', () => {
+  const root = fixture({ 'src/t1/d.d.mts': 'export declare const d: number;\n' });
+  throwsBuild(() => planBuild(root), 'src/t1/d.d.mts');
+});
+
+test('fails on a shared file that is not .mts or .json', () => {
+  const root = fixture({
+    'src/build.json': JSON.stringify({ tools: { t1: { skill: 's1', shared: ['lib/c.js'] } } }),
+    'src/shared/lib/c.js': 'export const c = 1;\n',
+    'src/t1/a.mts': 'export const a = 1;\n',
+  });
+  throwsBuild(() => planBuild(root), 'src/shared/lib/c.js');
+});
+
 test('fails on a tool missing from the manifest', () => {
   const root = fixture({ 'src/t1/a.mts': 'export const a = 1;\n', 'src/t9/b.mts': 'export const b = 1;\n' });
   throwsBuild(() => planBuild(root), 'src/t9');
