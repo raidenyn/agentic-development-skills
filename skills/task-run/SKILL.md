@@ -7,7 +7,7 @@ description: "Use when a thread was started by the project-conductor with a star
 
 A task thread runs one task of a GitHub Project board for the `project-conductor`. The conductor claims the task, creates its branch and launches this thread on the plan model with the **start instruction**. When the plan is pushed and reported, the conductor switches the thread to the implement model and sends the **apply instruction** with a fresh context.
 
-The two instruction texts are in the conductor's [references/run-github.md](../project-conductor/references/run-github.md#instructions). This skill follows them; it never changes a field they name.
+The two instruction texts are in the conductor's [references/run-github.md](../project-conductor/references/run-github.md#instructions) (in the `project-conductor` skill). This skill follows them, and copies their values exactly.
 
 Both instructions name the fields below, one per line, as `<Field>: <value>`:
 
@@ -67,6 +67,6 @@ The message starts with "Use the task-run skill to run the phase implement of th
 2. **Check the worktree.** `git branch --show-current` prints `Branch`, and `git merge-base --is-ancestor <Head> HEAD` succeeds: the worktree is at `Head` or later. If not, stop and tell the owner.
 3. **Read** the whole `Change folder`, and the issue named in `Issue`.
 4. **Implement** the change by the repository's own process, for example `openspec-apply-change` in a repository that uses OpenSpec, with its checks and reviews. Keep the task's "If it does not fit" rules.
-5. **Through to the pull request.** Commit by the repository's rules, push with `git push -u origin HEAD`, and open the pull request as the repository's process says, with the report the task asks for under "The pull request reports". Then do the repository's closeout for it. Care of the pull request after that is not part of this version.
+5. **Through to the pull request.** Commit by the repository's rules, push with `git push -u origin HEAD`, and open the pull request as the repository's process says, with the report the task asks for under "The pull request reports". Follow the repository's own process up to the pull request being ready for review. Never merge it, and archive nothing beyond what that process does before review. Care of the pull request after that is not part of this version.
 
 The apply instruction names no report line: send no phase report after implementing.

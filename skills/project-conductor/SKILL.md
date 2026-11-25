@@ -255,7 +255,7 @@ Reference: [Preflight](references/run-github.md#preflight), [Models](references/
 - **Read back every write.** Write in the order the reference gives, and read each write back before the next. A failed write or read-back stops that item, never the wake; the writes that completed stay and are reported.
 - **English by default.** Write in another language only when the person explicitly asks.
 
-**Ready is exactly three conditions:** the item is a task in the monitored project (an open issue of the served repository on the `PROJECT_URL` board, whose whole first line is a task key and whose Phase is not Planning or Outline), it has no open blocker, and its Status is "Ready". Nothing else decides readiness. The start guards are separate and apply only to a Ready item: it is not taken, and its body is trusted. (Spec: Ready rule; Taken items are left alone; Trusted issues only.)
+**Ready is exactly three conditions:** the item is a task in the monitored project (an open issue of the served repository on the `PROJECT_URL` board, whose whole first line is a task key and whose Phase is not Planning or Outline), it has no open blocker, and its Status is "Ready". Nothing else decides readiness. The start guards are separate and apply only to a Ready item: the read returned every entry (no overflow), it is not taken, and its body is trusted. (Spec: Ready rule; Taken items are left alone; Trusted issues only.)
 
 ### 1. Repair
 
