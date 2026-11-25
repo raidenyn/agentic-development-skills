@@ -9,9 +9,9 @@
 - [x] 2.1 Scaffold both skills with `python3 scripts/skills.py new` (`agent-harness-hook-runtime`, `agent-harness-verify-gate`) and add `assets/<tool>/tool.json`; extend `npm test` with `tests/agent-harness/*.test.mjs`
 - [x] 2.2 `lib/config.mjs`: load `.agents/harness.json`, return one tool's section, reject unknown own keys, ignore other tools' keys; tests
 - [x] 2.3 `lib/state.mjs`: `<git-dir>/agent-harness/<tool>/sessions/<host>-<session>/<agent>/` folders; the monotonic generation lock (`gate.lock.<n>` claimed by hard-linking a complete temp file to `n+1`, owner only if still highest after the claim, the highest file never deleted, release marks its own file `released`, takeover only from a dead pid, never by age); `writeJsonAtomic`; tests including two contenders and the paused-stale-contender interleaving at a deterministic barrier
-- [ ] 2.4 `lib/install.mjs`: copy with sha256 lock, idempotent repeat, refuse on an edited copy with no override, version mismatch to `update`, update removing dropped files, every refusal decided before any write; tests for the five RFC cases against throwaway git repos
-- [ ] 2.5 Host-config merge in `lib/install.mjs` for `.claude/settings.json` and `opencode.json`, used by both `install` and `update`: create when absent, keep foreign entries and order, no duplicates, refuse non-JSON with a manual line and leave the repo unchanged; tests including foreign entries and through the public CLIs
-- [ ] 2.6 Byte-identity test: the shared `lib/` files are identical in both tools' `assets/`
+- [x] 2.4 `lib/install.mjs`: copy with sha256 lock, idempotent repeat, refuse on an edited copy with no override, version mismatch to `update`, update removing dropped files, every refusal decided before any write; tests for the five RFC cases against throwaway git repos
+- [x] 2.5 Host-config merge in `lib/install.mjs` for `.claude/settings.json` and `opencode.json`, used by both `install` and `update`: create when absent, keep foreign entries and order, no duplicates, refuse non-JSON with a manual line and leave the repo unchanged; tests including foreign entries and through the public CLIs
+- [x] 2.6 Byte-identity test: the shared `lib/` files are identical in both tools' `assets/`
 
 ## 3. Hook runtime
 
