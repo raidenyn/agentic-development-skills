@@ -1,9 +1,9 @@
 // Dispatch, deadlines, fail-open, result merging, handler loading and proofs (design D2, D3).
-import { readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readHarnessConfig } from './config.mjs';
 import { checkTool, readLock } from './install.mjs';
-import { sessionStateDir } from './state.mjs';
+import { sessionStateDir, toolStateDir } from './state.mjs';
 import { startWorker } from './supervisor.mjs';
 
 export const EVENTS = Object.freeze(['tool.before', 'tool.after', 'prompt', 'turn.end', 'compact', 'session.start']);
@@ -27,6 +27,18 @@ const errText = (err) => (err instanceof Error ? err.message : String(err));
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const MAX_TIMER_MS = 2 ** 31 - 1; // setTimeout fires at once above this
 const positive = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.min(v, MAX_TIMER_MS) : undefined);
+
+// With AGENT_HARNESS_TRACE=1, one JSON line per dispatched event in
+// <hook-runtime state>/trace.jsonl (design D7): {event, processStart, hostCreatedAt?, receivedAt,
+// handlersLoadedAt, settledAt, outcomes}. Never throws.
+export function writeTrace(repoRoot, record, env = process.env) {
+  if (env.AGENT_HARNESS_TRACE !== '1') return;
+  try {
+    const dir = toolStateDir(repoRoot, 'hook-runtime');
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(join(dir, 'trace.jsonl'), `${JSON.stringify(record)}\n`);
+  } catch {}
+}
 
 export function failureNotice(name, event, reason, manual) {
   const r = String(reason ?? 'unknown error').replace(/[.\s]+$/, '');

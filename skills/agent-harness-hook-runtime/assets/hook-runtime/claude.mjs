@@ -6,7 +6,9 @@ import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { capabilityNotice, HOST_CAPABILITIES } from './lib/capabilities.mjs';
 import { CLAUDE_EVENTS, HOST, toEvent, toOutput } from './lib/claude-adapter.mjs';
-import { createRuntime, failureNotice, loadHandlers, OUTPUT_MS } from './lib/runtime.mjs';
+import {
+  createRuntime, failureNotice, loadHandlers, OUTPUT_MS, writeTrace,
+} from './lib/runtime.mjs';
 
 const HOST_MARGIN_MS = 7000; // work deadline = host deadline - 7 s (cleanup 6 s + output 1 s)
 const GIT_TIMEOUT_MS = 2000;
@@ -80,11 +82,16 @@ export async function main({
     if (!mapped) return empty;
     type = mapped.event.type;
     const { handlers, problems } = await loadHandlers(repoRoot);
+    const handlersLoadedAt = now();
     const runtime = createRuntime({ repoRoot, host: HOST, handlers, problems, now });
     merged = await runtime.dispatch(mapped.event, {
       sessionId: mapped.sessionId, agentId: mapped.agentId,
       hostDeadline, workDeadline: hostDeadline - HOST_MARGIN_MS,
     });
+    writeTrace(repoRoot, {
+      event: type, processStart: performance.timeOrigin, receivedAt: start, handlersLoadedAt, settledAt: now(),
+      outcomes: merged.outcomes ?? {},
+    }, env);
     // The capability check runs at session.start and adds a context line when something is missing.
     const missing = type === 'session.start' ? capabilityNotice(HOST, handlers, capabilities) : null;
     if (missing) merged = { ...merged, notices: [...(merged.notices ?? []), missing] };

@@ -7,7 +7,9 @@ import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { capabilityNotice, HOST_CAPABILITIES } from './capabilities.mjs';
 import { readHarnessConfig } from './config.mjs';
-import { CLEANUP_MS, createRuntime, DEFAULT_DEADLINE_MS, failureNotice, loadHandlers } from './runtime.mjs';
+import {
+  CLEANUP_MS, createRuntime, DEFAULT_DEADLINE_MS, failureNotice, loadHandlers, writeTrace,
+} from './runtime.mjs';
 import { sessionStateDir } from './state.mjs';
 
 export const HOST = 'opencode';
@@ -102,6 +104,7 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
     runtime = { handlers: [], problems: [failureNotice('hook-runtime', 'setup', errText(err))], dispatch: async () => ({ notices: [] }) };
   }
   const handlers = Array.isArray(runtime.handlers) ? runtime.handlers : [];
+  const handlersLoadedAt = now();
   let deadlines = {};
   try {
     const d = readHarnessConfig(repoRoot)['hook-runtime']?.deadlines;
@@ -175,14 +178,23 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
     else input.system = items;
   }
 
-  async function run(event, who, startedAt = now()) {
+  // `received` is {receivedAt, hostCreatedAt?} for the trace line; receipt defaults to the start.
+  async function run(event, who, startedAt = now(), received = {}) {
     const { workDeadline, hostDeadline } = eventDeadlines(handlers, event, startedAt, deadlines);
+    let out;
     try {
       const merged = await runtime.dispatch(event, { sessionId: who.sessionId, agentId: who.agentId, workDeadline, hostDeadline });
-      return { ...merged, notices: Array.isArray(merged?.notices) ? merged.notices : [] };
+      out = { ...merged, notices: Array.isArray(merged?.notices) ? merged.notices : [] };
     } catch (err) {
-      return { notices: [failureNotice('hook-runtime', event.type, errText(err))] };
+      out = { notices: [failureNotice('hook-runtime', event.type, errText(err))] };
     }
+    const trace = {
+      event: event.type, processStart: performance.timeOrigin, receivedAt: received.receivedAt ?? startedAt,
+      handlersLoadedAt, settledAt: now(), outcomes: out.outcomes ?? {},
+    };
+    if (typeof received.hostCreatedAt === 'number') trace.hostCreatedAt = received.hostCreatedAt;
+    writeTrace(repoRoot, trace);
+    return out;
   }
 
   // The compaction mark lives in the session's state folder, so it survives a new plugin instance.
@@ -229,10 +241,10 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
   }
 
   // Detached turn ends: one in flight per session, a FIFO behind it, every entry runs.
-  function enqueueTurnEnd(sid) {
+  function enqueueTurnEnd(sid, received) {
     let slot = slots.get(sid);
     if (!slot) slots.set(sid, (slot = { busy: false, queue: [] }));
-    slot.queue.push({ generation: generations.get(sid) ?? 0 });
+    slot.queue.push({ generation: generations.get(sid) ?? 0, received });
     if (!slot.busy) detached(drain(sid, slot));
   }
 
@@ -253,7 +265,7 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
   async function turnEnd(sid, entry) {
     const who = await begin(sid);
     const event = { type: 'turn.end', host: HOST, background: background(sid) };
-    const merged = await run(event, who, now()); // the budget starts at dequeue
+    const merged = await run(event, who, now(), entry.received); // the budget starts at dequeue
     // A newer session.execution.started supersedes this result: not delivered, released.
     if (disposed || (generations.get(sid) ?? 0) !== entry.generation) return void (await callBounded(merged.release));
     const text = unique([merged.block, merged.context, merged.notices]).join(JOIN);
@@ -287,7 +299,7 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
         break;
       case 'session.execution.succeeded':
         lifecycle.set(sid, 'idle');
-        enqueueTurnEnd(sid);
+        enqueueTurnEnd(sid, { receivedAt: now(), hostCreatedAt: typeof ev.created === 'number' ? ev.created : undefined });
         break;
       case 'session.execution.failed':
       case 'session.execution.interrupted':
