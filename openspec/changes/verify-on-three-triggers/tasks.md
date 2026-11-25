@@ -63,15 +63,15 @@
 
 ## 7. Live evidence (OpenCode first, then Claude Code)
 
-- [ ] 7.1 OpenCode, with an invocation log, a denial sentinel that matches the deny rule plus an allowed control, the trace, and markers not mentioned in the prompt:
+- [x] 7.1 OpenCode, with an invocation log, a denial sentinel that matches the deny rule plus an allowed control, the trace, and markers not mentioned in the prompt:
   - in a throwaway repo with the fixture handler, show all five capabilities;
   - in an instrumented worktree of this repo, with dependencies installed and a passing baseline first, show an edit that fails a check, a ticked task while a check fails, and a turn end while a check fails, each reaching the model from the same command;
   - show a 120 s task check, a delayed block, and a turn end during a run;
   - with only the shipped tools installed, capture one child's start, its blocked turn end, its resume, its finish, and another child's cancellation (`ctx.session.interrupt`); record whether the parent sees the child's completion before the child's block; save them as fixtures; show the root's notice while a child runs and its block after both have stopped;
   - record the host version
-- [ ] 7.2 Claude Code: the same runs, plus a background subagent's blocked turn end and the root's notice; record the host version
+- [x] 7.2 Claude Code: the same runs, plus a background subagent's blocked turn end and the root's notice; record the host version
 - [x] 7.3 Measure the no-change turn end on both hosts against 300 ms, reported separately: the bench's host-to-outcome and in-runtime times, and live host-to-outcome (OpenCode from the event's `created`; Claude Code from Node process start, which excludes the host's own spawn time, as stated)
-- [ ] 7.4 Write the PR report:
+- [x] 7.4 Write the PR report:
   - each acceptance criterion with its evidence;
   - the contracts and areas changed;
   - deviations: the additive fields (`timeouts`, `manual`, `ack`, `release`, `signal`, `trace`, `background`, `tool.callId`), the owner's turn-end decision, the stated limits, any missing capability, the OpenCode plugin path answer;

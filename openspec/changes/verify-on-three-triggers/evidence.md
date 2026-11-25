@@ -117,17 +117,32 @@ Both are under the 300 ms target. Live traced no-change turn ends (`AGENT_HARNES
 | Claude Code | Node process start to outcome (excludes the host's own spawn) | 247, 284, 262 ms (in-runtime 153, 175, 167 ms) |
 | OpenCode server | the event's `created` timestamp to outcome | 97, 59, 53 ms (in-runtime 89, 52, 48 ms) |
 
-## 7. Not done live
+## 7. Follow-up live checks (OpenCode with `ollama-cloud/deepseek-v4.1-flash:1017`)
 
-- **OpenCode failed-tool notice through `system`:** the ChatGPT quota ran out and no other OpenCode model
-  was available (Gemini key invalid). Covered by unit tests only.
-- **Cancelling an OpenCode child** (`ctx.session.interrupt`): not run.
-- **The verify gate's own `SubagentStop` block on Claude Code:** see section 5.
+The three checks that were missing at first, run after the ChatGPT quota ran out:
+
+- **OpenCode notice after a failed tool, through `system`:** a handler that always throws, plus a `read`
+  of a missing file, which OpenCode reports with `status: "error"`. Both notices (`hook thrower failed on
+  tool.before …` and `… on tool.after …`) were appended to `system` at the next `context` hook call, and
+  the model quoted them.
+- **Cancelling an OpenCode child:** a test-only plugin called `ctx.session.interrupt` on the child 4 s
+  after it started, with a command that always fails.
+  - 3.5 s: the root's turn ended while the child ran, and it got the notice (no resume).
+  - 6.1 s: `session.execution.interrupted` marked the child idle.
+  - From then on, the root's turn ends were blocked three times (three resumes, three confirmed charges),
+    and the fourth passed with the notice.
+  - In an earlier attempt with a removable fail flag, the root model ran the check itself and removed
+    the flag, so its turn end passed legitimately. The always-failing command avoided that.
+- **The verify gate's own `SubagentStop` block on Claude Code:** a foreground subagent with an always
+  failing command was blocked three times at `SubagentStop` (three confirmed charges), then got
+  `verify: still failing after 3 blocks; continuing.` The root's `Stop` got the same notice at once,
+  because root and subagents share one limit per session.
 
 ## 8. Environment finding
 
-This machine's `python3` has no PyYAML, which `scripts/skills.py` needs (CI installs it from
-`requirements-dev.txt`). With the hooks now onboarded in this checkout, every full run here fails at
-`skills.py validate` until PyYAML is available. Agent sessions in this checkout are blocked up to three
-times per failure, then continue with the notice. That is the gate working as designed, but the
-environment needs `pip install -r requirements-dev.txt`.
+This machine's `python3` had no PyYAML, which `scripts/skills.py` needs (CI installs it from
+`requirements-dev.txt`). With the hooks onboarded in this checkout, every full run here failed at
+`skills.py validate`, and agent sessions were blocked up to three times per failure, then continued with
+the notice. That is the gate working as designed. PyYAML 6.0.4 was then installed into the user
+site-packages, and the full check now passes here (49 s). The owner wants the requirement removed (a
+follow-up task).
