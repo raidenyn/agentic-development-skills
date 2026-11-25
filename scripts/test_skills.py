@@ -670,6 +670,25 @@ class BuildPagesTests(unittest.TestCase):
         self.assertEqual(code, 0, output)
         self.assertEqual(path.read_bytes(), before)
 
+    def test_real_repo_publishes_harness_assets(self):
+        out = self.out_dir()
+        code, output = self.build("0.0.1", out, "raidenyn/agentic-development-skills", ROOT)
+        self.assertEqual(code, 0, output)
+        index = json.loads((out / "opencode" / "index.json").read_text(encoding="utf-8"))
+        files = {entry["name"]: entry["files"] for entry in index["skills"]}
+        for skill in ("agent-harness-hook-runtime", "agent-harness-verify-gate"):
+            skill_dir = ROOT / "skills" / skill
+            assets = [
+                (Path(dirpath) / name).relative_to(skill_dir).as_posix()
+                for dirpath, _, names in os.walk(skill_dir / "assets")
+                for name in names
+            ]
+            self.assertTrue(assets, skill)
+            for rel in assets:
+                with self.subTest(skill=skill, file=rel):
+                    self.assertIn(rel, files[skill])
+                    self.assertTrue((out / "opencode" / skill / rel).is_file())
+
     def test_index_lists_skills_and_install_snippets(self):
         root = self.demo_repo()
         out = self.out_dir()

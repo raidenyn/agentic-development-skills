@@ -40,3 +40,17 @@ jobs:
 
       - name: Validate Claude Code marketplace manifest
         run: npx -y @anthropic-ai/claude-code@2.1.330 plugin validate .
+
+  # The copied harness tools promise Node 22.0.0; run their tests there. No npm ci: they have no
+  # dependencies. The glob is quoted so node expands it, since 22.0 does not expand a bare directory.
+  harness-node22:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.0.0"
+
+      - name: Run harness tests on Node 22.0.0
+        run: node --test "tests/agent-harness/*.test.mjs"
