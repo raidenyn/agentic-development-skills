@@ -36,4 +36,6 @@ The two threads are titled with their launch keys, `raidenyn-shadow/task-run-scr
 
 **Result: done.** Exactly two threads started. #17 was left Ready even though its only blocker is closed as not planned: the Ready rule held, and #17 was skipped only because no slot was free. E (#21) was in the same position.
 
+Note: `evidence/03-board.json` was captured in Task 3, before `isArchived` was added to the board query, so its items have no `isArchived`; a missing `isArchived` reads as false.
+
 Note: #17 was later claimed by hand as a test fixture for criterion 4 (see `08-reports.md`). That is why later wakes count three slots in use.

@@ -113,7 +113,7 @@ Read the board's fields with their options, then check the names exactly, case i
 
 ```bash
 gh project view <n> --owner <board owner> --format json --jq .id      # <project id>
-gh project field-list <n> --owner <board owner> --format json > <work>/fields.json
+gh project field-list <n> --owner <board owner> --limit 100 --format json > <work>/fields.json
 ```
 
 ```bash
@@ -141,19 +141,21 @@ When `gh project field-list` fails, the whole board is a gap: "Give the agent ac
 
 ### The label `blocked`
 
-A stop that needs the owner puts the label `blocked` on the issue. Read the labels, and create the label only when it is missing:
+A stop that needs the owner puts the label `blocked` on the issue. Read the label, and create it only when it is missing:
 
 ```bash
-gh label list --repo <repo> --limit 200 --json name --jq '.[] | select(.name == "blocked") | .name'
+gh api repos/<repo>/labels/blocked --jq .name > <work>/label.txt 2> <work>/label.err; echo "exit $?"
 ```
 
-No output: the label is missing. Create it:
+The lookup ignores case, so a label `Blocked` is found too. `exit 0`: the label exists. Another exit with `HTTP 404` in `<work>/label.err`: the label is missing. Any other failure leaves it unknown: do not create it, and report it as a gap with the error, like a failed create below. Wherever this reference checks an issue for the label `blocked`, it compares the names lower-cased.
+
+Missing: create it:
 
 ```bash
 gh label create blocked --repo <repo> --color B60205 --description "Waiting for the owner"
 ```
 
-Read the list again: the label must now be there. When the create fails, report it as a gap: "Create the label `blocked` in `<repo>`, or give the agent account write access." Then every stop that needs the label is reported in place of the label, never written.
+Read the label again: the lookup must now print `exit 0`. When the create fails, report it as a gap: "Create the label `blocked` in `<repo>`, or give the agent account write access." Then every stop that needs the label is reported in place of the label, never written.
 
 This is the only write of Preflight. It is not a write of Advance or Start, so it is made even when another item is a gap.
 
@@ -197,7 +199,7 @@ A role that is not resolved stops its step: a plan model gap stops Start, an imp
 
 ## Board
 
-Read every page of the board once, before Advance and Start. Every later step judges this read; Claim reads one issue again just before its first write. Anchor: `#board`.
+Read every page of the board once, before Advance and Start, and then run the [Ready filter](#ready-filter) on it once, also before Advance: the [Judge](#judge) script reads `<work>/filter.txt` and `<work>/board.json`. Every later step judges this read; Claim reads one issue again just before its first write. Anchor: `#board`.
 
 Save the shared fragments. The Claim re-read uses the same ones, so both reads return an item in the same shape:
 
@@ -265,7 +267,7 @@ done
 [ "$ok" = 1 ] && jq -s . <work>/board.jsonl > <work>/board.json && echo "board read"
 ```
 
-No `board read` line: the read failed. Start writes nothing in this wake, and the report names the error. A partial board is never judged.
+No `board read` line: the read failed. Advance and Start write nothing in this wake, and the report names the error as a gap. A partial board is never judged.
 
 Each item holds its `id` (the item id that `gh project item-edit --id` takes), its `type`, `isArchived` (true for an item archived on the board; a missing value counts as false), the five field values (`status`, `phase`, `runPhase`, `attempt`, `runThread`; `null` when unset) and its `content`. A draft item has `content.__typename` `DraftIssue` and no number. Every nested list has `totalCount` beside its `nodes`, so a list longer than its page is seen.
 
@@ -509,7 +511,7 @@ jq -r '.[0] | "assignees=\([.content.assignees.nodes[].login] | join(",")) statu
 
 Advance judges phase reports. Collect them, drop the ones already stopped, keep the newest per item, then answer each one by [Switch](#switch). Anchor: `#reports`.
 
-Advance runs only when Preflight has no gap and the implement model resolves by [Models](#models). Otherwise it answers no report and writes and sends nothing: its report line names the gap, and every report is judged again at the next wake.
+Advance runs only when Preflight has no gap, the board was read whole by [Board](#board), and the implement model resolves by [Models](#models). Otherwise it answers no report and writes and sends nothing: its report line names the gap, and every report is judged again at the next wake.
 
 ### What a report is
 
@@ -625,7 +627,7 @@ def epoch: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601;
       then "report-only not-a-task"
     elif ($i | complete | not) then "report-only incomplete-claim"
     elif $i.content.labels.totalCount > ($i.content.labels.nodes | length) then "blocked overflow:labels"
-    elif any($i.content.labels.nodes[]; .name == "blocked") then "blocked"
+    elif any($i.content.labels.nodes[]; (.name | ascii_downcase) == "blocked") then "blocked"
     elif .sender != ($i.runThread | val) then "stop foreign-sender"
     elif .attempt != ($i.attempt | val) then "stop wrong-attempt"
     elif (.phase | rank) < ($i.runPhase | val | rank) then "handled"
@@ -733,7 +735,7 @@ Do these in order. A failure stops the item here: report it with the steps that 
 1. **The change folder.** List the folders under `openspec/changes/` that the branch adds at `<head>`, leaving out `archive`:
 
    ```bash
-   gh api repos/<repo>/compare/<default>...<head> --paginate --jq '.files[] | select(.status=="added") | .filename' \
+   gh api repos/<repo>/compare/<default>...<head> --paginate --jq '.files[]? | select(.status=="added") | .filename' \
      > <work>/added-<issue>.txt; echo "exit $?"
    ```
 
@@ -799,7 +801,7 @@ Report: <message id> from <sender id>
 Reason: <reason>. Resume in phase: <Run phase>.
 ```
 
-Read both back: the labels hold `blocked` (`gh issue view <issue> --repo <repo> --json labels --jq '.labels[].name'`), and the comments read of [Recorded stops](#recorded-stops), run again for this issue, makes the judge script print the report as `recorded`. The comment is the record: a later wake drops this report, whether or not the label is still there. When only the label was written, a later wake sees the item as blocked; after the owner removes the label, it judges the report again and writes the comment.
+Read both back: the labels hold `blocked` (`gh issue view <issue> --repo <repo> --json labels --jq '.labels[].name | ascii_downcase'`), and the comments read of [Recorded stops](#recorded-stops), run again for this issue, makes the judge script print the report as `recorded`. The comment is the record: a later wake drops this report, whether or not the label is still there. When only the label was written, a later wake sees the item as blocked; after the owner removes the label, it judges the report again and writes the comment.
 
 When Preflight could not create the label `blocked`, write neither: report the stop with its comment text, for the owner.
 

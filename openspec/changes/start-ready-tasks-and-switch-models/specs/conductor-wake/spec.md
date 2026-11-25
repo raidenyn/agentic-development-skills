@@ -111,7 +111,7 @@ The conductor SHALL count as in use every open board issue that is assigned to t
 - **THEN** one wake starts exactly two threads, and the third issue stays Ready and is reported
 
 ### Requirement: Look before claiming
-Just before the first claim write, the conductor SHALL read the item again (Status, assignees, run fields, blockers, linked branches and pull requests, task key, body edit ids) and search for a thread titled exactly with its launch key. Labels are not re-read, because they do not decide readiness. It MUST skip and report the item when anything changed or such a thread exists.
+Just before the first claim write, the conductor SHALL read the item again (Status, assignees, run fields, blockers, linked branches and pull requests, task key, body edit history), run the Ready filter on it, and search for a thread titled exactly with its launch key. Labels are not re-read, because they do not decide readiness. It MUST skip and report the item when anything changed, the filter does not print `start`, or such a thread exists, so a new untrusted edit still blocks the claim.
 
 #### Scenario: Status changed during the wake
 - **WHEN** an item's Status moves from Ready to Backlog between the board read and the claim
@@ -184,7 +184,7 @@ A report from the recorded thread for the current attempt whose phase is earlier
 - **THEN** the wake's report acknowledges it, and nothing is written or sent
 
 ### Requirement: Act on a matching plan report
-When a report has phase plan, "Run phase" is plan, the sender is "Run thread", the attempt is "Attempt", `seq` is 1, `head` equals the remote head of the linked branch, and the thread is idle within a wait of 5 minutes, the conductor SHALL find the one change folder the branch adds at `head`, switch the thread to the implement model, send the apply instruction in queue mode with a fresh context, and write "Run phase" implement, in that order. No change folder, or several, MUST stop the task before any switch.
+When a report has phase plan, "Run phase" is plan, the sender is "Run thread", the attempt is "Attempt", `seq` is 1, `head` equals the remote head of the claimed branch (the linked branch, or the head branch of the issue's own closing pull request), and the thread is idle within a wait of 5 minutes, the conductor SHALL find the one change folder the branch adds at `head`, switch the thread to the implement model, send the apply instruction in queue mode with a fresh context, and write "Run phase" implement, in that order. No change folder, or several, MUST stop the task before any switch.
 
 #### Scenario: Matching report on an idle thread
 - **WHEN** the recorded thread sends a plan report for attempt 1 with seq 1 and the branch's head, and then ends its turn
@@ -201,7 +201,7 @@ A report that meets every condition of Act except idleness SHALL get "not idle y
 A report from the recorded thread for the current attempt whose `seq` or head does not match, or whose phase is later than "Run phase", SHALL stop the task as above. A malformed report, a report for an issue that is not a task on this board or whose claim is incomplete, and a matching report for a phase other than plan SHALL be reported only, as not handled in M1.
 
 #### Scenario: Head moved
-- **WHEN** the recorded thread's newest plan report names a head that is not the linked branch's remote head
+- **WHEN** the recorded thread's newest plan report names a head that is not the remote head of the claimed branch (the linked branch, or the head branch of the issue's own closing pull request)
 - **THEN** the task is stopped and reported
 
 ### Requirement: Apply instruction

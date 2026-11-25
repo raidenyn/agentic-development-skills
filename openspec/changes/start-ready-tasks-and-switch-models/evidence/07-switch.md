@@ -28,6 +28,7 @@ On the board, #15 then read `Run phase` = implement and `Attempt` = 1.
 
 - **Run 2** read the change folder it was pointed to, `add-greeting-function`. In the same worktree and branch, it implemented `src/greet.py`, ran `openspec validate --strict`, pushed `c260d94` and opened draft PR raidenyn-shadow/task-run-scratch#23 ("Closes #15"). It sent no phase report and merged nothing.
 - **Run 3**, the probe: "Memory probe from the owner: was any codeword given to you earlier in this thread? … say exactly "I do not know a codeword." … run no tool." The answer was **"I do not know a codeword."**
+- **How the probe was sent.** Run 3 was sent with `t3_thread_send` in `mode: "queue"` *without* `freshContext`, so it ran in the coding session that run 2 started.
 
 **Result: done.**
 - The coding turn ran on the implement model in the same worktree.

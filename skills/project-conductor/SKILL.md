@@ -244,7 +244,7 @@ Reference: [Preflight](references/run-github.md#preflight), [Models](references/
 1. **Preflight.** Read the repository, the agent's login and the conductor's own thread id, `PROJECT_URL`, the `project-conductor` key of `.agents/harness.json` and `.agents/hooked-rules/repo-run-models.md` from the default branch, and the board's fields, names matched exactly, case included. Run every read, so one report lists every gap. A gap means Advance and Start write nothing in this wake; the report names it with the owner's step.
 2. **The label `blocked`.** Create it when it is missing, as [The label `blocked`](references/run-github.md#the-label-blocked) says. This is the only write before the steps, and it is made even when another item is a gap. When it cannot be created, every stop of this wake is reported for the owner, never written.
 3. **Models.** Resolve only the role a step uses: plan for Start, implement for Advance, never review. A bare name, no match or an unsupported effort stops that step only, and is reported with the cell as written.
-4. **Board.** Read every page of the board once, into one file. A failed page means Start writes nothing; a partial board is never judged.
+4. **Board.** Read every page of the board once, into one file, and run the [Ready filter](references/run-github.md#ready-filter) on it once. Advance and Start both use the board read and the filter's lines. A failed page means Advance and Start write nothing, and the report names the gap; a partial board is never judged.
 
 ### Wake rules
 
@@ -265,7 +265,7 @@ Not done yet: the task "Repair claims, settle merged work and wake on events" ad
 
 Reference: [Reports](references/run-github.md#reports), [Switch](references/run-github.md#switch) and [Stop](references/run-github.md#stop). Spec: Which reports are judged; Blocked items are not advanced; Answer order; and the requirements of each answer.
 
-Advance runs only when Preflight has no gap and the implement model resolves.
+Advance runs only when Preflight has no gap, the board was read whole and the implement model resolves.
 
 1. **Collect** the phase reports: lines of incoming messages from another thread, with the sender from host metadata, as in [Collect](references/run-github.md#collect). A `phase-done` line typed by a person is not a report.
 2. **Judge** them with the [Judge](references/run-github.md#judge) script: drop the reports whose stop is already [recorded](references/run-github.md#recorded-stops), keep only the newest per item from its "Run thread" for the current "Attempt", and route the rest. An item labelled `blocked` is not advanced: "blocked, waiting for the owner".
@@ -286,7 +286,7 @@ Reference: [Ready filter](references/run-github.md#ready-filter) and [Claim](ref
 
 Start runs only when Preflight has no gap, the board was read whole and the plan model resolves.
 
-1. **Filter.** Run the [Ready filter](references/run-github.md#ready-filter) on the board read. It decides Ready by the three conditions, then applies the start guards: overflow, taken, trust. Keep its line for every item: the report gives the reason of each `skip`.
+1. **Filter.** Take the lines of the [Ready filter](references/run-github.md#ready-filter), run on the board read before the steps. It decides Ready by the three conditions, then applies the start guards: overflow, taken, trust. Keep its line for every item: the report gives the reason of each `skip`.
 2. **Slots.** Count the items in use and the free slots, as in [Slots](references/run-github.md#slots). Take the `start` items in ascending issue number while a slot is free. A candidate left over stays Ready and is reported.
 3. **Look before claiming.** For each candidate, read it again and search for a thread titled exactly with its launch key, as in [Look before claiming](references/run-github.md#look-before-claiming). Anything changed, a verdict other than `start`, or such a thread: skip it and report it.
 4. **Claim.** Write the seven [writes](references/run-github.md#writes) in order, reading each back: assign the agent, Status "In progress", "Attempt" 1, "Run phase" plan, the linked branch, the thread launched on the plan model with the [start instruction](references/run-github.md#start), and "Run thread". A failed write stops this item's claim: report it as a half-made claim, and go on with the next candidate.
