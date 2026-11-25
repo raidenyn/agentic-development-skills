@@ -1,7 +1,6 @@
+// Generated from src/shared/lib/install.mts by scripts/build.mts. Do not edit.
 import { createHash } from 'node:crypto';
-import {
-  existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
 import { readHarnessConfig } from './config.mjs';
 
@@ -9,8 +8,10 @@ export const DEFAULT_CLAUDE_COMMAND = 'node "$CLAUDE_PROJECT_DIR/.agents/harness
 export const DEFAULT_OPENCODE_PLUGIN = './.agents/harness/hook-runtime/opencode';
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const RESTORE = 'Restore the file with `git checkout -- .agents/harness/<tool>/<file>`, or delete the tool folder and its lock entry to reinstall.';
-const NO_LOCK = 'Delete the folder to reinstall, or restore the lock entry (`git checkout -- .agents/harness/lock.json`).';
+const RESTORE =
+  'Restore the file with `git checkout -- .agents/harness/<tool>/<file>`, or delete the tool folder and its lock entry to reinstall.';
+const NO_LOCK =
+  'Delete the folder to reinstall, or restore the lock entry (`git checkout -- .agents/harness/lock.json`).';
 
 export function sha256File(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
@@ -50,7 +51,12 @@ export function readLock(repoRoot) {
   return { version: 1, ...value, tools: value.tools };
 }
 
-const sortKeys = (o) => Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]]));
+const sortKeys = (o) =>
+  Object.fromEntries(
+    Object.keys(o)
+      .sort()
+      .map((k) => [k, o[k]]),
+  );
 
 function lockText(lock) {
   const tools = {};
@@ -104,8 +110,8 @@ function planTool({ sourceDir, repoRoot, mode }) {
     if (entry.version !== version && mode !== 'update') {
       return refuse(`${name} ${entry.version} is installed; use update to install ${version}.`);
     }
-    const same = entry.version === version
-      && JSON.stringify(sortKeys(entry.files)) === JSON.stringify(sortKeys(sourceHashes));
+    const same =
+      entry.version === version && JSON.stringify(sortKeys(entry.files)) === JSON.stringify(sortKeys(sourceHashes));
     if (same) return { code: 0, messages: [`${name} ${version} is up to date.`], changed: false, apply() {} };
   }
   return {
@@ -154,7 +160,11 @@ export function checkTool({ toolDir, repoRoot }) {
 function sectionPlan(repoRoot, tool, stub) {
   const config = readHarnessConfig(repoRoot);
   if (config[tool] !== undefined) return null;
-  return () => writeFileAtomic(join(repoRoot, '.agents', 'harness.json'), `${JSON.stringify({ ...config, [tool]: stub }, null, 2)}\n`);
+  return () =>
+    writeFileAtomic(
+      join(repoRoot, '.agents', 'harness.json'),
+      `${JSON.stringify({ ...config, [tool]: stub }, null, 2)}\n`,
+    );
 }
 
 export function ensureSection(repoRoot, tool, stub) {
@@ -177,10 +187,14 @@ function readJsonFile(file) {
 function planClaude(repoRoot, command, events) {
   const file = join(repoRoot, '.claude', 'settings.json');
   const entryFor = (timeout) => ({ hooks: [{ type: 'command', command, timeout }] });
-  const byHand = () => Object.entries(events)
-    .map(([ev, t]) => `  ${ev}: ${JSON.stringify(entryFor(t))}`).join('\n');
+  const byHand = () =>
+    Object.entries(events)
+      .map(([ev, t]) => `  ${ev}: ${JSON.stringify(entryFor(t))}`)
+      .join('\n');
   const refuse = (why) => ({
-    code: 1, messages: [`${file}: ${why}. Add these entries under "hooks" by hand:\n${byHand()}`], write: null,
+    code: 1,
+    messages: [`${file}: ${why}. Add these entries under "hooks" by hand:\n${byHand()}`],
+    write: null,
   });
   const read = readJsonFile(file);
   if (read.error) return refuse(`not plain JSON (comments would be lost): ${read.error}`);
@@ -192,7 +206,9 @@ function planClaude(repoRoot, command, events) {
   for (const [event, timeout] of Object.entries(events)) {
     if (hooks[event] !== undefined && !Array.isArray(hooks[event])) return refuse(`"hooks.${event}" is not an array`);
     const list = hooks[event] ?? [];
-    const has = list.some((e) => isObject(e) && Array.isArray(e.hooks) && e.hooks.some((h) => isObject(h) && h.command === command));
+    const has = list.some(
+      (e) => isObject(e) && Array.isArray(e.hooks) && e.hooks.some((h) => isObject(h) && h.command === command),
+    );
     if (!has) added.push([event, [...list, entryFor(timeout)]]);
   }
   if (!added.length) return { code: 0, messages: [], write: null };
@@ -207,7 +223,9 @@ function planClaude(repoRoot, command, events) {
 function planOpencode(repoRoot, pluginPath) {
   const file = join(repoRoot, 'opencode.json');
   const refuse = (why) => ({
-    code: 1, messages: [`${file}: ${why}. Add ${JSON.stringify(pluginPath)} to "plugins" by hand.`], write: null,
+    code: 1,
+    messages: [`${file}: ${why}. Add ${JSON.stringify(pluginPath)} to "plugins" by hand.`],
+    write: null,
   });
   const read = readJsonFile(file);
   if (read.error) return refuse(`not plain JSON (comments would be lost): ${read.error}`);
@@ -237,8 +255,12 @@ export function mergeOpencodeConfig(repoRoot, pluginPath) {
 }
 
 export function installHookRuntime({
-  sourceDir, repoRoot, mode = 'install', events,
-  command = DEFAULT_CLAUDE_COMMAND, pluginPath = DEFAULT_OPENCODE_PLUGIN,
+  sourceDir,
+  repoRoot,
+  mode = 'install',
+  events,
+  command = DEFAULT_CLAUDE_COMMAND,
+  pluginPath = DEFAULT_OPENCODE_PLUGIN,
 }) {
   const tool = planTool({ sourceDir, repoRoot, mode });
   const claude = planClaude(repoRoot, command, events ?? {});

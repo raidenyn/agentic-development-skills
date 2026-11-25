@@ -1,3 +1,4 @@
+// Generated from src/hook-runtime/lib/worker-entry.mts by scripts/build.mts. Do not edit.
 // The worker side (design D3): import one handler, answer `event`, `proof`, `ack` and `release`
 // messages from the supervisor. Spawning, the gate lock, proofs of other handlers and traces are
 // message calls to the supervisor; this thread never starts a process or touches a lock itself.
@@ -44,13 +45,25 @@ function spawnVia(requestId, argv, { cwd, env, timeoutMs, signal, maxBytes = Inf
   };
   let callId;
   const onAbort = () => post({ type: 'spawn.kill', requestId, callId });
-  const p = call(requestId, 'spawn', {
-    argv: argv.map(String), cwd, env, timeoutMs,
-  }, { onData }).then((m) => {
+  const p = call(
+    requestId,
+    'spawn',
+    {
+      argv: argv.map(String),
+      cwd,
+      env,
+      timeoutMs,
+    },
+    { onData },
+  ).then((m) => {
     signal?.removeEventListener('abort', onAbort);
     if (m.error) throw new Error(m.error);
     return {
-      code: m.code, signal: m.signal, pgid: m.pgid, timedOut: m.timedOut === true, truncated,
+      code: m.code,
+      signal: m.signal,
+      pgid: m.pgid,
+      timedOut: m.timedOut === true,
+      truncated,
       stdout: Buffer.concat(out.stdout).toString('utf8'),
       stderr: Buffer.concat(out.stderr).toString('utf8'),
     };
@@ -152,11 +165,15 @@ async function runBlockCallback({ type, requestId }) {
 parentPort.on('message', (msg) => {
   if (!msg || msg.workerGen !== workerGen) return;
   switch (msg.type) {
-    case 'event': return void runEvent(msg);
-    case 'proof': return void runProof(msg);
+    case 'event':
+      return void runEvent(msg);
+    case 'proof':
+      return void runProof(msg);
     case 'ack':
-    case 'release': return void runBlockCallback(msg);
-    case 'spawn.data': return void calls.get(msg.callId)?.onData?.(msg.stream, msg.chunk);
+    case 'release':
+      return void runBlockCallback(msg);
+    case 'spawn.data':
+      return void calls.get(msg.callId)?.onData?.(msg.stream, msg.chunk);
     default: {
       const c = calls.get(msg.callId);
       if (!c) return;
@@ -169,7 +186,8 @@ parentPort.on('message', (msg) => {
 function meta(h) {
   if (!h || typeof h !== 'object') throw new Error('handler.mjs has no default export object');
   if (typeof h.name !== 'string' || !h.name) throw new Error('the handler has no name');
-  if (!Array.isArray(h.events) || h.events.some((e) => typeof e !== 'string')) throw new Error('the handler events are not a list of names');
+  if (!Array.isArray(h.events) || h.events.some((e) => typeof e !== 'string'))
+    throw new Error('the handler events are not a list of names');
   if (typeof h.handle !== 'function') throw new Error('the handler has no handle function');
   const timeouts = {};
   for (const [k, v] of Object.entries(h.timeouts ?? {})) if (typeof v === 'number') timeouts[k] = v;

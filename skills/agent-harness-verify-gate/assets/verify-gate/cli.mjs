@@ -1,3 +1,4 @@
+// Generated from src/verify-gate/cli.mts by scripts/build.mts. Do not edit.
 // verify-gate CLI (design D6 install/update/check, spec "Manual run").
 //   node <skill>/assets/verify-gate/cli.mjs install [--repo DIR]
 //   node <skill>/assets/verify-gate/cli.mjs update [--repo DIR]
@@ -27,17 +28,20 @@ function git(args, cwd) {
 
 function defaultRepo() {
   const harness = resolve(HERE, '..');
-  if (basename(harness) === 'harness' && basename(resolve(harness, '..')) === '.agents') return resolve(harness, '..', '..');
+  if (basename(harness) === 'harness' && basename(resolve(harness, '..')) === '.agents')
+    return resolve(harness, '..', '..');
   return git(['rev-parse', '--show-toplevel'], process.cwd()) || process.cwd();
 }
 
 const hasRuntime = (repoRoot) => Boolean(readLock(repoRoot).tools['hook-runtime']);
-const NO_RUNTIME = 'hook-runtime is not installed in this repo (no entry in .agents/harness/lock.json); install agent-harness-hook-runtime first.';
+const NO_RUNTIME =
+  'hook-runtime is not installed in this repo (no entry in .agents/harness/lock.json); install agent-harness-hook-runtime first.';
 
 function install(repoRoot, mode, io) {
   const node = requireNode22();
   if (node) return io.fail([node]);
-  if (git(['rev-parse', '--is-inside-work-tree'], repoRoot) !== 'true') return io.fail([`${repoRoot} is not a git work tree`]);
+  if (git(['rev-parse', '--is-inside-work-tree'], repoRoot) !== 'true')
+    return io.fail([`${repoRoot} is not a git work tree`]);
   let config;
   try {
     if (!hasRuntime(repoRoot)) return io.fail([NO_RUNTIME]);
@@ -54,7 +58,9 @@ function install(repoRoot, mode, io) {
   if (res.code !== 0) return io.fail(res.messages);
   const messages = [...res.messages];
   if (ensureSection(repoRoot, TOOL, { command: [] })) {
-    messages.push(`added "${TOOL}": {"command": []} to .agents/harness.json; set verify-gate.command to the repo's verify argv.`);
+    messages.push(
+      `added "${TOOL}": {"command": []} to .agents/harness.json; set verify-gate.command to the repo's verify argv.`,
+    );
   }
   return io.ok(messages);
 }
@@ -93,13 +99,21 @@ async function run(repoRoot, io) {
   const deadline = start + normalizeConfig(section).timeoutSeconds * 1000 + 10000;
   try {
     const r = await runGate({
-      repoRoot, trigger: 'turn-end', config: section, stateDir: toolStateDir(repoRoot, TOOL),
-      signal: controller.signal, deadline, cleanupDeadline: deadline + 5000,
+      repoRoot,
+      trigger: 'turn-end',
+      config: section,
+      stateDir: toolStateDir(repoRoot, TOOL),
+      signal: controller.signal,
+      deadline,
+      cleanupDeadline: deadline + 5000,
     });
     switch (r.status) {
-      case 'skipped': return io.ok(['verify: no change since the last full pass.']);
-      case 'passed': return io.ok([`verify: passed in ${Date.now() - start} ms.`]);
-      case 'contended': return io.fail([r.text]);
+      case 'skipped':
+        return io.ok(['verify: no change since the last full pass.']);
+      case 'passed':
+        return io.ok([`verify: passed in ${Date.now() - start} ms.`]);
+      case 'contended':
+        return io.fail([r.text]);
       default:
         io.out(`${r.text}\n`);
         return 1;
@@ -114,8 +128,14 @@ async function run(repoRoot, io) {
 export async function main(argv, { out = (s) => process.stdout.write(s), err = (s) => process.stderr.write(s) } = {}) {
   const io = {
     out,
-    ok: (lines) => { for (const l of lines) out(`${l}\n`); return 0; },
-    fail: (lines) => { for (const l of lines) err(`${l}\n`); return 1; },
+    ok: (lines) => {
+      for (const l of lines) out(`${l}\n`);
+      return 0;
+    },
+    fail: (lines) => {
+      for (const l of lines) err(`${l}\n`);
+      return 1;
+    },
   };
   const [command, ...rest] = argv;
   let repo;
@@ -148,7 +168,12 @@ const isScript = (() => {
 
 if (isScript) {
   main(process.argv.slice(2)).then(
-    (code) => { process.exitCode = code; },
-    (e) => { process.stderr.write(`${TOOL}: ${errText(e)}\n`); process.exitCode = 1; },
+    (code) => {
+      process.exitCode = code;
+    },
+    (e) => {
+      process.stderr.write(`${TOOL}: ${errText(e)}\n`);
+      process.exitCode = 1;
+    },
   );
 }

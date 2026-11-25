@@ -1,3 +1,4 @@
+// Generated from src/shared/lib/config.mts by scripts/build.mts. Do not edit.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 

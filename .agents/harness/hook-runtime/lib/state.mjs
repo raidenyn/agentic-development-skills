@@ -1,6 +1,14 @@
+// Generated from src/shared/lib/state.mts by scripts/build.mts. Do not edit.
 import { execFileSync } from 'node:child_process';
 import {
-  linkSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync,
+  linkSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
@@ -10,7 +18,9 @@ let tmpCounter = 0;
 
 export function gitDir(repoRoot) {
   return execFileSync('git', ['rev-parse', '--absolute-git-dir'], {
-    cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
 }
 
@@ -45,7 +55,9 @@ export function writeJsonAtomic(path, value) {
   try {
     renameSync(tmp, path);
   } catch (err) {
-    try { unlinkSync(tmp); } catch {}
+    try {
+      unlinkSync(tmp);
+    } catch {}
     throw err;
   }
 }
@@ -123,7 +135,9 @@ export function acquireGateLock(dir, { beforeLink } = {}) {
     if (err.code === 'EEXIST') return null;
     throw err;
   } finally {
-    try { unlinkSync(tmp); } catch {}
+    try {
+      unlinkSync(tmp);
+    } catch {}
   }
 
   const after = listLocks(dir);

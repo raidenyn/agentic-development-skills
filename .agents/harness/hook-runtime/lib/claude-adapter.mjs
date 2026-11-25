@@ -1,3 +1,4 @@
+// Generated from src/hook-runtime/lib/claude-adapter.mts by scripts/build.mts. Do not edit.
 // Claude Code adapter (design D2 tool kinds, D3 event mapping and result delivery): hook payload to
 // normalized event, and merged dispatch result to the host's hook JSON.
 import { isAbsolute, relative, resolve, sep } from 'node:path';
@@ -29,8 +30,13 @@ const TYPES = {
 
 const KINDS = {
   Bash: 'shell',
-  Edit: 'edit', Write: 'edit', MultiEdit: 'edit', NotebookEdit: 'edit',
-  Read: 'read', Glob: 'read', Grep: 'read',
+  Edit: 'edit',
+  Write: 'edit',
+  MultiEdit: 'edit',
+  NotebookEdit: 'edit',
+  Read: 'read',
+  Glob: 'read',
+  Grep: 'read',
 };
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);

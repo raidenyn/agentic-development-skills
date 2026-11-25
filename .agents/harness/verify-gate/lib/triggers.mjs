@@ -1,3 +1,4 @@
+// Generated from src/verify-gate/lib/triggers.mts by scripts/build.mts. Do not edit.
 // Trigger detection (design D5 "Ticked task"). One detector serves edits and shell calls alike: it
 // compares per-key checkbox counts of a task file before the call (the before-image) with the file
 // afterwards. Line positions and hunks do not matter. Swapping which of two identically labelled

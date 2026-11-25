@@ -1,3 +1,4 @@
+// Generated from src/hook-runtime/claude.mts by scripts/build.mts. Do not edit.
 // Claude Code entry: one command for every hook event (design D3). It reads the hook payload from
 // stdin, dispatches it to the installed handlers and prints the host's hook JSON. It exits 0 on
 // every path: a hook never blocks the host on its own failure.
@@ -6,9 +7,7 @@ import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { capabilityNotice, HOST_CAPABILITIES } from './lib/capabilities.mjs';
 import { CLAUDE_EVENTS, HOST, toEvent, toOutput } from './lib/claude-adapter.mjs';
-import {
-  createRuntime, failureNotice, loadHandlers, OUTPUT_MS, writeTrace,
-} from './lib/runtime.mjs';
+import { createRuntime, failureNotice, loadHandlers, OUTPUT_MS, writeTrace } from './lib/runtime.mjs';
 
 const HOST_MARGIN_MS = 7000; // work deadline = host deadline - 7 s (cleanup 6 s + output 1 s)
 const GIT_TIMEOUT_MS = 2000;
@@ -18,14 +17,23 @@ const errText = (err) => (err instanceof Error ? err.message : String(err));
 export function defaultSpawn(argv, { cwd, env, timeoutMs } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawnChild(argv[0], argv.slice(1), {
-      cwd, env: env ? { ...process.env, ...env } : process.env, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd,
+      env: env ? { ...process.env, ...env } : process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
     let stderr = '';
     const t = timeoutMs ? setTimeout(() => child.kill('SIGKILL'), timeoutMs) : null;
-    child.stdout.on('data', (d) => { stdout += d; });
-    child.stderr.on('data', (d) => { stderr += d; });
-    child.on('error', (err) => { if (t) clearTimeout(t); reject(err); });
+    child.stdout.on('data', (d) => {
+      stdout += d;
+    });
+    child.stderr.on('data', (d) => {
+      stderr += d;
+    });
+    child.on('error', (err) => {
+      if (t) clearTimeout(t);
+      reject(err);
+    });
     child.on('close', (code, signal) => {
       if (t) clearTimeout(t);
       resolve({ code, signal, stdout, stderr, pgid: child.pid });
@@ -47,10 +55,17 @@ async function findRepoRoot(payload, { cwd, env, spawn }) {
 
 // Resolves once fn() settles or the deadline passes, whichever is first; never rejects.
 function bounded(fn, until) {
-  return () => new Promise((resolve) => {
-    const t = setTimeout(resolve, Math.max(0, until - Date.now()));
-    Promise.resolve().then(fn).catch(() => {}).finally(() => { clearTimeout(t); resolve(); });
-  });
+  return () =>
+    new Promise((resolve) => {
+      const t = setTimeout(resolve, Math.max(0, until - Date.now()));
+      Promise.resolve()
+        .then(fn)
+        .catch(() => {})
+        .finally(() => {
+          clearTimeout(t);
+          resolve();
+        });
+    });
 }
 
 const parse = (text) => {
@@ -65,7 +80,12 @@ const parse = (text) => {
 // is called once `text` was written, `release` when it could not be; both are bounded by
 // cleanupDeadline.
 export async function main({
-  stdin, cwd = process.cwd(), env = process.env, spawn = defaultSpawn, now = Date.now, capabilities = HOST_CAPABILITIES,
+  stdin,
+  cwd = process.cwd(),
+  env = process.env,
+  spawn = defaultSpawn,
+  now = Date.now,
+  capabilities = HOST_CAPABILITIES,
 } = {}) {
   const start = now();
   const empty = { text: '', ack: null, release: null, cleanupDeadline: start };
@@ -85,13 +105,23 @@ export async function main({
     const handlersLoadedAt = now();
     const runtime = createRuntime({ repoRoot, host: HOST, handlers, problems, now });
     merged = await runtime.dispatch(mapped.event, {
-      sessionId: mapped.sessionId, agentId: mapped.agentId,
-      hostDeadline, workDeadline: hostDeadline - HOST_MARGIN_MS,
+      sessionId: mapped.sessionId,
+      agentId: mapped.agentId,
+      hostDeadline,
+      workDeadline: hostDeadline - HOST_MARGIN_MS,
     });
-    writeTrace(repoRoot, {
-      event: type, processStart: performance.timeOrigin, receivedAt: start, handlersLoadedAt, settledAt: now(),
-      outcomes: merged.outcomes ?? {},
-    }, env);
+    writeTrace(
+      repoRoot,
+      {
+        event: type,
+        processStart: performance.timeOrigin,
+        receivedAt: start,
+        handlersLoadedAt,
+        settledAt: now(),
+        outcomes: merged.outcomes ?? {},
+      },
+      env,
+    );
     // The capability check runs at session.start and adds a context line when something is missing.
     const missing = type === 'session.start' ? capabilityNotice(HOST, handlers, capabilities) : null;
     if (missing) merged = { ...merged, notices: [...(merged.notices ?? []), missing] };
@@ -132,7 +162,9 @@ async function runAsScript() {
   };
   if (!result.text) return finish();
   try {
-    process.stdout.write(result.text, (err) => { finish(err); });
+    process.stdout.write(result.text, (err) => {
+      finish(err);
+    });
   } catch (err) {
     finish(err);
   }

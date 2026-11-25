@@ -1,3 +1,4 @@
+// Generated from src/hook-runtime/lib/opencode-adapter.mts by scripts/build.mts. Do not edit.
 // OpenCode 2.4.1 adapter (design D2 tool kinds, D3 event mapping, child lifecycle, superseded
 // results and notice channels, D5 turn-end queue). A V2 plugin `{id, setup(ctx)}`: tool hooks
 // `execute.before`/`execute.after`, session hooks `prompt`/`context`, and the event stream. Handlers
@@ -7,9 +8,7 @@ import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { capabilityNotice, HOST_CAPABILITIES } from './capabilities.mjs';
 import { readHarnessConfig } from './config.mjs';
-import {
-  CLEANUP_MS, createRuntime, DEFAULT_DEADLINE_MS, failureNotice, loadHandlers, writeTrace,
-} from './runtime.mjs';
+import { CLEANUP_MS, createRuntime, DEFAULT_DEADLINE_MS, failureNotice, loadHandlers, writeTrace } from './runtime.mjs';
 import { sessionStateDir } from './state.mjs';
 
 export const HOST = 'opencode';
@@ -21,9 +20,14 @@ const CALLBACK_MS = CLEANUP_MS; // bound on synthetic, ack and release
 const JOIN = '\n\n';
 
 const KINDS = {
-  shell: 'shell', bash: 'shell',
-  patch: 'edit', edit: 'edit', write: 'edit',
-  read: 'read', glob: 'read', grep: 'read',
+  shell: 'shell',
+  bash: 'shell',
+  patch: 'edit',
+  edit: 'edit',
+  write: 'edit',
+  read: 'read',
+  glob: 'read',
+  grep: 'read',
 };
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -63,9 +67,8 @@ export function toToolEvent(type, input, repoRoot) {
   if (kind === 'shell' && typeof toolInput.command === 'string') event.command = toolInput.command;
   if (kind === 'edit') {
     const meta = input?.result?.metadata;
-    const paths = name === 'patch'
-      ? (Array.isArray(meta?.files) ? meta.files.map((f) => f?.file) : [])
-      : [toolInput.filePath];
+    const paths =
+      name === 'patch' ? (Array.isArray(meta?.files) ? meta.files.map((f) => f?.file) : []) : [toolInput.filePath];
     event.files = [...new Set(paths.map((p) => repoRelative(p, repoRoot)).filter((p) => p !== null))];
   }
   return event;
@@ -75,7 +78,10 @@ function findRepoRoot(ctx) {
   const dir = [ctx?.location?.directory, ctx?.directory, ctx?.worktree].find(isId) ?? process.cwd();
   try {
     const top = execFileSync('git', ['rev-parse', '--show-toplevel'], {
-      cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000,
+      cwd: dir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 2000,
     }).trim();
     if (top) return top;
   } catch {}
@@ -89,8 +95,11 @@ async function defaultRuntime({ repoRoot, host }) {
 }
 
 export function createOpencodePlugin({
-  runtimeFactory = defaultRuntime, setTimer = setTimeout, clearTimer = clearTimeout,
-  capabilities = HOST_CAPABILITIES, now = Date.now,
+  runtimeFactory = defaultRuntime,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
+  capabilities = HOST_CAPABILITIES,
+  now = Date.now,
 } = {}) {
   return { id: PLUGIN_ID, setup: (ctx) => setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, now }) };
 }
@@ -101,7 +110,11 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
   try {
     runtime = await runtimeFactory({ repoRoot, host: HOST });
   } catch (err) {
-    runtime = { handlers: [], problems: [failureNotice('hook-runtime', 'setup', errText(err))], dispatch: async () => ({ notices: [] }) };
+    runtime = {
+      handlers: [],
+      problems: [failureNotice('hook-runtime', 'setup', errText(err))],
+      dispatch: async () => ({ notices: [] }),
+    };
   }
   const handlers = Array.isArray(runtime.handlers) ? runtime.handlers : [];
   const handlersLoadedAt = now();
@@ -122,15 +135,26 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
   const compacted = new Set(); // sessions marked by session.compaction.ended, not yet re-delivered
 
   // Resolves to {value} | {error} | {timedOut}, never rejects.
-  const within = (fn, ms) => new Promise((done) => {
-    const t = setTimer(() => done({ timedOut: true }), ms);
-    Promise.resolve().then(fn).then(
-      (value) => { clearTimer(t); done({ value }); },
-      (error) => { clearTimer(t); done({ error }); },
-    );
-  });
+  const within = (fn, ms) =>
+    new Promise((done) => {
+      const t = setTimer(() => done({ timedOut: true }), ms);
+      Promise.resolve()
+        .then(fn)
+        .then(
+          (value) => {
+            clearTimer(t);
+            done({ value });
+          },
+          (error) => {
+            clearTimer(t);
+            done({ error });
+          },
+        );
+    });
   const callBounded = (fn) => (typeof fn === 'function' ? within(fn, CALLBACK_MS) : Promise.resolve());
-  const detached = (p) => { Promise.resolve(p).catch(() => {}); };
+  const detached = (p) => {
+    Promise.resolve(p).catch(() => {});
+  };
 
   // The parentID walk. A lookup error or timeout, a cycle or the depth cap makes the session a root.
   async function walk(sid) {
@@ -153,7 +177,11 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
     return root;
   }
   const identity = (sid) => {
-    if (!identities.has(sid)) identities.set(sid, walk(sid).catch(() => ({ sessionId: sid, agentId: 'main' })));
+    if (!identities.has(sid))
+      identities.set(
+        sid,
+        walk(sid).catch(() => ({ sessionId: sid, agentId: 'main' })),
+      );
     return identities.get(sid);
   };
 
@@ -183,14 +211,23 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
     const { workDeadline, hostDeadline } = eventDeadlines(handlers, event, startedAt, deadlines);
     let out;
     try {
-      const merged = await runtime.dispatch(event, { sessionId: who.sessionId, agentId: who.agentId, workDeadline, hostDeadline });
+      const merged = await runtime.dispatch(event, {
+        sessionId: who.sessionId,
+        agentId: who.agentId,
+        workDeadline,
+        hostDeadline,
+      });
       out = { ...merged, notices: Array.isArray(merged?.notices) ? merged.notices : [] };
     } catch (err) {
       out = { notices: [failureNotice('hook-runtime', event.type, errText(err))] };
     }
     const trace = {
-      event: event.type, processStart: performance.timeOrigin, receivedAt: received.receivedAt ?? startedAt,
-      handlersLoadedAt, settledAt: now(), outcomes: out.outcomes ?? {},
+      event: event.type,
+      processStart: performance.timeOrigin,
+      receivedAt: received.receivedAt ?? startedAt,
+      handlersLoadedAt,
+      settledAt: now(),
+      outcomes: out.outcomes ?? {},
     };
     if (typeof received.hostCreatedAt === 'number') trace.hostCreatedAt = received.hostCreatedAt;
     writeTrace(repoRoot, trace);
@@ -227,10 +264,13 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
   // session.start for the first event seen for a session id (session.created arrives only for children).
   function ensureStarted(sid) {
     if (!started.has(sid)) {
-      started.set(sid, (async () => {
-        const who = await identity(sid);
-        await sessionStart(sid, who, takeMark(sid, who, { persistedOnly: true }));
-      })().catch(() => {}));
+      started.set(
+        sid,
+        (async () => {
+          const who = await identity(sid);
+          await sessionStart(sid, who, takeMark(sid, who, { persistedOnly: true }));
+        })().catch(() => {}),
+      );
     }
     return started.get(sid);
   }
@@ -299,7 +339,10 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
         break;
       case 'session.execution.succeeded':
         lifecycle.set(sid, 'idle');
-        enqueueTurnEnd(sid, { receivedAt: now(), hostCreatedAt: typeof ev.created === 'number' ? ev.created : undefined });
+        enqueueTurnEnd(sid, {
+          receivedAt: now(),
+          hostCreatedAt: typeof ev.created === 'number' ? ev.created : undefined,
+        });
         break;
       case 'session.execution.failed':
       case 'session.execution.interrupted':
@@ -356,8 +399,10 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
       } else {
         // A failed call's content cannot be appended: notices go to `system` at the next context
         // call, and context is reported as not delivered.
-        const lost = typeof merged.context === 'string'
-          ? `hook-runtime: the context from tool.after of the failed ${input.tool} call was not delivered.` : null;
+        const lost =
+          typeof merged.context === 'string'
+            ? `hook-runtime: the context from tool.after of the failed ${input.tool} call was not delivered.`
+            : null;
         queueSystem(input.sessionID, merged.notices, lost);
       }
     } catch {}
@@ -384,14 +429,16 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
   });
 
   const controller = new AbortController();
-  detached((async () => {
-    for await (const ev of ctx.event.subscribe({ signal: controller.signal })) {
-      if (disposed) break;
-      try {
-        onEvent(ev);
-      } catch {}
-    }
-  })());
+  detached(
+    (async () => {
+      for await (const ev of ctx.event.subscribe({ signal: controller.signal })) {
+        if (disposed) break;
+        try {
+          onEvent(ev);
+        } catch {}
+      }
+    })(),
+  );
 
   // Stops dispatching and returns within 1 s. The supervisor keeps killing the running events'
   // process groups in the background and releases their gate locks only once the groups are gone.

@@ -1,3 +1,4 @@
+// Generated from src/hook-runtime/lib/runtime.mts by scripts/build.mts. Do not edit.
 // Dispatch, deadlines, fail-open, result merging, handler loading and proofs (design D2, D3).
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -48,7 +49,9 @@ export function failureNotice(name, event, reason, manual) {
 // A referenced timer (never unref): a handler whose promise never settles cannot let Node exit early.
 function timer(ms) {
   let id;
-  const p = new Promise((resolve) => { id = setTimeout(resolve, Math.max(0, ms)); });
+  const p = new Promise((resolve) => {
+    id = setTimeout(resolve, Math.max(0, ms));
+  });
   return { p, clear: () => clearTimeout(id) };
 }
 
@@ -69,7 +72,8 @@ function validate(result, type) {
   if (result === null || result === undefined) return { kind: null };
   if (!isObject(result)) return { error: 'returned an invalid result' };
   const kinds = KINDS.filter((k) => result[k] !== undefined);
-  if (kinds.length !== 1) return { error: `returned an invalid result (${kinds.length ? kinds.join(' and ') : 'no result kind'})` };
+  if (kinds.length !== 1)
+    return { error: `returned an invalid result (${kinds.length ? kinds.join(' and ') : 'no result kind'})` };
   const [kind] = kinds;
   if (!RESULT_KINDS[type].includes(kind)) return { error: `returned ${kind}, which ${type} does not accept` };
   if (typeof result[kind] !== 'string') return { error: `returned a ${kind} that is not text` };
@@ -99,7 +103,9 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
   }
 
   async function proof(name, ctx = {}) {
-    const owner = sorted.find((h) => isObject(h.proofs) && Object.hasOwn(h.proofs, name) && typeof h.proofs[name] === 'function');
+    const owner = sorted.find(
+      (h) => isObject(h.proofs) && Object.hasOwn(h.proofs, name) && typeof h.proofs[name] === 'function',
+    );
     if (!owner) return `proof ${name} is not registered`;
     const deadline = ctx.deadline ?? now() + DEFAULT_DEADLINE_MS;
     let config = {};
@@ -112,7 +118,11 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
     if (ctx.signal?.aborted) forward();
     else ctx.signal?.addEventListener('abort', forward, { once: true });
     const ownerCtx = {
-      ...ctx, repoRoot, host, deadline, config,
+      ...ctx,
+      repoRoot,
+      host,
+      deadline,
+      config,
       signal: controller.signal,
       trace() {},
     };
@@ -145,12 +155,23 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
     let open = true;
     let traced;
     const ctx = {
-      repoRoot, host, sessionId: opts.sessionId, agentId: opts.agentId, deadline,
-      signal: controller.signal, stateDir: undefined, config: config[toolOf(handler)] ?? {},
+      repoRoot,
+      host,
+      sessionId: opts.sessionId,
+      agentId: opts.agentId,
+      deadline,
+      signal: controller.signal,
+      stateDir: undefined,
+      config: config[toolOf(handler)] ?? {},
       proof: (name) => proof(name, ctx),
-      trace: (outcome) => { if (open) traced = String(outcome); },
+      trace: (outcome) => {
+        if (open) traced = String(outcome);
+      },
     };
-    const fail = (reason) => ({ failure: failureNotice(handler.name, type, reason, handler.manual), outcome: 'failed' });
+    const fail = (reason) => ({
+      failure: failureNotice(handler.name, type, reason, handler.manual),
+      outcome: 'failed',
+    });
 
     let pending;
     try {
@@ -159,7 +180,10 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
     } catch (err) {
       pending = Promise.reject(err);
     }
-    const settled = pending.then((value) => ({ ok: true, value }), (error) => ({ ok: false, error }));
+    const settled = pending.then(
+      (value) => ({ ok: true, value }),
+      (error) => ({ ok: false, error }),
+    );
     const t = timer(deadline - now());
     const first = await Promise.race([settled, t.p.then(() => null)]);
     t.clear();
@@ -176,7 +200,9 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
       });
       return {
         ...fail(`timed out after ${Math.max(0, Math.round(deadline - t0))} ms`),
-        cleanup, cleanupDeadline, spent: deadline >= workDeadline,
+        cleanup,
+        cleanupDeadline,
+        spent: deadline >= workDeadline,
       };
     }
     if (!first.ok) return fail(errText(first.error));
@@ -221,7 +247,12 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
         continue;
       }
       const r = await runHandler(handler, event, {
-        workDeadline, deadlines, config, hostDeadline, sessionId, agentId,
+        workDeadline,
+        deadlines,
+        config,
+        hostDeadline,
+        sessionId,
+        agentId,
       });
       outcomes[handler.name] = r.outcome;
       if (r.failure) notices.push(r.failure);
@@ -243,8 +274,14 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
     if (texts.deny.length) out.deny = texts.deny.join(JOIN);
     if (texts.block.length) out.block = texts.block.join(JOIN);
     if (texts.context.length && !out.deny) out.context = texts.context.join(JOIN);
-    if (acks.length) out.ack = async () => { for (const fn of acks) await callQuietly(fn); };
-    if (releases.length) out.release = async () => { for (const fn of releases) await callQuietly(fn); };
+    if (acks.length)
+      out.ack = async () => {
+        for (const fn of acks) await callQuietly(fn);
+      };
+    if (releases.length)
+      out.release = async () => {
+        for (const fn of releases) await callQuietly(fn);
+      };
     return out;
   }
 
@@ -252,30 +289,35 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
 }
 
 export async function loadHandlers(repoRoot, { loadBudgetMs = LOAD_BUDGET_MS } = {}) {
-  const notLoaded = (name, reason) => `hook ${name} was not loaded: ${String(reason).replace(/[.\s]+$/, '')}. Do this step by hand.`;
+  const notLoaded = (name, reason) =>
+    `hook ${name} was not loaded: ${String(reason).replace(/[.\s]+$/, '')}. Do this step by hand.`;
   let lock;
   try {
     lock = readLock(repoRoot);
   } catch (err) {
     return { handlers: [], problems: [notLoaded('hook-runtime', errText(err))] };
   }
-  const results = await Promise.all(Object.keys(lock.tools).sort().map(async (name) => {
-    const toolDir = join(repoRoot, '.agents', 'harness', name);
-    let meta;
-    try {
-      meta = JSON.parse(readFileSync(join(toolDir, 'tool.json'), 'utf8'));
-    } catch (err) {
-      return { problem: notLoaded(name, `cannot read tool.json (${errText(err)})`) };
-    }
-    if (meta?.handler !== true) return null;
-    const issues = checkTool({ toolDir, repoRoot });
-    if (issues.length) return { problem: notLoaded(name, `its copy differs from the lock: ${issues.join('; ')}`) };
-    try {
-      return { handler: await startWorker(toolDir, { loadBudgetMs, tool: name }) };
-    } catch (err) {
-      return { problem: notLoaded(name, errText(err)) };
-    }
-  }));
+  const results = await Promise.all(
+    Object.keys(lock.tools)
+      .sort()
+      .map(async (name) => {
+        const toolDir = join(repoRoot, '.agents', 'harness', name);
+        let meta;
+        try {
+          meta = JSON.parse(readFileSync(join(toolDir, 'tool.json'), 'utf8'));
+        } catch (err) {
+          return { problem: notLoaded(name, `cannot read tool.json (${errText(err)})`) };
+        }
+        if (meta?.handler !== true) return null;
+        const issues = checkTool({ toolDir, repoRoot });
+        if (issues.length) return { problem: notLoaded(name, `its copy differs from the lock: ${issues.join('; ')}`) };
+        try {
+          return { handler: await startWorker(toolDir, { loadBudgetMs, tool: name }) };
+        } catch (err) {
+          return { problem: notLoaded(name, errText(err)) };
+        }
+      }),
+  );
   return {
     handlers: results.filter((r) => r?.handler).map((r) => r.handler),
     problems: results.filter((r) => r?.problem).map((r) => r.problem),
