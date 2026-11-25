@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
@@ -43,6 +43,21 @@ test('an invalid .json file fails the edit run', async () => {
     assert.match(bad.stderr, /bad\.json/);
     const good = await runNode(script, [], { cwd: dir, env: { ...env, VERIFY_FILE: 'good.json' } });
     assert.equal(good.code, 0, good.stderr);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a missing PyYAML fails with the install hint', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'repo-verify-'));
+  try {
+    await mkdir(join(dir, 'bin'));
+    await writeFile(join(dir, 'bin', 'python3'), '#!/bin/sh\nexit 1\n');
+    await chmod(join(dir, 'bin', 'python3'), 0o755);
+    const env = { VERIFY_TRIGGER: 'turn-end', PATH: `${join(dir, 'bin')}:${process.env.PATH}` };
+    const out = await runNode(script, [], { cwd: dir, env });
+    assert.notEqual(out.code, 0);
+    assert.match(out.stderr, /PyYAML is missing: pip install -r requirements-dev\.txt/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

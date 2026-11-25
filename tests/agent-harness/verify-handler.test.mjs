@@ -16,6 +16,7 @@ const vg = (f) => import(pathToFileURL(join(ASSETS.verifyGate, f)).href);
 const handlerMod = await vg('handler.mjs');
 const { createVerifyHandler, failureKey, normalizeTail, runGate } = handlerMod;
 const { acquireGateLock } = await vg('lib/state.mjs');
+const { localLock } = await vg('lib/gate.mjs');
 const { toEvent } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'claude-adapter.mjs')).href);
 const { toToolEvent } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'opencode-adapter.mjs')).href);
 
@@ -559,4 +560,15 @@ test('the edit, run and key functions are injectable', async () => {
   assert.deepEqual(calls, ['edit']);
   assert.deepEqual(r.log(), []);
   assert.ok(readdirSync(r.toolDir).includes('changed.txt'));
+});
+
+test('a busy block ledger says so instead of claiming the limit was reached', async () => {
+  const r = await repo();
+  r.fail();
+  const busyLedger = {
+    acquire: async (dir) => (dir.endsWith('ledger') ? null : localLock.acquire(dir)),
+  };
+  const { result } = await fire(h, r, turnEnd(), { lock: busyLedger });
+  assert.match(result.context, /block counter was busy/);
+  assert.doesNotMatch(result.context, /still failing after/);
 });

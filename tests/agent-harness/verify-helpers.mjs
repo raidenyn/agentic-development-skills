@@ -71,7 +71,7 @@ export async function verifyRepo({ files = {}, config = {}, commit = true } = {}
 // Calls a handler in process with a worker-like context (directSpawn as `spawn`, no `lock`, so the
 // gate falls back to the local gate lock).
 export async function fire(handler, r, event, {
-  agentId = 'main', sessionId = 's1', host = 'claude-code', budgetMs = 60000, signal, spawn = directSpawn,
+  agentId = 'main', sessionId = 's1', host = 'claude-code', budgetMs = 60000, signal, spawn = directSpawn, lock,
 } = {}) {
   const traced = [];
   const ctx = {
@@ -83,6 +83,7 @@ export async function fire(handler, r, event, {
     trace: (o) => traced.push(o),
     proof: async () => null,
     spawn,
+    ...(lock ? { lock } : {}),
   };
   const result = await handler.handle(structuredClone(event), ctx);
   return { result, traced, ctx };

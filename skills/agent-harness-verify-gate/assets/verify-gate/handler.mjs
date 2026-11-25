@@ -241,6 +241,9 @@ async function turnEnd(event, ctx, deps, trace) {
     return { context: `verify: ${cmd} fails while ${background} subagent(s) still run; verification runs again at the next turn end. ${body(r)}` };
   }
   const c = r.charge;
+  if (c?.busy) {
+    return { context: `verify: ${cmd} failed, and the block counter was busy, so this turn end is not blocked. ${MANUAL}\n\n${cmd} failed: ${body(r)}` };
+  }
   if (!c?.charged) {
     return { context: `verify: still failing after ${c?.limit ?? max} blocks; continuing. ${MANUAL}\n\n${cmd} failed: ${body(r)}` };
   }

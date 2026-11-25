@@ -7,7 +7,7 @@ description: "Use when wiring agent hooks for Claude Code and OpenCode into a re
 
 A small Node runtime that is copied into a repo, under `.agents/harness/hook-runtime/`, and wired to the hooks of Claude Code and OpenCode. It turns each host's hook calls into six host-neutral events and runs the installed handlers on them. The handlers never see a host API. The first handler is the verify gate (skill `agent-harness-verify-gate`).
 
-Before starting an agent in a clone you do not trust, read its `.claude/settings.json`, `opencode.json` and `.agents/harness/`: these hooks run code on every tool call.
+Before starting an agent in a clone you do not trust, read its `.claude/settings.json`, `opencode.json`, `.agents/harness.json` and `.agents/harness/`, and the scripts the `verify-gate.command` in `.agents/harness.json` runs: these hooks run code on every tool call, and that command runs on the first edit and at every turn end.
 
 ## When to use
 
@@ -131,6 +131,7 @@ Host behaviour to know when you write a handler:
 - **Subagents run in the background on both hosts.** A root turn end can come while a subagent still edits, which is what `background` is for. Both hosts start a new root turn when the subagent finishes.
 - **On OpenCode, the parent is handed every round of a blocked subagent's work.** That includes the failing round before the fix, and the round after it.
 - **On OpenCode, a superseded turn-end result is not delivered.** If a later turn has already started when the result is ready, `release` is called instead.
+- **One-shot `opencode run --standalone` gets no turn-end checks or blocks.** The process exits when the session goes idle, which kills the detached turn-end check, and the turn ends unverified. Use the long-lived server (`opencode serve` or the TUI), or run `node .agents/harness/verify-gate/cli.mjs run` afterwards.
 - **On OpenCode, context after a failed tool call is not delivered.** The model gets a notice that it was not delivered.
 
 ## Onboard
@@ -153,7 +154,7 @@ Host behaviour to know when you write a handler:
 
 1. **Update.** From the newer skill folder, run `node <skill>/assets/hook-runtime/cli.mjs update --repo <repo>`.
    - It replaces a copy whose files all match its lock, removes files the new version no longer has, rewrites the lock entry and merges the host configs again.
-   - It refuses on an edited, missing or extra file, naming it. Restore the file with `git checkout -- <file>`, or delete the tool folder and its lock entry and install again. There is no override flag.
+   - It refuses on an edited, missing or extra file, naming it. Restore the file with `git checkout -- .agents/harness/<tool>/<file>`, or delete the tool folder and its lock entry and install again. There is no override flag.
    - `install` refuses when a different version is installed, so use `update` for that.
 2. **Review** the diff of `.agents/` and the host configs.
 3. **Check.** Run `node .agents/harness/hook-runtime/cli.mjs check`.
@@ -169,4 +170,4 @@ When you change the tool's files in the skill's own source repo, bump `version` 
 4. Delete the `check` step from CI.
 5. Optionally, delete `<git dir>/agent-harness/`.
 
-Before starting an agent in a clone you do not trust, read its `.claude/settings.json`, `opencode.json` and `.agents/harness/`: these hooks run code on every tool call.
+Before starting an agent in a clone you do not trust, read its `.claude/settings.json`, `opencode.json`, `.agents/harness.json` and `.agents/harness/`, and the scripts the `verify-gate.command` in `.agents/harness.json` runs: these hooks run code on every tool call, and that command runs on the first edit and at every turn end.

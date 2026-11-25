@@ -7,7 +7,7 @@ description: "Use when a repo's verify command should run automatically on agent
 
 A handler for the agent harness hook runtime (skill `agent-harness-hook-runtime`). It runs one command, the repo's verify command, when an agent edits a file, when it ticks a task, and at every turn end. A failing turn end blocks the agent until the command passes, at most three times for the same failure. When nothing changed since the last full pass, nothing runs.
 
-Before starting an agent in a clone you do not trust, read its `.claude/settings.json`, `opencode.json` and `.agents/harness/`: these hooks run code on every tool call.
+Before starting an agent in a clone you do not trust, read its `.claude/settings.json`, `opencode.json`, `.agents/harness.json` and `.agents/harness/`, and the scripts the `verify-gate.command` in `.agents/harness.json` runs: these hooks run code on every tool call, and that command runs on the first edit and at every turn end.
 
 ## When to use
 
@@ -51,9 +51,10 @@ Every trigger first compares the working-tree content key (a git tree id from a 
 - **Turn end.** Every turn end runs a full run with `VERIFY_TRIGGER=turn-end`: the root agent's and each subagent's.
   - **Failure.** A failure returns a block: `verify: <command> failed (attempt n of m). Fix the failure before ending the turn: ...`. The agent continues and fixes it.
   - **The background notice.** When the root agent's turn ends while its subagents still run, a failure is only a notice: `verify: <command> fails while <n> subagent(s) still run; verification runs again at the next turn end.` A subagent may still be changing the tree, so it does not block and is not counted. Both hosts start a new root turn when a subagent finishes, and that turn's end verifies again.
+  - **OpenCode one-shot.** `opencode run --standalone` does not get turn-end checks or blocks: the process exits when the session goes idle and kills the detached check. Use the long-lived server (`opencode serve` or the TUI), or run `node .agents/harness/verify-gate/cli.mjs run` afterwards.
   - **The limit.** At most `maxBlocks` blocks (3 at most) are given per failure and per session. The count is shared by the root agent and its subagents. A failure is identified by the exact argv, the exit status and the output tail, with paths, times, durations and hex ids normalized. A different failure gets its own count.
   - **The backstop.** No session gets more than 10 turn-end blocks in total.
-  - **After a limit.** Each later turn end passes with `verify: still failing after <n> blocks; continuing. Run node .agents/harness/verify-gate/cli.mjs run by hand.` and the tail.
+  - **After a limit.** Each later turn end passes with `verify: still failing after <n> blocks; continuing. Run node .agents/harness/verify-gate/cli.mjs run by hand.` and the tail. `<n>` is the limit that was reached: `maxBlocks` for one failure, or 10 at the backstop.
   - **Where notices go.** On Claude Code, a notice at the root `Stop` is a `systemMessage`, which the user sees and the model does not. On OpenCode it is a message that does not resume the agent.
 - **Full-run pass.** A pass of a task or turn-end run records `pass.json`, but only if the content key is the same before and after the run. A failed full run deletes it.
 - **Contention.** A run that finds another run holding the gate lock waits for it until its own deadline, and then usually finds nothing changed. Only if the deadline passes does it report `verify: verification already running; nothing was checked.`.
@@ -137,7 +138,7 @@ The gate registers the proof `verify-pass`. Another handler calls `context.proof
 
 1. **Update.** From the newer skill folder, run `node <skill>/assets/verify-gate/cli.mjs update --repo <repo>`.
    - It replaces a copy whose files all match its lock, removes files the new version no longer has and rewrites the lock entry.
-   - It refuses on an edited, missing or extra file, naming it. Restore the file with `git checkout -- <file>`, or delete the tool folder and its lock entry and install again. There is no override flag.
+   - It refuses on an edited, missing or extra file, naming it. Restore the file with `git checkout -- .agents/harness/<tool>/<file>`, or delete the tool folder and its lock entry and install again. There is no override flag.
    - `install` refuses when a different version is installed, so use `update` for that.
 2. **Review** the diff of `.agents/`.
 3. **Check.** Run `node .agents/harness/verify-gate/cli.mjs check`.
@@ -153,4 +154,4 @@ When you change the tool's files in the skill's own source repo, bump `version` 
 
 The host configs belong to the hook runtime. Remove them with that skill if no handler is left.
 
-Before starting an agent in a clone you do not trust, read its `.claude/settings.json`, `opencode.json` and `.agents/harness/`: these hooks run code on every tool call.
+Before starting an agent in a clone you do not trust, read its `.claude/settings.json`, `opencode.json`, `.agents/harness.json` and `.agents/harness/`, and the scripts the `verify-gate.command` in `.agents/harness.json` runs: these hooks run code on every tool call, and that command runs on the first edit and at every turn end.

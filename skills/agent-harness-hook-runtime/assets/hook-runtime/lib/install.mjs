@@ -9,7 +9,8 @@ export const DEFAULT_CLAUDE_COMMAND = 'node "$CLAUDE_PROJECT_DIR/.agents/harness
 export const DEFAULT_OPENCODE_PLUGIN = './.agents/harness/hook-runtime/opencode';
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const RESTORE = 'Restore it with `git checkout -- <file>`, or delete the tool folder and its lock entry to reinstall.';
+const RESTORE = 'Restore the file with `git checkout -- .agents/harness/<tool>/<file>`, or delete the tool folder and its lock entry to reinstall.';
+const NO_LOCK = 'Delete the folder to reinstall, or restore the lock entry (`git checkout -- .agents/harness/lock.json`).';
 
 export function sha256File(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
@@ -93,12 +94,12 @@ function planTool({ sourceDir, repoRoot, mode }) {
   const present = listToolFiles(dest);
   if (!entry) {
     if (present.length) {
-      return refuse(`${name}: ${posix.join('.agents/harness', name)} exists but has no lock entry. ${RESTORE}`);
+      return refuse(`${name}: ${posix.join('.agents/harness', name)} exists but has no lock entry. ${NO_LOCK}`);
     }
   } else {
     const problems = checkAgainst(dest, entry.files, present);
     if (problems.length) {
-      return refuse(...problems.map((p) => `${name}: ${p}`), RESTORE);
+      return refuse(...problems.map((p) => `${name}: ${p}`), RESTORE.replace('<tool>', name));
     }
     if (entry.version !== version && mode !== 'update') {
       return refuse(`${name} ${entry.version} is installed; use update to install ${version}.`);

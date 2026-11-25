@@ -34,7 +34,19 @@ function jsonProblem(relPath) {
   }
 }
 
+// The Python checks import PyYAML; without it the failure should say how to fix the environment.
+function pyYamlProblem(argv) {
+  if (argv[0] !== 'python3' || argv.includes('py_compile')) return null;
+  const probe = spawnSync('python3', ['-c', 'import yaml'], { stdio: 'ignore' });
+  return probe.status === 0 ? null : 'PyYAML is missing: pip install -r requirements-dev.txt';
+}
+
 function run(argv) {
+  const missing = pyYamlProblem(argv);
+  if (missing) {
+    console.error(`verify: ${missing}`);
+    return false;
+  }
   const result = spawnSync(argv[0], argv.slice(1), { stdio: 'inherit' });
   if (result.status === 0) return true;
   const why = result.error ? result.error.message : result.signal ? `signal ${result.signal}` : `exit ${result.status}`;
