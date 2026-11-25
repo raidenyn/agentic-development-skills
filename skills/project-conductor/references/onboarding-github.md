@@ -147,10 +147,10 @@ Read the field back: every old option keeps its id, and the four names are there
 
 ### Read
 
-Read each file from a ref: the default branch, or a commit SHA. The raw media type returns the file's exact bytes. Create the folders of the run first:
+Read each file from a ref: the default branch, or a commit SHA. The raw media type returns the file's exact bytes. Create the folders of the run first, and `<work>/<sha>` once the SHA is known (below). `mkdir -p` also makes the nested folders of a default branch name with a `/`:
 
 ```bash
-mkdir -p <work>/<default> <work>/<sha> <work>/planned <work>/keys
+mkdir -p <work>/<default> <work>/planned <work>/keys
 # <path> is .agents/harness.json, .agents/hooked-rules/repo-run-models.md or .agents/hooked-rules/repo-review-models.md
 if gh api -H 'Accept: application/vnd.github.raw+json' \
      "repos/<repo>/contents/<path>?ref=<ref>" > <work>/<ref>/<file> 2> <work>/err; then
@@ -162,11 +162,13 @@ else
 fi
 ```
 
-Read all three from `ref=<default>`, and from the onboarding branch when it exists:
+Read all three from `ref=<default>`, and from the onboarding branch when it exists. Read the branch by its head SHA, never by its name (the name holds a `/`, and the head may move between reads):
 
 ```bash
 gh api repos/<repo>/git/ref/heads/chore/project-conductor-onboarding --jq .object.sha   # 404: no branch
 ```
+
+Which SHA to use is decided in "Compare with the branch and its pull request" below; then `mkdir -p <work>/<sha>` and read the three files with `ref=<sha>`.
 
 ### The harness key
 
