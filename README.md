@@ -8,6 +8,8 @@ Each release publishes versioned catalogs to [GitHub Pages](https://raidenyn.git
 
 | Skill | What it does |
 | --- | --- |
+| [`agent-harness-hook-runtime`](skills/agent-harness-hook-runtime/SKILL.md) | Copy a small Node hook runtime into a repo and wire it to Claude Code and OpenCode hooks. |
+| [`agent-harness-verify-gate`](skills/agent-harness-verify-gate/SKILL.md) | Run the repo's verify command on edit, ticked task and turn end, and block the agent while it fails. |
 | [`feature-rfc`](skills/feature-rfc/SKILL.md) | Write and review a feature RFC: a system-level design with milestones and shared contracts, approved before the work is split into tasks, OpenSpec changes and PRs. An accepted RFC is frozen and archived, and a later change is a new RFC. |
 | [`harness-audit`](skills/harness-audit/SKILL.md) | Read-only audit of a repo's agentic-coding harness (AGENTS.md, specs, verify command, hooks, permissions, sandbox, evals). Walks a 57-item checklist and returns a prioritized TODO table in phases. |
 | [`milestone-breakdown`](skills/milestone-breakdown/SKILL.md) | Split one milestone of an accepted feature RFC into PR-sized tasks for coding agents: slice vertically, size for review, handle gaps in the RFC, check dependencies and coverage, then reconcile every task with the merged code before it starts, keep the remaining tasks current and close the milestone. |

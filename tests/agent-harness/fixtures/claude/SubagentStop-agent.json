@@ -1,0 +1,27 @@
+{
+  "session_id": "539874d2-8669-48be-9f0b-2c9b7a5b2153",
+  "transcript_path": "/HOME/.claude/projects/SESSION.jsonl",
+  "cwd": "/REPO",
+  "scratchpad_dir": "/SCRATCH",
+  "prompt_id": "2974008e-f87b-44cc-b847-2936169ccb13",
+  "permission_mode": "bypassPermissions",
+  "agent_id": "acce120c0d6e8559b",
+  "agent_type": "general-purpose",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_transcript_path": "/HOME/.claude/projects/SESSION.jsonl",
+  "last_assistant_message": "The echo ran, and `notes2.md` was written with one line (`from-subagent`) at `/REPO/notes2.md`.\n\nHARNESS lines I saw:\n\n1. From the grep of the scratchpad `cc-spike` directory, in `/REPO/.agents/harness/hook-runtime/claude.mjs`:\n   - Line 10: `if (ev === \"PreToolUse\" && JSON.stringify(p.tool_input || {}).includes(\"HARNESS_DENY\")) out = { hookSpecificOutput: { hookEventName: \"PreToolUse\", permissionDecision: \"deny\", permissionDecisionReason: \"HARNESS_DENIED by spike hook\" } }`\n   - Line 11: `if (ev === \"PostToolUse\") out = { hookSpecificOutput: { hookEventName: \"PostToolUse\", additionalContext: \u2026",
+  "background_tasks": [
+    {
+      "id": "acce120c0d6e8559b",
+      "type": "subagent",
+      "status": "running",
+      "description": "Subagent harness spike run",
+      "agent_type": "general-purpose"
+    }
+  ],
+  "session_crons": []
+}

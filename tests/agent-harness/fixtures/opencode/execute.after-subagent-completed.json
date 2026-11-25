@@ -1,0 +1,31 @@
+{
+  "tool": "subagent",
+  "codemode": false,
+  "sessionID": "ses_dedfe7299ffexvwC0QDPgTiOoW",
+  "agent": "build",
+  "messageID": "msg_21201b03c001yNV2e8n94oe9GZ",
+  "id": "call_537419fb3bf6422cbb27cd55a044962c",
+  "input": {
+    "agent": "general",
+    "description": "Run delegated shell task",
+    "prompt": "Run the shell command echo from-subagent, then append one line to notes2.md, then report any line containing HARNESS from the tool results."
+  },
+  "status": "completed",
+  "result": {
+    "output": {
+      "sessionID": "ses_dedfe4625ffe7X3k5Q6cF7eOyd",
+      "status": "running",
+      "output": "The subagent is working in the background (sessionID: ses_dedfe4625ffe7X3k5Q6cF7eOyd). You will receive a <background-result kind=\"subagent\"> message when it goes idle, and again after each later round of work.\nDO NOT sleep, poll, proactively check on its progress, or duplicate this subagent's work.\nWork on non-overlapping tasks, or briefly tell the user what you launched and end your response.\nTo\u2026"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "The subagent is working in the background (sessionID: ses_dedfe4625ffe7X3k5Q6cF7eOyd). You will receive a <background-result kind=\"subagent\"> message when it goes idle, and again after each later round of work.\nDO NOT sleep, poll, proactively check on its progress, or duplicate this subagent's work.\nWork on non-overlapping tasks, or briefly tell the user what you launched and end your response.\nTo\u2026"
+      }
+    ],
+    "metadata": {
+      "sessionID": "ses_dedfe4625ffe7X3k5Q6cF7eOyd",
+      "status": "running"
+    }
+  }
+}

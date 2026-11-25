@@ -16,4 +16,6 @@ This repo publishes Agent Skills. Each skill lives in `skills/<name>/` and is li
 0. Run `python3 scripts/skills.py install-hooks` once per clone; commits and PR titles must follow Conventional Commits (`feat:`, `fix:`, `docs:` …).
 1. `python3 scripts/skills.py new <name> "<description>"`
 2. Write the skill. Add it to the Skills table in `README.md`.
-3. `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'` and `npm test` must all pass (`npm ci` first).
+3. `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'` and `npm test` must all pass (`npm ci` and `pip install -r requirements-dev.txt` first).
+
+Agent hooks run `node scripts/verify.mjs` on edits, ticked tasks and turn end (`.agents/harness/`); run it by hand with `node .agents/harness/verify-gate/cli.mjs run`.

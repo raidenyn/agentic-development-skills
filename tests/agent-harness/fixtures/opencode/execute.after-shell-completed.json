@@ -1,0 +1,30 @@
+{
+  "tool": "shell",
+  "codemode": false,
+  "sessionID": "ses_dedff3bd3ffe5JNm4SZRSafWUU",
+  "agent": "build",
+  "messageID": "msg_21200e20b001EMKbBR8YEXcShR",
+  "id": "call_94ad0980836748069f5ea1dfd4129aa7",
+  "input": {
+    "command": "echo hi"
+  },
+  "status": "completed",
+  "result": {
+    "output": {
+      "exitCode": 0,
+      "wallTimeSeconds": 0.003,
+      "output": "hi\n"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "hi\n"
+      }
+    ],
+    "metadata": {
+      "status": "completed",
+      "truncated": false,
+      "exit": 0
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "session_id": "539874d2-8669-48be-9f0b-2c9b7a5b2153",
+  "transcript_path": "/HOME/.claude/projects/SESSION.jsonl",
+  "cwd": "/REPO",
+  "scratchpad_dir": "/SCRATCH",
+  "prompt_id": "2974008e-f87b-44cc-b847-2936169ccb13",
+  "permission_mode": "bypassPermissions",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "Do these steps in order using tools: 1) run the Bash command: echo HARNESS_DENY ; 2) run Bash: echo hi ; 3) edit README.md to say 'hello world' with the Edit tool; 4) use the Task tool to start a general-purpose subagent with prompt 'Run Bash echo from-subagent, then write notes2.md with one line, then report every line containing HARNESS you saw.' 5) Finally report every HARNESS marker you saw and which step it came from."
+}

@@ -1,0 +1,28 @@
+{
+  "session_id": "539874d2-8669-48be-9f0b-2c9b7a5b2153",
+  "transcript_path": "/HOME/.claude/projects/SESSION.jsonl",
+  "cwd": "/REPO",
+  "scratchpad_dir": "/SCRATCH",
+  "prompt_id": "2974008e-f87b-44cc-b847-2936169ccb13",
+  "permission_mode": "bypassPermissions",
+  "agent_id": "acce120c0d6e8559b",
+  "agent_type": "general-purpose",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo from-subagent; grep -rn \"HARNESS\" /REPO 2>/dev/null; echo \"exit=$?\"",
+    "description": "Echo marker and search working directory for HARNESS"
+  },
+  "tool_response": {
+    "stdout": "from-subagent\n/REPO/.agents/harness/hook-runtime/claude.mjs:10:if (ev === \"PreToolUse\" && JSON.stringify(p.tool_input || {}).includes(\"HARNESS_DENY\")) out = { hookSpecificOutput: { hookEventName: \"PreToolUse\", permissionDecision: \"deny\", permissionDecisionReason: \"HARNESS_DENIED by spike hook\" } }\n/REPO/.agents/harness/hook-runtime/claude.mjs:11:if (ev === \"PostToolUse\") out = { hookSpecificOutput: { hookEventName: \"PostToolUse\", additionalContext: \"HARNESS_AFTER agent=\" + (p.agent_id || \"main\") } }\n/REPO/.agents/harness/hook-runtime/claude.mjs:13:if (ev === \"Stop\" && process.env.SPIKE_BLOCK &\u2026",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  },
+  "tool_use_id": "toolu_019qPqwmvoMrXDK8uaGivpGE",
+  "duration_ms": 26
+}

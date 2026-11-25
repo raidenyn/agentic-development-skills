@@ -1,0 +1,32 @@
+{
+  "tool": "patch",
+  "codemode": false,
+  "sessionID": "ses_dedff3bd3ffe5JNm4SZRSafWUU",
+  "agent": "build",
+  "messageID": "msg_21200fa7f001y9x0RYpoSiwTVf",
+  "id": "call_b0a95ac25f784d9bbcf8d57004c373c1",
+  "input": {
+    "patchText": "*** Begin Patch\n*** Update File: README.md\n@@\n-hello\n+hello world\n*** End Patch\n"
+  },
+  "status": "completed",
+  "result": {
+    "output": {},
+    "content": [
+      {
+        "type": "text",
+        "text": "Success. Updated the following files:\nM README.md"
+      }
+    ],
+    "metadata": {
+      "files": [
+        {
+          "file": "README.md",
+          "patch": "Index: /REPO/README.md\n===================================================================\n--- /REPO/REA\u2026",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 1
+        }
+      ]
+    }
+  }
+}

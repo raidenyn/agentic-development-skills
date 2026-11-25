@@ -1,0 +1,109 @@
+## ADDED Requirements
+
+### Requirement: Skill names and published assets
+The repository SHALL publish the skills `agent-harness-hook-runtime` and `agent-harness-verify-gate`, each with its tool under `skills/<skill>/assets/<tool>/` (`hook-runtime` and `verify-gate`), a marketplace entry and a README row. The Pages build SHALL include every file under each skill's `assets/` in the OpenCode catalog and on disk.
+
+#### Scenario: Catalog carries the assets
+- **WHEN** `scripts/skills.py build-pages` runs on this repository
+- **THEN** `opencode/index.json` lists both skills, and every file under their `assets/` appears in the skill's `files` and in the output folder
+
+### Requirement: Dependency-free Node tools
+Copied tool code SHALL be plain `.mjs` (or `.json` data), with no npm dependencies, and SHALL run on Node 22.0.0 or newer. Tests for the tools SHALL live outside the skill folders.
+
+#### Scenario: Node 22.0.0
+- **WHEN** CI runs `node --test "tests/agent-harness/*.test.mjs"` on Node 22.0.0
+- **THEN** every test passes
+
+### Requirement: Vendored layout
+`install` SHALL copy a tool into `.agents/harness/<tool>/` and record, in `.agents/harness/lock.json` under the tool's name, the tool version from its `tool.json` and the sha256 of each copied file. Settings SHALL live in `.agents/harness.json`, one top-level key per tool. A tool SHALL ignore other tools' keys and SHALL reject an unknown key in its own section, naming it.
+
+#### Scenario: Fresh install of the hook runtime
+- **WHEN** `hook-runtime` `install` runs in a git repo with no `.agents/harness/`
+- **THEN** the tool folder, its lock entry, its config section and both host configs exist, and `check` passes
+
+#### Scenario: Fresh install of the verify gate
+- **WHEN** `verify-gate` `install` runs after `hook-runtime`
+- **THEN** the tool folder, its lock entry and a `{"command": []}` section exist, and `check` fails with "set verify-gate.command" until the command is set
+
+#### Scenario: Refusal changes nothing
+- **WHEN** `install` or `update` refuses (an edited copy, a JSONC host config, an invalid `.agents/harness.json`)
+- **THEN** no file in the repo has changed
+
+#### Scenario: Unknown own key
+- **WHEN** `.agents/harness.json` has `"verify-gate": {"command": ["true"], "colour": 1}` and a key `"other-tool": {"x": 1}`
+- **THEN** `verify-gate` `check` fails naming `colour`, and says nothing about `other-tool`
+
+### Requirement: Repeated install and edited copies
+A repeated `install` of the same version with unchanged copied files SHALL change nothing and exit 0. `install` and `update` SHALL refuse to overwrite a copied file whose content differs from the lock, naming the file. There SHALL be no override flag; the message SHALL say how to restore the file (`git checkout -- .agents/harness/<tool>/<file>`) or reinstall (delete the tool folder and its lock entry). `install` SHALL refuse when a different version is installed and point to `update`.
+
+#### Scenario: Repeated install
+- **WHEN** `install` runs twice
+- **THEN** the second run exits 0 and `git status` shows no change
+
+#### Scenario: Edited copy
+- **WHEN** a copied file was edited in the repo and `update` runs
+- **THEN** `update` exits non-zero naming that file and changes nothing
+
+### Requirement: Update from an older version
+`update` SHALL replace an installed copy of another version whose files all match its lock. It SHALL add new files, remove files the new version no longer has, and rewrite the lock entry.
+
+#### Scenario: Older version
+- **WHEN** a repo has version 0.1.0 installed and `update` runs from version 0.2.0 with one file renamed
+- **THEN** the folder matches 0.2.0 exactly, the old file is gone, and the lock records 0.2.0
+
+### Requirement: Check
+`check`, run from the copied folder, SHALL exit non-zero when any copied file is missing, extra or differs from the lock, when the tool's config section has an unknown key, lacks a required value or has an invalid value, or, for `verify-gate`, when `hook-runtime` is not installed. Otherwise it SHALL exit 0. Each target repo's CI SHALL run `check` for every installed tool.
+
+#### Scenario: Differing file
+- **WHEN** one byte of `.agents/harness/verify-gate/handler.mjs` changes
+- **THEN** `check` exits non-zero naming that file
+
+### Requirement: Host config merge
+`hook-runtime` `install` and `update` SHALL add the runtime's entries to `.claude/settings.json` (one hook entry without a `matcher` per mapped Claude Code event, running the `claude.mjs` command) and to `opencode.json` (the plugin folder in `plugins`). They SHALL create either file if absent, preserve every foreign key and entry unchanged and in order, and never add a duplicate entry. They SHALL refuse to rewrite a file they cannot parse as plain JSON, printing the entry to add by hand.
+
+#### Scenario: Foreign entries kept
+- **WHEN** `.claude/settings.json` already has a `PreToolUse` hook of another tool and an `enabledPlugins` key
+- **THEN** after install both are unchanged and the runtime's entry is added once
+
+#### Scenario: Entries and timeouts
+- **WHEN** `hook-runtime` `install` runs in a repo without `.claude/settings.json`
+- **THEN** each of the eight mapped events has one entry without a `matcher`, with a timeout of 1800 seconds for `PostToolUse`, `PostToolUseFailure`, `Stop` and `SubagentStop` and 10 seconds for the others
+
+#### Scenario: Install twice keeps one entry
+- **WHEN** `hook-runtime` `install` runs twice
+- **THEN** each host config contains the runtime's entry exactly once
+
+### Requirement: Verify gate install order
+`verify-gate` `install` SHALL refuse until `hook-runtime` is installed, and SHALL NOT touch host configs.
+
+#### Scenario: Runtime missing
+- **WHEN** `verify-gate` `install` runs in a repo without `hook-runtime` in the lock
+- **THEN** it exits non-zero naming `agent-harness-hook-runtime`, and changes nothing
+
+### Requirement: Onboard and Update sections with the untrusted-checkout warning
+Each of the two skills SHALL have an Onboard section (run `install`, set the config values that need judgement, add `check` to CI, verify live) and an Update section (run `update`, review the diff, run `check`). Each SHALL carry the warning to read a checkout's hook config (`.claude/settings.json`, `opencode.json`, `.agents/harness.json`, `.agents/harness/`) and the scripts that `verify-gate.command` runs before starting an agent in an untrusted clone.
+
+#### Scenario: Warning present
+- **WHEN** either SKILL.md is read
+- **THEN** it contains the untrusted-checkout warning and both sections
+
+### Requirement: Guidance for a fast command
+The verify gate skill SHALL guide the agent to make the command fast: the test runner's related-test support first, and a hand-built mapping only where the stack has none.
+
+#### Scenario: Guidance present
+- **WHEN** the verify gate SKILL.md is read
+- **THEN** it names related-test support first and a hand-built mapping as the fallback
+
+### Requirement: Vendored copy parity
+This repository SHALL fail its tests when its vendored copy of a tool differs from that tool's assets.
+
+#### Scenario: Drifted copy
+- **WHEN** a file under `skills/agent-harness-verify-gate/assets/verify-gate/` changes and `.agents/harness/verify-gate/` is not updated
+- **THEN** the test fails with "run update"
+
+### Requirement: This repository is onboarded
+This repository SHALL have both tools installed from its own skills, a `verify-gate.command` of `node scripts/verify.mjs`, host configs for Claude Code and OpenCode, and CI steps running both tools' `check` and the harness tests on Node 22.
+
+#### Scenario: CI check
+- **WHEN** the validate workflow runs on a pull request
+- **THEN** it runs `check` for `hook-runtime` and `verify-gate` and fails if either fails

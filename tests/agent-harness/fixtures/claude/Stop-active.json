@@ -1,0 +1,24 @@
+{
+  "session_id": "539874d2-8669-48be-9f0b-2c9b7a5b2153",
+  "transcript_path": "/HOME/.claude/projects/SESSION.jsonl",
+  "cwd": "/REPO",
+  "scratchpad_dir": "/SCRATCH",
+  "prompt_id": "2974008e-f87b-44cc-b847-2936169ccb13",
+  "permission_mode": "bypassPermissions",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "Stop",
+  "stop_hook_active": true,
+  "last_assistant_message": "BLOCKSEEN",
+  "background_tasks": [
+    {
+      "id": "acce120c0d6e8559b",
+      "type": "subagent",
+      "status": "running",
+      "description": "Subagent harness spike run",
+      "agent_type": "general-purpose"
+    }
+  ],
+  "session_crons": []
+}

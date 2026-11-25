@@ -1,0 +1,11 @@
+{
+  "tool": "shell",
+  "codemode": false,
+  "sessionID": "ses_dedfe4625ffe7X3k5Q6cF7eOyd",
+  "agent": "general",
+  "messageID": "msg_21201cabc0010Ty2auFmdq2jzK",
+  "id": "call_ef58dc9723ad439bbe69c6e4db4319ff",
+  "input": {
+    "command": "echo from-subagent"
+  }
+}

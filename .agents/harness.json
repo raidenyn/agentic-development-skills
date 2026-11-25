@@ -1,0 +1,7 @@
+{
+  "hook-runtime": {},
+  "verify-gate": {
+    "command": ["node", "scripts/verify.mjs"],
+    "base": "origin/main"
+  }
+}
