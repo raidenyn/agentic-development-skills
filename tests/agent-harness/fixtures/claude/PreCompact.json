@@ -1,0 +1,10 @@
+{
+  "session_id": "539874d2-8669-48be-9f0b-2c9b7a5b2153",
+  "transcript_path": "/HOME/.claude/projects/SESSION.jsonl",
+  "cwd": "/REPO",
+  "scratchpad_dir": "/SCRATCH",
+  "prompt_id": "8a62cea1-848f-4f9b-9b63-ce9742fefb8e",
+  "hook_event_name": "PreCompact",
+  "trigger": "manual",
+  "custom_instructions": null
+}

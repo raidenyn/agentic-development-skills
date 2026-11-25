@@ -1,0 +1,24 @@
+{"ms": 0, "kind": "prompt", "v": {"sessionID": "ses_dedb11e4dffeWmS3tHmrm5yJHd", "text": "Use the subagent tool to start a general subagent with promp"}}
+{"ms": 15, "kind": "session.inbox.enqueued", "v": {"id": "ses_dedb11e4dffeWmS3tHmrm5yJHd", "parent": null}}
+{"ms": 31, "kind": "session.execution.started", "v": {"id": "ses_dedb11e4dffeWmS3tHmrm5yJHd", "parent": null}}
+{"ms": 1552, "kind": "session.inbox.delivered", "v": {"id": "ses_dedb11e4dffeWmS3tHmrm5yJHd", "parent": null}}
+{"ms": 3591, "kind": "session.created", "v": {"id": "ses_dedb1018bffeKNLgIF1C4DzbB6", "parent": "ses_dedb11e4dffeWmS3tHmrm5yJHd"}}
+{"ms": 3608, "kind": "prompt", "v": {"sessionID": "ses_dedb1018bffeKNLgIF1C4DzbB6", "text": "You are a subagent spawned by another session.\nWrite the lin"}}
+{"ms": 3620, "kind": "session.inbox.enqueued", "v": {"id": "ses_dedb1018bffeKNLgIF1C4DzbB6", "parent": "ses_dedb11e4dffeWmS3tHmrm5yJHd"}}
+{"ms": 3728, "kind": "session.execution.started", "v": {"id": "ses_dedb1018bffeKNLgIF1C4DzbB6", "parent": "ses_dedb11e4dffeWmS3tHmrm5yJHd"}}
+{"ms": 3731, "kind": "session.inbox.delivered", "v": {"id": "ses_dedb1018bffeKNLgIF1C4DzbB6", "parent": "ses_dedb11e4dffeWmS3tHmrm5yJHd"}}
+{"ms": 6686, "kind": "session.execution.succeeded", "v": {"id": "ses_dedb11e4dffeWmS3tHmrm5yJHd", "parent": null}}
+{"ms": 13493, "kind": "session.execution.succeeded", "v": {"id": "ses_dedb1018bffeKNLgIF1C4DzbB6", "parent": "ses_dedb11e4dffeWmS3tHmrm5yJHd"}}
+{"ms": 16501, "kind": "child-block-sent", "v": {"id": "ses_dedb1018bffeKNLgIF1C4DzbB6"}}
+{"ms": 16501, "kind": "session.inbox.enqueued", "v": {"id": "ses_dedb11e4dffeWmS3tHmrm5yJHd", "parent": null}}
+{"ms": 16502, "kind": "session.execution.started", "v": {"id": "ses_dedb11e4dffeWmS3tHmrm5yJHd", "parent": null}}
+{"ms": 16502, "kind": "session.inbox.delivered", "v": {"id": "ses_dedb11e4dffeWmS3tHmrm5yJHd", "parent": null}}
+{"ms": 16503, "kind": "session.inbox.enqueued", "v": {"id": "ses_dedb1018bffeKNLgIF1C4DzbB6", "parent": "ses_dedb11e4dffeWmS3tHmrm5yJHd"}}
+{"ms": 16553, "kind": "session.execution.started", "v": {"id": "ses_dedb1018bffeKNLgIF1C4DzbB6", "parent": "ses_dedb11e4dffeWmS3tHmrm5yJHd"}}
+{"ms": 16555, "kind": "session.inbox.delivered", "v": {"id": "ses_dedb1018bffeKNLgIF1C4DzbB6", "parent": "ses_dedb11e4dffeWmS3tHmrm5yJHd"}}
+{"ms": 19377, "kind": "session.execution.succeeded", "v": {"id": "ses_dedb11e4dffeWmS3tHmrm5yJHd", "parent": null}}
+{"ms": 22607, "kind": "session.execution.succeeded", "v": {"id": "ses_dedb1018bffeKNLgIF1C4DzbB6", "parent": "ses_dedb11e4dffeWmS3tHmrm5yJHd"}}
+{"ms": 22607, "kind": "session.inbox.enqueued", "v": {"id": "ses_dedb11e4dffeWmS3tHmrm5yJHd", "parent": null}}
+{"ms": 22675, "kind": "session.execution.started", "v": {"id": "ses_dedb11e4dffeWmS3tHmrm5yJHd", "parent": null}}
+{"ms": 22676, "kind": "session.inbox.delivered", "v": {"id": "ses_dedb11e4dffeWmS3tHmrm5yJHd", "parent": null}}
+{"ms": 26288, "kind": "session.execution.succeeded", "v": {"id": "ses_dedb11e4dffeWmS3tHmrm5yJHd", "parent": null}}

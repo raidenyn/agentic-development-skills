@@ -1,0 +1,10 @@
+{
+  "id": "msg_21202b821001SXA4bRpzwzs8Qv",
+  "sessionID": "ses_dedfe7299ffexvwC0QDPgTiOoW",
+  "time": {
+    "created": 1795598497827
+  },
+  "type": "compaction",
+  "payload": {},
+  "delivery": "steer"
+}

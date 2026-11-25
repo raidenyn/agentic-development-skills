@@ -1,0 +1,18 @@
+{
+  "id": "evt_21202b83d002JIvACxIBh8R64U",
+  "created": 1795598497853,
+  "type": "session.compaction.started",
+  "durable": {
+    "aggregateID": "ses_dedfe7299ffexvwC0QDPgTiOoW",
+    "seq": 84,
+    "version": 1
+  },
+  "location": {
+    "directory": "/REPO"
+  },
+  "data": {
+    "sessionID": "ses_dedfe7299ffexvwC0QDPgTiOoW",
+    "reason": "manual",
+    "inputID": "msg_21202b821001SXA4bRpzwzs8Qv"
+  }
+}

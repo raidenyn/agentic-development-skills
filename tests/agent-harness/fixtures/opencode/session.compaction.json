@@ -1,0 +1,15 @@
+{
+  "sessionID": "ses_dedfe7299ffexvwC0QDPgTiOoW",
+  "model": {
+    "id": "gpt-6.2-sol-fast",
+    "providerID": "openai",
+    "variant": "default"
+  },
+  "system": "<4 items>",
+  "messages": "<16 items>",
+  "options": {
+    "textVerbosity": "low"
+  },
+  "agent": "build",
+  "tools": "<13 items>"
+}

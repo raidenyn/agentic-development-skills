@@ -1,0 +1,187 @@
+## ADDED Requirements
+
+### Requirement: Six normalized events
+The hook runtime SHALL turn host events into exactly six event types: `tool.before`, `tool.after`, `prompt`, `turn.end`, `compact` and `session.start`. Each tool event SHALL carry the tool's raw name, a kind (`shell`, `edit`, `read` or `other`) and its input. An edit event SHALL carry the edited paths relative to the repo root, dropping paths outside it, and a shell event SHALL carry the command.
+
+#### Scenario: Claude Code edit becomes tool.after
+- **WHEN** `claude.mjs` receives a `PostToolUse` payload for the `Edit` tool with `tool_input.file_path` inside the repo
+- **THEN** handlers receive `{type: "tool.after", tool: {kind: "edit"}, files: ["<relative path>"]}`
+
+#### Scenario: Path outside the repo
+- **WHEN** an edit event names a file outside the repo root
+- **THEN** that path is not in `files`
+
+### Requirement: Claude Code entry
+On Claude Code, one command, `node "$CLAUDE_PROJECT_DIR/.agents/harness/hook-runtime/claude.mjs"`, SHALL handle every hook event, dispatching on `hook_event_name`: `PreToolUse` to `tool.before`, `PostToolUse` and `PostToolUseFailure` to `tool.after`, `UserPromptSubmit` to `prompt`, `Stop` and `SubagentStop` to `turn.end`, `PreCompact` to `compact`, and `SessionStart` to `session.start`.
+
+#### Scenario: Failed tool call
+- **WHEN** a `Bash` call changes a file and then exits non-zero, so Claude Code sends `PostToolUseFailure`
+- **THEN** handlers receive `tool.after` for that call
+
+#### Scenario: Compaction source
+- **WHEN** `SessionStart` arrives with `source: "compact"`
+- **THEN** handlers receive `session.start` with `afterCompact: true`
+
+#### Scenario: Compaction's internal agent is not a turn end
+- **WHEN** `claude.mjs` receives a `SubagentStop` with `agent_type: ""`
+- **THEN** no handler is called and the output is empty
+
+### Requirement: OpenCode entry
+On OpenCode, the host SHALL import the plugin `.agents/harness/hook-runtime/opencode/index.mjs`. It SHALL map the `execute.before` and `execute.after` tool hooks, the `prompt` session hook, the `session.execution.succeeded` event (turn end) and the `session.compaction.started` event to the six types, and the first event seen for a session to `session.start`.
+
+#### Scenario: OpenCode turn end becomes turn.end
+- **WHEN** the OpenCode plugin observes a `session.execution.succeeded` event for a session
+- **THEN** handlers subscribed to `turn.end` are called once for that session, detached from the event stream
+
+#### Scenario: First event starts a session
+- **WHEN** the first event the plugin sees for a root session is a `prompt`
+- **THEN** handlers receive `session.start` for that session before the `prompt`
+
+### Requirement: Running subagents
+A `turn.end` SHALL carry `background`, the number of this session's subagents still running. On Claude Code it SHALL be read from a `Stop` payload's `background_tasks`. On OpenCode it SHALL come from each child's own lifecycle events, in arrival order, with the `subagent` launch result used only for a child whose lifecycle has not been seen yet.
+
+#### Scenario: Running subagents are counted
+- **WHEN** a `Stop` payload lists one `background_tasks` entry of type `subagent` with status `running`
+- **THEN** handlers receive `turn.end` with `background: 1`
+
+#### Scenario: A fast child
+- **WHEN** a child's `session.execution.succeeded` is processed before the launch result that reports it running
+- **THEN** the child counts as idle
+
+### Requirement: Handler loading and dispatch
+The runtime SHALL load `handler.mjs` from `.agents/harness/<tool>/` for each tool in `.agents/harness/lock.json` whose `tool.json` declares `"handler": true`. It SHALL skip, with a reported failure, a handler whose copied files do not match the lock. It SHALL call handlers in process, in name order, only for the events they list.
+
+#### Scenario: Tampered handler is not loaded
+- **WHEN** an installed handler file differs from its lock hash
+- **THEN** the runtime does not import it and reports that the tool's copy differs from the lock
+
+### Requirement: Result kinds and merging
+`tool.before` SHALL accept `deny`; `tool.after`, `prompt` and `session.start` SHALL accept `context`; `turn.end` SHALL accept `block` or `context`; `compact` SHALL accept none. An invalid kind SHALL be discarded and reported. When several handlers answer one event, any `deny` SHALL win, and `block` and `context` texts SHALL be joined in handler-name order.
+
+#### Scenario: Two handlers add context
+- **WHEN** two handlers both return `{context}` for one `tool.after`
+- **THEN** the host receives both texts, in handler-name order
+
+#### Scenario: Invalid kind
+- **WHEN** a handler returns `{deny}` at `turn.end`
+- **THEN** nothing is denied and a failure notice names the handler
+
+### Requirement: Handler context
+Every `handle` call SHALL receive the repo root, the host name, the session id, the agent context id (`main` for the root agent, a subagent's own id otherwise), a deadline and an abort signal that fires at it, a state folder unique to (tool, host, session, agent context) under `<git-dir>/agent-harness/`, the tool's config section, `proof(name)`, and `trace(outcome)`.
+
+#### Scenario: Subagent state is separate
+- **WHEN** the root agent and a subagent of the same session trigger the same handler
+- **THEN** the two calls receive different agent context ids and different state folders
+
+### Requirement: Result delivery on Claude Code
+On Claude Code, the runtime SHALL write the host's hook JSON: a `PreToolUse` deny decision, `additionalContext` for context, and `{decision: "block", reason}` for a block. A turn-end notice SHALL be a `systemMessage`, which reaches the user only. It SHALL flush the output and exit 0 on every path. It SHALL call a block result's `ack` after the output is written, and its `release` on any path that does not write it.
+
+#### Scenario: Deny before a command on Claude Code
+- **WHEN** a handler returns `{deny: "no"}` for a `PreToolUse` of `Bash`
+- **THEN** `claude.mjs` prints a `PreToolUse` output whose permission decision is deny with reason `no`, and exits 0
+
+### Requirement: Result delivery on OpenCode
+On OpenCode, the runtime SHALL deny by throwing an `Error` with the text from `execute.before`. It SHALL add context after a completed tool by appending a text item to the result's `content`, and deliver `prompt` and `session.start` context by appending a text item to `system` at the next `context` session hook. It SHALL turn a block into a synthetic message that resumes the session, and SHALL call the block's `ack` after that message is accepted.
+
+#### Scenario: Deny before a command on OpenCode
+- **WHEN** a handler returns `{deny: "no"}` for `execute.before` of `shell`
+- **THEN** the plugin throws an `Error` whose message is `no`, and the command does not run
+
+#### Scenario: Block at turn end on OpenCode
+- **WHEN** a handler returns `{block: "fix it"}` for `turn.end` on OpenCode
+- **THEN** the plugin sends a synthetic message with text `fix it` that resumes the session
+
+### Requirement: OpenCode turn-end slot
+On OpenCode, turn-end work SHALL run detached, one slot per session. Turn ends that arrive while the slot is busy SHALL be queued in order, and each SHALL run. A result whose start generation was overtaken by a newer `session.execution.started` SHALL NOT be delivered, and its `release` SHALL be called.
+
+#### Scenario: A later turn fixes the tree
+- **WHEN** turn A's slow run fails and turn B starts and fixes the tree before A's result is ready
+- **THEN** A's block is not delivered, its `release` is called, and B's run verifies the fixed tree
+
+#### Scenario: Two turn ends during one run
+- **WHEN** turn ends B and C arrive while A's run is in flight
+- **THEN** both run after A, in order, and only a result whose generation is current is delivered
+
+### Requirement: Re-delivery after compaction
+After a compaction, the runtime SHALL dispatch `session.start` with `afterCompact: true` before the model's next request and deliver its context. On OpenCode it SHALL record the compaction in the session's state folder on `session.compaction.ended`, and SHALL dispatch and deliver once, at the next `context` hook call for that session.
+
+#### Scenario: OpenCode re-delivery
+- **WHEN** `session.compaction.ended` arrives for a session and a handler returns `{context: "rule"}` for `session.start` with `afterCompact`
+- **THEN** the next `context` hook call for that session has `rule` appended to `system`, and later calls do not repeat it
+
+### Requirement: Fail open
+When a handler throws, rejects, returns an invalid value or passes its deadline, the host call SHALL proceed as if that handler had returned null. On an event with a model channel, the model SHALL be told which hook failed, on which event, and what to do by hand, using the handler's `manual` text when it has one. On Claude Code, any runtime failure SHALL still exit 0.
+
+#### Scenario: Notice after a failed OpenCode tool
+- **WHEN** a handler throws during `execute.after` of a call whose status is `error`
+- **THEN** the notice is appended to `system` at that session's next `context` hook call
+
+#### Scenario: Handler throws on tool.after
+- **WHEN** a handler throws during `tool.after`
+- **THEN** the tool result reaches the model unchanged plus a line `hook <name> failed on tool.after: <reason>` and the manual instruction
+
+#### Scenario: Failure before a command on Claude Code
+- **WHEN** a handler throws during `PreToolUse`
+- **THEN** `claude.mjs` prints `additionalContext` with the failure notice and no permission decision, and the command runs
+
+#### Scenario: Broken runtime config on Claude Code
+- **WHEN** `.agents/harness.json` is not valid JSON and a `Stop` event arrives
+- **THEN** `claude.mjs` exits 0 without blocking
+
+### Requirement: Handlers in workers under a supervisor
+On both hosts, each handler SHALL run in its own worker thread under the adapter's main thread (the supervisor). The supervisor SHALL terminate a worker whose handler passes its deadline, and start a fresh one for later events. A worker SHALL NOT spawn processes or take the gate lock itself. The supervisor SHALL do both on its behalf, and SHALL kill those processes and release those locks when the worker ends.
+
+#### Scenario: Synchronous loop
+- **WHEN** a handler runs `while (true) {}` before its first `await` during `tool.before`, on either host
+- **THEN** the command runs after the handler's deadline, the failure notice is given where the event has a channel, and the next event is handled by a fresh worker
+
+#### Scenario: Termination during a git write
+- **WHEN** a worker is terminated while its private-index `git add` runs
+- **THEN** no git process keeps running, the gate lock is released, and the next run is not blocked by `index.lock`
+
+### Requirement: Worker messages
+Every message between the supervisor and a worker SHALL carry the worker generation and the request id of its event. Messages from an ended event or a replaced worker SHALL be dropped. A proof request SHALL be answered by the worker of the handler that registered the proof, under the requesting event's deadline.
+
+#### Scenario: Late trace
+- **WHEN** a terminated event's worker posts a `trace` after a new event started
+- **THEN** the trace is not credited to the new event
+
+### Requirement: Event deadline
+Each handler SHALL get a work budget: its `timeouts[event]`, else `hook-runtime.deadlines[event]`, else 5 seconds. Cleanup of its child processes and writing the output SHALL get a separate budget after it, within the host's limit. A result that settles after the work budget SHALL be discarded.
+
+#### Scenario: Handler exceeds its deadline before a command
+- **WHEN** a handler does not settle before its deadline at `tool.before`
+- **THEN** the command runs (no deny)
+
+#### Scenario: Timeout on a text event
+- **WHEN** a handler never settles at `tool.after` in a spawned `claude.mjs` with no other live handle
+- **THEN** the process prints the failure notice and exits 0
+
+#### Scenario: Late block
+- **WHEN** a handler returns `{block}` half a second after its deadline
+- **THEN** the turn end is not blocked and a failure notice is given
+
+#### Scenario: Stuck import
+- **WHEN** a handler module's top-level `await` never settles
+- **THEN** that handler is skipped after 2 seconds, and the others run
+
+### Requirement: Bounded loading and queued budgets
+Handler loading SHALL be bounded at 2 seconds on both hosts. A queued OpenCode turn end's budget SHALL start when it starts running, not when it arrived.
+
+#### Scenario: Backlog
+- **WHEN** three turn ends are queued behind a run that used almost all its budget
+- **THEN** all three run with their full budgets
+
+### Requirement: Named proofs
+A handler SHALL be able to register named proofs, each a `check(context)` returning null when the proof holds or a failure text otherwise. The runtime SHALL resolve a proof by name for any handler. An unknown or throwing proof SHALL resolve to a failure text.
+
+#### Scenario: Unknown proof
+- **WHEN** a handler calls `context.proof("nope")`
+- **THEN** it receives a failure text naming `nope` as not registered
+
+### Requirement: Capability report
+`node .agents/harness/hook-runtime/cli.mjs capabilities` SHALL print, per host adapter, the five capabilities, each marked supported or missing with the host version it was verified on. It SHALL list every installed handler event that needs a missing capability, and that SHALL also be added to the model context at `session.start`.
+
+#### Scenario: Report lists both hosts
+- **WHEN** `capabilities` runs in an onboarded repo
+- **THEN** it prints a table for `claude-code` and `opencode` with all five capabilities and a verified host version for each

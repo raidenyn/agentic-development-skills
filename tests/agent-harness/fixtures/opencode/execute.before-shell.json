@@ -1,0 +1,11 @@
+{
+  "tool": "shell",
+  "codemode": false,
+  "sessionID": "ses_dedff3bd3ffe5JNm4SZRSafWUU",
+  "agent": "build",
+  "messageID": "msg_21200d847001TrnGC5Ya9M92OK",
+  "id": "call_56c2b2a71a224c4d9b5e5e3222023099",
+  "input": {
+    "command": "echo HARNESS_DENY"
+  }
+}

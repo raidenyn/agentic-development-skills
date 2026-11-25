@@ -1,0 +1,32 @@
+{
+  "tool": "patch",
+  "codemode": false,
+  "sessionID": "ses_dede62d3fffe2VJ1w0BRe1mak4",
+  "agent": "build",
+  "messageID": "msg_2121a90ed0014DuKVkRLJK25pj",
+  "id": "call_68c49815758748139138418180d5aba7",
+  "input": {
+    "patchText": "*** Begin Patch\n*** Update File: openspec/changes/x/tasks.md\n@@\n-- [ ] 1.2 Write the thing\n+- [x] 1.2 Write the thing\n*** End Patch\n"
+  },
+  "status": "completed",
+  "result": {
+    "output": {},
+    "content": [
+      {
+        "type": "text",
+        "text": "Success. Updated the following files:\nM openspec/changes/x/tasks.md"
+      }
+    ],
+    "metadata": {
+      "files": [
+        {
+          "file": "openspec/changes/x/tasks.md",
+          "patch": "Index: /REPO/openspec/changes/x/tasks.md\n===================================================================\n--- /REPO/openspec/changes/x/tasks.md\n+++ /REPO/openspec/changes/x/tasks.md\n@@ -1,6 +1,6 @@\n ## 1. Work\n \n - [x] 1.1 Done already\n-- [ ] 1.2 Write the thing\n+- [x] 1.2 Write the thing\n - [ ] 1.3 Test the thing\n - [x] 1.4 Also done\n",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 1
+        }
+      ]
+    }
+  }
+}

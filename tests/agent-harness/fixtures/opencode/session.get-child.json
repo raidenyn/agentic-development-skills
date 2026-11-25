@@ -1,0 +1,32 @@
+{
+  "id": "ses_dedfe4625ffe7X3k5Q6cF7eOyd",
+  "parentID": "ses_dedfe7299ffexvwC0QDPgTiOoW",
+  "projectID": "821618dbe48d114fd6fa0d28e9a0888c0d66a782",
+  "agent": "general",
+  "model": {
+    "id": "gpt-6.2-sol-fast",
+    "providerID": "openai",
+    "variant": "default"
+  },
+  "cost": 0,
+  "tokens": {
+    "input": 12883,
+    "output": 156,
+    "reasoning": 13,
+    "cache": {
+      "read": 62208,
+      "write": 0
+    }
+  },
+  "outcome": "succeeded",
+  "time": {
+    "created": 1795598432746,
+    "updated": 1795598446811,
+    "busy": 1795598432799,
+    "idle": 1795598446827
+  },
+  "title": "Run delegated shell task",
+  "location": {
+    "directory": "/REPO"
+  }
+}

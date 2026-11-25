@@ -1,0 +1,29 @@
+{
+  "tool": "read",
+  "codemode": false,
+  "sessionID": "ses_dedff3bd3ffe5JNm4SZRSafWUU",
+  "agent": "build",
+  "messageID": "msg_21200ea0e00143Z1DFVF8UyfyY",
+  "id": "call_a8c683bc4a4a4927a05538496dcf0206",
+  "input": {
+    "path": "README.md"
+  },
+  "status": "completed",
+  "result": {
+    "output": {
+      "type": "text",
+      "offset": 1,
+      "lineCount": 1,
+      "content": "hello\n"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "Read file README.md, lines 1-1\n1: hello"
+      }
+    ],
+    "metadata": {
+      "truncated": false
+    }
+  }
+}
