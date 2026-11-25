@@ -225,7 +225,7 @@ fragment IssueFacts on Issue {
   blockedBy(first: 50) { totalCount nodes { number state stateReason } }
   linkedBranches(first: 10) { totalCount nodes { ref { name } } }
   closedByPullRequestsReferences(first: 10, includeClosedPrs: true) {
-    totalCount nodes { number isCrossRepository authorAssociation author { login } } }
+    totalCount nodes { number isCrossRepository headRefName headRepository { nameWithOwner } authorAssociation author { login } } }
   userContentEdits(first: 100) { totalCount nodes { editor { login } deletedAt } }
 }
 EOF
@@ -604,9 +604,17 @@ def epoch: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601;
 | ($filter | split("\n") | map(select(. != "") | split(" ") | {key: .[0], value: (.[2] // .[1])}) | from_entries) as $verdict
 | def item: . as $r | first($items[] | select(.isArchived != true and .content.__typename == "Issue"
       and .content.repository.nameWithOwner == $r.repo and .content.number == $r.issue)) // null;
+  def branch: .content as $c
+    | if $c.linkedBranches.totalCount == 1 then $c.linkedBranches.nodes[0].ref.name
+      elif $c.linkedBranches.totalCount == 0
+           and $c.closedByPullRequestsReferences.totalCount == ($c.closedByPullRequestsReferences.nodes | length) then
+        [$c.closedByPullRequestsReferences.nodes[]
+         | select(.isCrossRepository == false and .headRepository.nameWithOwner == $repo) | .headRefName]
+        | unique | if length == 1 then .[0] else null end
+      else null end;
   def complete: any(.content.assignees.nodes[]; .login == $agent)
       and (.runThread | val | . != null and . != "") and (.attempt | val) != null
-      and (.runPhase | val | rank) != null and .content.linkedBranches.totalCount == 1;
+      and (.runPhase | val | rank) != null and branch != null;
   def recorded: . as $r | any($stops[0][] | select(.issue == $r.issue);
       .body | contains("Report: \($r.messageId) from \($r.sender)\n> \($r.line)\n"));
   def route($i):
@@ -626,17 +634,20 @@ def epoch: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601;
     | ($claims[0]["\(.issue)"] // "") as $since
     | select(.trigger or ($i != null and $since != "" and (.at | epoch) >= ($since | epoch)))
     | . + {own: ($i != null and .sender == ($i.runThread | val) and .attempt == ($i.attempt | val)),
+           branch: (if $i == null then null else $i | branch end),
            answer: (if $i != null and recorded then "recorded" else route($i) end)} ]
   | (map(select(.own and .answer != "recorded")) | group_by(.issue) | map(max_by([.position, .index]) | [.messageId, .index])) as $newest
   | .[] | if .own and .answer != "recorded" and (. as $r | any($newest[]; . == [$r.messageId, $r.index]) | not)
           then .answer = "superseded" else . end
-  | [.answer, (.issue // "-"), .messageId, .sender, .line] | @tsv
+  | [.answer, (.issue // "-"), .messageId, .sender, .line, (.branch // "-")] | @tsv
 EOF
 jq -r --arg repo <repo> --arg agent <agent> --slurpfile board <work>/board.json --slurpfile stops <work>/stops.json \
   --slurpfile claims <work>/claims.json --slurpfile skip <work>/unreadable.txt --rawfile filter <work>/filter.txt -f <work>/judge.jq <work>/reports.json > <work>/judged.tsv
 ```
 
-Each line is the route, the issue, the message id, the sender id and the line. A task is an item the filter does not call `not-task`, `other-repo`, `closed`, `plan-item`, `planning` or `outline`. A complete claim is an item assigned to `<agent>`, with "Run thread" and "Attempt" set, a "Run phase" of plan, implement, closeout or care, and exactly one linked branch. The routes:
+Each line is the route, the issue, the message id, the sender id, the line and the claimed branch (`-` when there is none). A task is an item the filter does not call `not-task`, `other-repo`, `closed`, `plan-item`, `planning` or `outline`. A complete claim is an item assigned to `<agent>`, with "Run thread" and "Attempt" set, a "Run phase" of plan, implement, closeout or care, and a claimed branch.
+
+The claimed branch is the item's one linked branch. GitHub unlinks that branch as soon as a pull request from it names the issue with a closing keyword, so when no branch is linked, the claimed branch is the `headRefName` of the closing pull requests that are not cross-repository and whose head repository is `<repo>`, when they all name the same one. More than one linked branch, two such pull requests on different branches, none of either, or a list of closing pull requests that overflows its page leaves no claimed branch: the claim is incomplete. The start guard `taken` is unchanged: a linked branch or a trusted closing pull request already makes an item taken. The routes:
 
 | Route | Next |
 |---|---|
@@ -659,12 +670,12 @@ Answer each judged report with the first answer that applies, in this order. Anc
 | 1 | `finish-switch` | The report is from the "Run thread" for the current "Attempt", "Run phase" is plan, and the thread already holds the apply message for this launch key and the report's `head`. |
 | 2 | `stop` | The report names a complete claim, and its sender is not the "Run thread", or its attempt is not "Attempt", whatever the phase. |
 | 3 | `handled` | The report is from the "Run thread" for the current "Attempt", and its phase is earlier than "Run phase". |
-| 4 | `act` | Only a plan report while "Run phase" is plan, from the "Run thread" for the current "Attempt", with `seq` 1 and `head` equal to the remote head of the linked branch, on a thread that is idle within 5 minutes. |
+| 4 | `act` | Only a plan report while "Run phase" is plan, from the "Run thread" for the current "Attempt", with `seq` 1 and `head` equal to the remote head of the claimed branch, on a thread that is idle within 5 minutes. |
 | 5 | `not-idle` | Everything for `act` matches, but the thread still runs after 5 minutes, or the switch is refused. |
 | 6 | `stop` | The report is from the "Run thread" for the current "Attempt", and its `seq` or `head` does not match, or its phase is later than "Run phase". |
 | 7 | `report-only` | The line is malformed; it names an issue that is not a task on this board, or whose claim is incomplete; or it matches but its phase is not plan: "not handled in M1". |
 
-`judged.tsv` already gives answers 2, 3 and 7 where the board read decides them. Answer 1 cannot apply to those routes: it needs the "Run thread", the current "Attempt" and a "Run phase" of plan, so no report is earlier than "Run phase". A `check` report is from the "Run thread" for the current "Attempt", and its phase is not earlier than "Run phase". For it, take these steps in order. `<run thread>`, `<attempt>`, `<branch>` (the one linked branch) and `<item id>` come from the item in `<work>/board.json`; `<head>`, `<phase>` and `<seq>` from the report. The launch key is `<repo>#<issue> attempt <attempt>`.
+`judged.tsv` already gives answers 2, 3 and 7 where the board read decides them. Answer 1 cannot apply to those routes: it needs the "Run thread", the current "Attempt" and a "Run phase" of plan, so no report is earlier than "Run phase". A `check` report is from the "Run thread" for the current "Attempt", and its phase is not earlier than "Run phase". For it, take these steps in order. `<run thread>`, `<attempt>`, `<item id>` come from the item in `<work>/board.json`, and `<branch>` is the claimed branch, the last column of `judged.tsv`; `<head>`, `<phase>` and `<seq>` from the report. The launch key is `<repo>#<issue> attempt <attempt>`.
 
 ### 1. A half-done switch
 
@@ -687,7 +698,7 @@ jq -e --arg me <conductor id> --arg key "<repo>#<issue> attempt <attempt>" --arg
 
 ### 3. The head
 
-Read the remote head of the linked branch:
+Read the remote head of the claimed branch:
 
 ```bash
 gh api repos/<repo>/git/ref/heads/<branch> --jq .object.sha 2> <work>/err      # <remote head>
@@ -819,7 +830,7 @@ Run one wake of the project-conductor skill for this repository.
 
 ### Apply
 
-Sent with `t3_thread_send` in [Switch](#switch), in queue mode with a fresh context. `<attempt>` is the item's "Attempt", `<head>` the report's `head`, and `<name>` the change folder found at that head:
+Sent with `t3_thread_send` in [Switch](#switch), in queue mode with a fresh context. `<branch>` is the claimed branch of [Judge](#judge), `<attempt>` the item's "Attempt", `<head>` the report's `head`, and `<name>` the change folder found at that head:
 
 ```text
 Use the task-run skill to run the phase implement of this task.
