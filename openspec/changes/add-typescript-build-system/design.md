@@ -75,7 +75,7 @@ src/
 
 - A file `src/<tool>/<rel>.mts` is emitted to `skills/<skill>/assets/<tool>/<rel>.mjs`.
 - A shared entry `<rel>.mts` is read from `src/shared/<rel>.mts` and emitted to the same relative path in each tool that lists it. A tool file and a shared file with the same output path is a build error.
-- Any other file under `src/<tool>/` (today only `tool.json`) is copied byte for byte.
+- A `.json` file under `src/<tool>/` (today only `tool.json`) is copied byte for byte. Any other file that is not `.mts` is a build error naming it: a `.ts`, a hand-written `.mjs` or a declaration file would otherwise ship unchecked (found in the final review).
 - A file named `*.types.mts` is never emitted. `verbatimModuleSyntax` forces it to be imported with `import type`, which the stripper removes.
 
 A tool file imports a shared file with the specifier it has after emission: `src/hook-runtime/lib/runtime.mts` writes `./config.mts`, although the file is `src/shared/lib/config.mts`. `tsconfig.json` makes that resolve with `rootDirs: ["src/hook-runtime", "src/verify-gate", "src/shared"]`, which overlays the folders for relative imports (checked with `tsc` 7.0.2). The overlay would also let one tool import the other's files; the build's specifier check rejects that, because the file is not emitted into the importing tool. A new tool adds its folder to `rootDirs`, and a build test fails when `rootDirs` and `src/build.json` disagree.

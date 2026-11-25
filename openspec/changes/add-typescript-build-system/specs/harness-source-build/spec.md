@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Source location and output mapping
-Shipped harness code SHALL be written as `.mts` files under `src/<tool>/`. `node scripts/build.mts` SHALL emit each `src/<tool>/<rel>.mts` to `skills/<skill>/assets/<tool>/<rel>.mjs`, where `<skill>` is the tool's `skill` value in `src/build.json`. A file under `src/<tool>/` that is not `.mts` SHALL be copied to the same relative path byte for byte.
+Shipped harness code SHALL be written as `.mts` files under `src/<tool>/`. `node scripts/build.mts` SHALL emit each `src/<tool>/<rel>.mts` to `skills/<skill>/assets/<tool>/<rel>.mjs`, where `<skill>` is the tool's `skill` value in `src/build.json`. A `.json` file under `src/<tool>/` SHALL be copied to the same relative path byte for byte.
 
 #### Scenario: A module is emitted
 - **WHEN** `src/hook-runtime/lib/runtime.mts` exists and `src/build.json` maps `hook-runtime` to `agent-harness-hook-runtime`
@@ -14,6 +14,13 @@ Shipped harness code SHALL be written as `.mts` files under `src/<tool>/`. `node
 #### Scenario: A tool is missing from the manifest
 - **WHEN** a folder `src/new-tool/` exists and `src/build.json` has no entry for `new-tool`
 - **THEN** the build exits non-zero and names the folder
+
+### Requirement: Only modules and data are built
+A file under `src/<tool>/` or listed as shared that is neither `.mts` nor `.json` (for example `.ts`, `.mjs` or a `.d.mts` declaration file) SHALL fail the build with its path, because it would ship without the type check and the specifier check.
+
+#### Scenario: A file that cannot be built
+- **WHEN** `src/hook-runtime/lib/extra.ts` exists
+- **THEN** the build exits non-zero and names `src/hook-runtime/lib/extra.ts`
 
 ### Requirement: Shared files have one source
 A file listed in a tool's `shared` array in `src/build.json` SHALL be read from `src/shared/<rel>` and emitted to `<rel>` (with `.mjs`) inside every tool that lists it. The build SHALL fail when a shared file and a tool's own file map to the same output path.
