@@ -11,7 +11,7 @@ One transient GitHub error (HTTP 500 "diff temporarily unavailable") on the read
 | `.agents/harness.json` holds only the `project-conductor` key | `jq keys` = `["project-conductor"]` |
 | `repo-run-models.md` with no presets section | `grep -c "Reviewer presets"` = 0 |
 
-Open follow-up: PR #1's body still describes only `.agents/harness.json`, because the procedure does not say to update the body when it completes a partial pull request.
+Follow-up found in this run: PR #1's body still described only `.agents/harness.json`, because the procedure did not say to update the body when it completes a partial pull request. Fixed in the reference (the body is replaced after the completing push, and a reused open pull request whose body differs from the planned one gets its body as **change**) and proved by rerunning the settings step: see "Rerun of the settings step: PR body" at the end.
 
 #### Report
 
@@ -174,4 +174,101 @@ $ grep -c "Reviewer presets" repo-run-models.md at head
 0
 $ jq keys harness.json at head
 ["project-conductor"]
+````
+
+#### Rerun of the settings step: PR body
+
+After the fix, the settings step of the procedure was run again for `raidenyn-shadow/task-run-scratch-bare` with board https://github.com/users/raidenyn-shadow/projects/5, without the wait, same models. No other step was written; the only GitHub write was PR #1's body.
+
+| Expected | Actual |
+|---|---|
+| branch reused as is, no push | compare at 8b48807 = the expected set, both files equal to planned; head unchanged |
+| PR #1 body planned as change, then written | `cmp` differed before; `gh pr edit --body-file`; read back equal |
+| a further run writes nothing | body equal to planned: reuse |
+
+Survey:
+
+````text
+## Survey: settings step, raidenyn-shadow/task-run-scratch-bare
+raidenyn-shadow
+main
+main .agents/harness.json absent
+main .agents/hooked-rules/repo-run-models.md absent
+main .agents/hooked-rules/repo-review-models.md absent
+branch: 8b48807470beecc27dd0ff4075d99f7f2b02d8a6
+[{"baseRefName":"main","headRefOid":"8b48807470beecc27dd0ff4075d99f7f2b02d8a6","headRepository":{"id":"R_kgDOV7nCvQ","name":"task-run-scratch-bare","nameWithOwner":"raidenyn-shadow/task-run-scratch-bare"},"isCrossRepository":false,"number":1,"url":"https://github.com/raidenyn-shadow/task-run-scratch-bare/pull/1"}]
+compare at sha=8b48807470beecc27dd0ff4075d99f7f2b02d8a6
+added .agents/harness.json 
+added .agents/hooked-rules/repo-run-models.md 
+8b48807470beecc27dd0ff4075d99f7f2b02d8a6 .agents/harness.json present
+8b48807470beecc27dd0ff4075d99f7f2b02d8a6 .agents/hooked-rules/repo-run-models.md present
+8b48807470beecc27dd0ff4075d99f7f2b02d8a6 .agents/hooked-rules/repo-review-models.md absent
+## Compare planned with branch at 8b48807470beecc27dd0ff4075d99f7f2b02d8a6
+harness.json == planned
+repo-run-models.md == planned
+expected: added .agents/harness.json; added .agents/hooked-rules/repo-run-models.md
+=> exactly the expected set, each with its planned content: reuse as is
+head still: 8b48807470beecc27dd0ff4075d99f7f2b02d8a6
+````
+
+Plan line: `4 | PR #1 body | change | body lists only harness.json; the PR's changes are harness.json and repo-run-models.md`, diff:
+
+````diff
+--- pr-body.now.md	2026-11-25 13:36:25.832448413 +0000
++++ pr-body.md	2026-11-25 13:36:25.293447450 +0000
+@@ -1,5 +1,6 @@
+ Settings for the project-conductor loop on https://github.com/users/raidenyn-shadow/projects/5, written by the onboarding procedure.
+ 
+ - `.agents/harness.json`: key `project-conductor` with maxParallel 2, reviewRounds 5, reconcileMinutes 30, maxAttempts 2. Other keys unchanged.
++- `.agents/hooked-rules/repo-run-models.md`: models for plan, review and implement.
+ 
+ Nothing reads these settings until the loop exists.
+````
+
+Body before (`gh api repos/<repo>/pulls/1 | jq -j .body`):
+
+````markdown
+Settings for the project-conductor loop on https://github.com/users/raidenyn-shadow/projects/5, written by the onboarding procedure.
+
+- `.agents/harness.json`: key `project-conductor` with maxParallel 2, reviewRounds 5, reconcileMinutes 30, maxAttempts 2. Other keys unchanged.
+
+Nothing reads these settings until the loop exists.
+````
+
+Body after:
+
+````markdown
+Settings for the project-conductor loop on https://github.com/users/raidenyn-shadow/projects/5, written by the onboarding procedure.
+
+- `.agents/harness.json`: key `project-conductor` with maxParallel 2, reviewRounds 5, reconcileMinutes 30, maxAttempts 2. Other keys unchanged.
+- `.agents/hooked-rules/repo-run-models.md`: models for plan, review and implement.
+
+Nothing reads these settings until the loop exists.
+````
+
+Write and read back:
+
+````text
+## PR body write
+re-read: unchanged since the survey
+https://github.com/raidenyn-shadow/task-run-scratch-bare/pull/1
+edit exit=0
+read back: cmp prints nothing, body == planned
+## Rerun check (repeatability)
+body equal to planned: reuse, no write
+[{"headRefOid":"8b48807470beecc27dd0ff4075d99f7f2b02d8a6","number":1,"state":"OPEN"}]
+````
+
+Report of the rerun (settings step only):
+
+````markdown
+### Changed
+- Pull request body of https://github.com/raidenyn-shadow/task-run-scratch-bare/pull/1: now lists `.agents/harness.json` and `.agents/hooked-rules/repo-run-models.md`
+
+### Reused
+- `.agents/harness.json` and `.agents/hooked-rules/repo-run-models.md` on branch `chore/project-conductor-onboarding` at 8b48807
+- Pull request https://github.com/raidenyn-shadow/task-run-scratch-bare/pull/1
+
+### Pending
+- Merge https://github.com/raidenyn-shadow/task-run-scratch-bare/pull/1
 ````

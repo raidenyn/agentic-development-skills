@@ -195,6 +195,120 @@ https://github.com/raidenyn-shadow/task-run-scratch/issues/5
 exit=0
 ````
 
+#### Edit histories of the keyed issues (read afterwards, read-only)
+
+Read with the trust query of the reference ("Trust"), after the key writes, to prove the acceptance criterion from the edit histories as well as the bodies.
+
+`gh api graphql -f query='<the trust query>' -f owner=raidenyn-shadow -f name=task-run-scratch -F n=4`:
+
+````json
+{
+  "data": {
+    "repository": {
+      "issue": {
+        "number": 4,
+        "state": "OPEN",
+        "author": {
+          "login": "raidenyn-shadow"
+        },
+        "milestone": {
+          "number": 1
+        },
+        "projectItems": {
+          "nodes": [
+            {
+              "project": {
+                "id": "PVT_kwHOD4ARxs4BtKTK"
+              }
+            }
+          ]
+        },
+        "userContentEdits": {
+          "totalCount": 2,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "id": "UCE_lAHOV7nCMc8AAAABibLmas8AAAABOIkoiQ",
+              "updatedAt": "2026-11-25T13:11:09Z",
+              "deletedAt": null,
+              "editor": {
+                "login": "raidenyn-shadow"
+              }
+            },
+            {
+              "id": "UCE_lAHOV7nCMc8AAAABibLmas8AAAABOIkogg",
+              "updatedAt": "2026-11-25T13:11:09Z",
+              "deletedAt": null,
+              "editor": {
+                "login": "raidenyn-shadow"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+````
+
+`gh api graphql -f query='<the trust query>' -f owner=raidenyn-shadow -f name=task-run-scratch -F n=5`:
+
+````json
+{
+  "data": {
+    "repository": {
+      "issue": {
+        "number": 5,
+        "state": "OPEN",
+        "author": {
+          "login": "raidenyn-shadow"
+        },
+        "milestone": {
+          "number": 1
+        },
+        "projectItems": {
+          "nodes": [
+            {
+              "project": {
+                "id": "PVT_kwHOD4ARxs4BtKTK"
+              }
+            }
+          ]
+        },
+        "userContentEdits": {
+          "totalCount": 2,
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "id": "UCE_lAHOV7nCMc8AAAABibLoAs8AAAABOIkuTw",
+              "updatedAt": "2026-11-25T13:11:14Z",
+              "deletedAt": null,
+              "editor": {
+                "login": "raidenyn-shadow"
+              }
+            },
+            {
+              "id": "UCE_lAHOV7nCMc8AAAABibLoAs8AAAABOIkuTA",
+              "updatedAt": "2026-11-25T13:11:14Z",
+              "deletedAt": null,
+              "editor": {
+                "login": "raidenyn-shadow"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+````
+
+Edits made by: only `raidenyn-shadow` (the agent's `gh` login and the repository owner) on both #4 and #5; no other editor, no deleted edit, no further page.
+
 #### Checks: cmp of bodies, gh pr diff, files on the PR head
 
 ````text
