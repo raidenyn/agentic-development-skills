@@ -266,12 +266,12 @@ When the branch is reused and no pull request is open, open one as below.
 
 Work in the clone. Never force-push.
 
-A commit needs a git identity. When the machine has none, commit as the agent account, in the clone only:
+A commit needs a git name and email. Set whichever is missing to the agent account, in the clone only:
 
 ```bash
-git -C <work>/clone config user.email > /dev/null || {
-  git -C <work>/clone config user.name "<agent>"
-  git -C <work>/clone config user.email "$(gh api user --jq .id)+<agent>@users.noreply.github.com"; }
+git -C <work>/clone config user.name > /dev/null || git -C <work>/clone config user.name "<agent>"
+git -C <work>/clone config user.email > /dev/null ||
+  git -C <work>/clone config user.email "$(gh api user --jq .id)+<agent>@users.noreply.github.com"
 ```
 
 No branch yet:
