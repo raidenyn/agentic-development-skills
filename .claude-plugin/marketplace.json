@@ -42,6 +42,18 @@
       ]
     },
     {
+      "name": "project-conductor",
+      "source": "./skills/project-conductor",
+      "description": "Prepare a GitHub Project board and its repository for unattended task runs: the PROJECT_URL variable, three run fields, conductor settings, a model file and task keys, with a dry run and owner steps.",
+      "category": "development",
+      "tags": [
+        "github-projects",
+        "unattended",
+        "agents",
+        "onboarding"
+      ]
+    },
+    {
       "name": "rfc-breakdown",
       "source": "./skills/rfc-breakdown",
       "description": "Turn an accepted feature RFC into a backlog that covers all its milestones: full tasks only for the milestones that can start now, usually the first, outline tasks for the rest and a consistency check across milestones.",
