@@ -24,19 +24,21 @@ jobs:
       - name: Validate SKILL.md frontmatter and marketplace entries
         run: python3 scripts/skills.py validate
 
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
 
       - name: Install Node dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       # The npx-based marketplace test needs the Node version from .nvmrc.
       - name: Run Python tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
       - name: Run release config tests
-        run: npm test
+        run: pnpm test
 
       - name: Check the hook runtime install
         run: node .agents/harness/hook-runtime/cli.mjs check
@@ -45,9 +47,9 @@ jobs:
         run: node .agents/harness/verify-gate/cli.mjs check
 
       - name: Validate Claude Code marketplace manifest
-        run: npx -y @anthropic-ai/claude-code@2.1.330 plugin validate .
+        run: pnpm dlx @anthropic-ai/claude-code@2.1.330 plugin validate .
 
-  # The copied harness tools promise Node 22.0.0; run their tests there. No npm ci: they have no
+  # The copied harness tools promise Node 22.0.0; run their tests there. No install: they have no
   # dependencies. The glob is quoted so node expands it, since 22.0 does not expand a bare directory.
   harness-node22:
     runs-on: ubuntu-latest

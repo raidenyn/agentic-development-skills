@@ -2,10 +2,10 @@
 
 - [x] 1.1 Confirm PR #54 (the harness M1 code) is merged into `main` and this branch is on top of it (done: branch fast-forwarded to `36f0886`, which also holds PR #55)
 - [x] 1.2 Amend the harness RFC with the `feature-rfc` skill: the "Node only" decision and the Goals line become "no build step in the target repo; the source is TypeScript in this repository and the built `.mjs` files are committed". Record it in the review log. Ask the owner to approve the wording and stop if they do not
-- [ ] 1.3 Switch to pnpm: set `"packageManager": "pnpm@12.18.0"` in `package.json`, run `pnpm import` so `pnpm-lock.yaml` keeps the versions `package-lock.json` resolved, delete `package-lock.json`, and add `@semantic-release/commit-analyzer` 14.0.0-beta.5 and `@semantic-release/release-notes-generator` 15.0.0-beta.4 as exact dev dependencies (the release tests import them, and pnpm does not expose a dependency's dependencies)
-- [ ] 1.4 In the same step, change `['npm', 'test']` to `['pnpm', 'test']` in `scripts/verify.mjs` and in `tests/agent-harness/repo-verify.test.mjs`, so the live verify gate runs the new package manager
-- [ ] 1.5 Workflows: add `pnpm/action-setup` (pinned by commit, version read from `packageManager`) before `actions/setup-node` in the `validate` job and the `release` job; replace `npm ci` with `pnpm install --frozen-lockfile`, `npm test` with `pnpm test`, `npx semantic-release` with `pnpm exec semantic-release`, and `npx -y @anthropic-ai/claude-code@…` with `pnpm dlx @anthropic-ai/claude-code@…`. The Node 22.0.0 job gets no pnpm and no install
-- [ ] 1.6 Docs: `AGENTS.md` and `README.md` name `pnpm install --frozen-lockfile` and `pnpm test`; the README says how to get pnpm
+- [x] 1.3 Switch to pnpm: set `"packageManager": "pnpm@12.18.0"` in `package.json`, run `pnpm import` so `pnpm-lock.yaml` keeps the versions `package-lock.json` resolved, delete `package-lock.json`, and add `@semantic-release/commit-analyzer` 14.0.0-beta.5 and `@semantic-release/release-notes-generator` 15.0.0-beta.4 as exact dev dependencies (the release tests import them, and pnpm does not expose a dependency's dependencies)
+- [x] 1.4 In the same step, change `['npm', 'test']` to `['pnpm', 'test']` in `scripts/verify.mjs` and in `tests/agent-harness/repo-verify.test.mjs`, so the live verify gate runs the new package manager
+- [x] 1.5 Workflows: add `pnpm/action-setup` (pinned by commit, version read from `packageManager`) before `actions/setup-node` in the `validate` job and the `release` job; replace `npm ci` with `pnpm install --frozen-lockfile`, `npm test` with `pnpm test`, `npx semantic-release` with `pnpm exec semantic-release`, and `npx -y @anthropic-ai/claude-code@…` with `pnpm dlx @anthropic-ai/claude-code@…`. The Node 22.0.0 job gets no pnpm and no install
+- [x] 1.6 Docs: `AGENTS.md` and `README.md` name `pnpm install --frozen-lockfile` and `pnpm test`; the README says how to get pnpm
 
 ## 2. Tooling
 

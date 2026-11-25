@@ -26,7 +26,7 @@ test('FULL_CHECKS is the full list', () => {
   assert.deepEqual(FULL_CHECKS, [
     VALIDATE,
     ['python3', '-m', 'unittest', 'discover', '-s', 'scripts', '-p', 'test_*.py'],
-    ['npm', 'test'],
+    ['pnpm', 'test'],
     ['node', '.agents/harness/hook-runtime/cli.mjs', 'check'],
     ['node', '.agents/harness/verify-gate/cli.mjs', 'check'],
   ]);
