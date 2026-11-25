@@ -32,7 +32,7 @@
   - linked worktree, real index untouched, reuse, corrupt-index rebuild
 - [x] 4.2 `lib/run.mjs`: argv spawn without a shell, `VERIFY_*` environment, the changed-file list as the union of the private-index diff, the real index's untracked files and stat changes since the last pass, the exit status with the signal name, process-group timeout and abort signal with SIGTERM then SIGKILL, resolving only when the whole group is gone, 1 MiB cap, 60-line tail, spawn errors as failures; tests including a leader that exits on SIGTERM while a descendant traps it and the changed list for LF-to-CRLF and `assume-unchanged` edits
 - [x] 4.3 `lib/triggers.mjs`: edit-file extraction, `taskFiles` glob matching, one tick detector (unticked-fall plus ticked-rise per item key between the call's before-image and the file afterwards), deduplicated only against ticks recorded after the call began; an added done item and a new ticked file are not ticks; tests from both tick fixtures' texts, moved and ticked, reorder, duplicate labels, re-tick after an untick, overlapping calls, CRLF and bullets, and the identical-label swap as a known non-detection
-- [ ] 4.4 `handler.mjs`:
+- [x] 4.4 `handler.mjs`:
   - the three triggers, the no-change shortcut with `trace("no-change")`, the pass record written only by a full run with equal keys before and after, deleted on full failure;
   - the gate lock and its contention notice;
   - a full run at every turn end, subagents included, with a notice instead of a block while `background > 0`;
@@ -43,9 +43,9 @@
   - the `verify-pass` proof, the `manual` text, `timeouts` from `timeoutSeconds`.
 
   Wrapper tests include the edit-pass-then-turn-end-fail sequence, the per-trigger handover of trigger, file, base and changed list, two real processes, a timed-out run writing no record, and failure keys (`E101` vs `E202` distinct, SIGSEGV vs SIGABRT distinct, an 8-digit decimal code kept, a changing temp path the same).
-- [ ] 4.5 Proof tests: `verify-pass` holds after a full pass, still holds after committing unchanged content, fails after any edit (including LF to CRLF) or config change, never holds after only edit runs, reports "verification is running" while the lock is held
-- [ ] 4.6 `cli.mjs install | update | check | run` for verify-gate: refuse without hook-runtime, add a `{"command": []}` section stub, `check` fails until the command is set and rejects `maxBlocks` outside 1–3; tests
-- [ ] 4.7 `tests/agent-harness/bench-no-change.mjs`: median of 20 no-change turn ends per host, host-to-outcome and in-runtime, counting only traced `no-change` outcomes, with zero command invocations asserted
+- [x] 4.5 Proof tests: `verify-pass` holds after a full pass, still holds after committing unchanged content, fails after any edit (including LF to CRLF) or config change, never holds after only edit runs, reports "verification is running" while the lock is held
+- [x] 4.6 `cli.mjs install | update | check | run` for verify-gate: refuse without hook-runtime, add a `{"command": []}` section stub, `check` fails until the command is set and rejects `maxBlocks` outside 1–3; tests
+- [x] 4.7 `tests/agent-harness/bench-no-change.mjs`: median of 20 no-change turn ends per host, host-to-outcome and in-runtime, counting only traced `no-change` outcomes, with zero command invocations asserted
 
 ## 5. Skill text, catalog and CI
 
