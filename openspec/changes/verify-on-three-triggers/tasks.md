@@ -6,7 +6,7 @@
 
 ## 2. Shared tool libraries
 
-- [ ] 2.1 Scaffold both skills with `python3 scripts/skills.py new` (`agent-harness-hook-runtime`, `agent-harness-verify-gate`) and add `assets/<tool>/tool.json`; extend `npm test` with `tests/agent-harness/*.test.mjs`
+- [x] 2.1 Scaffold both skills with `python3 scripts/skills.py new` (`agent-harness-hook-runtime`, `agent-harness-verify-gate`) and add `assets/<tool>/tool.json`; extend `npm test` with `tests/agent-harness/*.test.mjs`
 - [ ] 2.2 `lib/config.mjs`: load `.agents/harness.json`, return one tool's section, reject unknown own keys, ignore other tools' keys; tests
 - [ ] 2.3 `lib/state.mjs`: `<git-dir>/agent-harness/<tool>/sessions/<host>-<session>/<agent>/` folders; the monotonic generation lock (`gate.lock.<n>` claimed by hard-linking a complete temp file to `n+1`, owner only if still highest after the claim, the highest file never deleted, release marks its own file `released`, takeover only from a dead pid, never by age); `writeJsonAtomic`; tests including two contenders and the paused-stale-contender interleaving at a deterministic barrier
 - [ ] 2.4 `lib/install.mjs`: copy with sha256 lock, idempotent repeat, refuse on an edited copy with no override, version mismatch to `update`, update removing dropped files, every refusal decided before any write; tests for the five RFC cases against throwaway git repos
