@@ -1,13 +1,13 @@
 ## 1. Host proofs and proof ground
 
-- [ ] 1.1 Prove on scratch threads that `t3_thread_read` returns another thread's sender id as metadata, separate from the text. Record the result and the field in `evidence/01-host-proofs.md`. If there is no such field, stop under "If it does not fit".
-- [ ] 1.2 Prove that messages carry comparable timestamps, that `t3_thread_configure` without `threadId` returns the caller's own id, and that `clientRequestId` accepts the launch key and returns the same thread on a repeat. Record each result, and the fallback chosen when one is missing (bound by position; find own thread by exact title; a sanitised launch key as the request id).
-- [ ] 1.3 Prove that `t3_thread_launch` with a worktree on a branch that already exists on the remote (created by `gh issue develop`) checks that branch out. Record it. If it does not, record the fallback (a same-named local branch from `origin/<default>`) and use it in 2.x.
-- [ ] 1.4 Prepare project 5 of `raidenyn-shadow`:
+- [x] 1.1 Prove on scratch threads that `t3_thread_read` returns another thread's sender id as metadata, separate from the text. Record the result and the field in `evidence/01-host-proofs.md`. If there is no such field, stop under "If it does not fit".
+- [x] 1.2 Prove that messages carry comparable timestamps, that `t3_thread_configure` without `threadId` returns the caller's own id, and that `clientRequestId` accepts the launch key and returns the same thread on a repeat. Record each result, and the fallback chosen when one is missing (bound by position; find own thread by exact title; a sanitised launch key as the request id).
+- [x] 1.3 Prove that `t3_thread_launch` with a worktree on a branch that already exists on the remote (created by `gh issue develop`) checks that branch out. Record it. If it does not, record the fallback (a same-named local branch from `origin/<default>`) and use it in 2.x.
+- [x] 1.4 Prepare project 5 of `raidenyn-shadow`:
   - set Status options to Backlog, Ready, In progress, In review, Done;
   - add the Phase field with the `task-publishing` options;
   - check that the three run fields exist.
-- [ ] 1.5 Prepare `raidenyn-shadow/task-run-scratch`:
+- [x] 1.5 Prepare `raidenyn-shadow/task-run-scratch`:
   - an OpenSpec setup and an `AGENTS.md` naming its process;
   - provider-qualified model cells in `repo-run-models.md`: plan `claudeAgent/claude-opus-5-5` (`medium`), review `opencode/openai/gpt-6.2-sol` (`medium`), implement `opencode/ollama-cloud/deepseek-v4.1-flash:1017` (`high`; the owner confirmed the id, and `medium` is not offered);
   - the scratch repository registered as a T3 project, and the `.claude/skills/` path proved with `project-conductor` on Claude and OpenCode;
