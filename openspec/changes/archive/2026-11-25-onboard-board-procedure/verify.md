@@ -45,7 +45,7 @@ publish-skills-releases  valid: true
 
 | Capability | Sync status | Notes |
 |---|---|---|
-| `board-onboarding` | ✗ pending sync | New capability with 21 ADDED requirements. `openspec/specs/board-onboarding/` does not exist yet; archive creates it. |
+| `board-onboarding` | ✗ pending sync | New capability with 20 ADDED requirements. `openspec/specs/board-onboarding/` does not exist yet; created at archive as `openspec/specs/board-onboarding/spec.md`. |
 
 ---
 
