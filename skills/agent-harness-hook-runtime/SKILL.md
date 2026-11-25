@@ -160,7 +160,7 @@ Host behaviour to know when you write a handler:
 3. **Check.** Run `node .agents/harness/hook-runtime/cli.mjs check`.
 4. **Restart host sessions.** OpenCode loads the plugin and the handler workers once per process, so restart it. Claude Code loads the runtime for each hook call.
 
-When you change the tool's files in the skill's own source repo, bump `version` in `assets/hook-runtime/tool.json` by hand. Nothing enforces the bump yet. The lock's per-file hashes still show an outdated copy in a target repo.
+In the skill's own source repo, `assets/hook-runtime/` is generated from TypeScript under `src/hook-runtime/`; edit the source, never the assets. When you change it, bump `version` in `src/hook-runtime/tool.json` by hand and rebuild. Nothing enforces the bump yet. The lock's per-file hashes still show an outdated copy in a target repo.
 
 ## Remove
 

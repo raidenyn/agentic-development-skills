@@ -144,7 +144,7 @@ The gate registers the proof `verify-pass`. Another handler calls `context.proof
 3. **Check.** Run `node .agents/harness/verify-gate/cli.mjs check`.
 4. **Restart OpenCode sessions**, which load handlers once per process.
 
-When you change the tool's files in the skill's own source repo, bump `version` in `assets/verify-gate/tool.json` by hand. Nothing enforces the bump yet.
+In the skill's own source repo, `assets/verify-gate/` is generated from TypeScript under `src/verify-gate/`; edit the source, never the assets. When you change it, bump `version` in `src/verify-gate/tool.json` by hand and rebuild. Nothing enforces the bump yet.
 
 ## Remove
 

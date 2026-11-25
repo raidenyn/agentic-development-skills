@@ -16,6 +16,14 @@ This repo publishes Agent Skills. Each skill lives in `skills/<name>/` and is li
 0. Run `python3 scripts/skills.py install-hooks` once per clone; commits and PR titles must follow Conventional Commits (`feat:`, `fix:`, `docs:` …).
 1. `python3 scripts/skills.py new <name> "<description>"`
 2. Write the skill. Add it to the Skills table in `README.md`.
-3. `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'` and `pnpm test` must all pass (`pnpm install --frozen-lockfile` and `pip install -r requirements-dev.txt` first; pnpm is the only package manager).
+3. `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'` and `pnpm run check` must all pass (`pnpm install --frozen-lockfile` and `pip install -r requirements-dev.txt` first; pnpm is the only package manager).
+
+## Node code
+
+- **Shipped tools** are strict TypeScript in `src/<tool>/` (files in `src/shared/` go into every tool that lists them in `src/build.json`). `pnpm run build` writes the committed `.mjs` under `skills/<skill>/assets/<tool>/`. Never edit `skills/*/assets/` or `.agents/harness/` by hand.
+- After changing a tool: bump `version` in `src/<tool>/tool.json` once per pull request, then `pnpm run harness:update`, which rebuilds and refreshes this repo's installed copy and lock.
+- Source uses erasable syntax only. Put type-only declarations in `*.types.mts` or inside a type; a comment above a type ships orphaned.
+- **Repo scripts** are `.mts` in `scripts/`, run by Node 26 without a build. **Tests of shipped tools** stay `.mjs` in `tests/agent-harness/` and must not import `.mts`: CI also runs them on Node 22.0.0.
+- Biome lints and formats; `noNonNullAssertion` is off because `!` keeps the typed build byte-identical, and `noExplicitAny` is off because `any` marks host and JSON boundaries on purpose (strict `tsc` still rejects implicit `any`). Use `any` only there.
 
 Agent hooks run `node scripts/verify.mts` on edits, ticked tasks and turn end (`.agents/harness/`); run it by hand with `node .agents/harness/verify-gate/cli.mjs run`.

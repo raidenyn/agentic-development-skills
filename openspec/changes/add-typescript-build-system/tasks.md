@@ -43,11 +43,11 @@
 
 ## 7. CI and documentation
 
-- [ ] 7.1 `validate.yml`: add build check, type check and lint steps after `pnpm install --frozen-lockfile`; leave the Node 22.0.0 job without `pnpm install --frozen-lockfile`
-- [ ] 7.2 `AGENTS.md`: the three classes of code, "never edit `skills/*/assets/` or `.agents/harness/` by hand", the edit, build, version bump and `update` sequence, and `pnpm run check` in the workflow list
-- [ ] 7.3 `README.md`: update the layout block and the development commands
-- [ ] 7.4 Both harness skills' `SKILL.md`: check for statements that the assets are hand-written or that the repo has no build, and correct them
-- [ ] 7.5 Run `openspec validate add-typescript-build-system --strict` so the deltas for `harness-tool-install` and `board-onboarding` still match the main specs' requirement headers
+- [x] 7.1 `validate.yml`: add build check, type check and lint steps after `pnpm install --frozen-lockfile`; leave the Node 22.0.0 job without `pnpm install --frozen-lockfile`
+- [x] 7.2 `AGENTS.md`: the three classes of code, "never edit `skills/*/assets/` or `.agents/harness/` by hand", the edit, build, version bump and `update` sequence, and `pnpm run check` in the workflow list
+- [x] 7.3 `README.md`: update the layout block and the development commands
+- [x] 7.4 Both harness skills' `SKILL.md`: check for statements that the assets are hand-written or that the repo has no build, and correct them
+- [x] 7.5 Run `openspec validate add-typescript-build-system --strict` so the deltas for `harness-tool-install` and `board-onboarding` still match the main specs' requirement headers
 
 ## 8. Final checks
 

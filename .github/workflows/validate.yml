@@ -33,6 +33,16 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
 
+      # The skill assets are built from src/; a stale or hand-edited asset fails here.
+      - name: Check the build output is current
+        run: pnpm run build:check
+
+      - name: Type-check
+        run: pnpm run typecheck
+
+      - name: Lint and format check
+        run: pnpm run lint
+
       # The npx-based marketplace test needs the Node version from .nvmrc.
       - name: Run Python tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
