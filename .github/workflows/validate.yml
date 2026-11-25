@@ -38,6 +38,12 @@ jobs:
       - name: Run release config tests
         run: npm test
 
+      - name: Check the hook runtime install
+        run: node .agents/harness/hook-runtime/cli.mjs check
+
+      - name: Check the verify gate install
+        run: node .agents/harness/verify-gate/cli.mjs check
+
       - name: Validate Claude Code marketplace manifest
         run: npx -y @anthropic-ai/claude-code@2.1.330 plugin validate .
 

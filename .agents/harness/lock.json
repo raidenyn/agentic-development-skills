@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "tools": {
+    "hook-runtime": {
+      "version": "0.1.0",
+      "files": {
+        "claude.mjs": "6113c2735e159eabf8b2bba2cec44783c1cbcedc71bf980a80c2e17ddd6ac615",
+        "cli.mjs": "b7a315ba8b45178ba75a47966b8a23698fda8a96578ca1e4baffba3d5c0ed774",
+        "lib/capabilities.mjs": "8244ecdf726358a4b5408c2480a04e5df03e9823ad4bfce70b1f9fda8554fe5c",
+        "lib/claude-adapter.mjs": "45a854032c21570e850438fcf2da6e5cd62c3140a6176dcc523dcb2a04e481a0",
+        "lib/config.mjs": "19ebb270a6adea1541698161c32cd1d91b43d9a5f59a6a1b5d3c818c17498989",
+        "lib/install.mjs": "6ff06210e372b709bda59d7846f433f311d405bfdc7859b3ef7984cb2bbf182c",
+        "lib/opencode-adapter.mjs": "893ca5c3d2143f36cfcb789209acb8fac4e9b637f95df8cc90f40fb669269350",
+        "lib/runtime.mjs": "103c1572a3f6324c6135bc49bf46c8ac6674e721dba32fdd6188abb7df1167ad",
+        "lib/state.mjs": "6d799c3967b76dee662733741ea9f4311c0b619d7fa50f8f87cbef12a3dfa5b3",
+        "lib/supervisor.mjs": "5c81e18c3aaad9bf5eb5afd91679dd95cc0cc12b751a0eb10048fa35cc8692c4",
+        "lib/worker-entry.mjs": "cd9471463536f90fa2d5d7059cb8cc138a4f403272d93f287d1afe61ef209d9b",
+        "opencode/index.mjs": "9af31479c2f09a7a44815fe42b90bcf0598e7dccb4667999c15671ee70391ff8",
+        "tool.json": "f937136352b102f44fe8fe56eb3f7cfecf91d4cfc62ec8243834fb40fa1f1b2c"
+      }
+    },
+    "verify-gate": {
+      "version": "0.1.0",
+      "files": {
+        "cli.mjs": "a82ee7998ee84bd5e68a211acee1d9541f6bbd474b867cbdda4232accd6bf14a",
+        "handler.mjs": "f043d0414618e6a78a8e7d0adc3cb545a3345a941fa6e3f73125409b559996c5",
+        "lib/config.mjs": "19ebb270a6adea1541698161c32cd1d91b43d9a5f59a6a1b5d3c818c17498989",
+        "lib/gate.mjs": "c94d895c57400a63bfa57472f3d4d4e4400d1f38827becffb6727e741de97668",
+        "lib/install.mjs": "6ff06210e372b709bda59d7846f433f311d405bfdc7859b3ef7984cb2bbf182c",
+        "lib/run.mjs": "d6812a3db92b5d1200fa1888ed734c83e3155b50e54a317392df8187be6a7348",
+        "lib/state.mjs": "6d799c3967b76dee662733741ea9f4311c0b619d7fa50f8f87cbef12a3dfa5b3",
+        "lib/tree.mjs": "d536524d05ab57a8cbabfc520ec611f10dbd3571fe7aeb6a9c5b952c71d6edea",
+        "lib/triggers.mjs": "ca5b9a24bfd5c0a77951f2c824dafedadd7b95eb6986caba0652049f5fb94bfb",
+        "tool.json": "26aece3d8172662d3ffe539921e58a63764be7b12f8c583d8ea624b3c9f37894"
+      }
+    }
+  }
+}
