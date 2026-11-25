@@ -19,7 +19,7 @@ All commands are in [references/onboarding-github.md](references/onboarding-gith
 | Repository | none | `owner/name`, the one repository the board serves. |
 | Plan model | `Opus-5.5` | Shown in the plan for the person to confirm. |
 | Review model | `GPT-6.2-Sol` | Shown in the plan for the person to confirm. |
-| Implement model | DeepSeek | The exact model id must be confirmed by the person in this run. Never guess it. When `repo-run-models.md` already exists, its id is shown for confirmation. |
+| Implement model | DeepSeek | The exact model id must be confirmed by the person. Never guess it. An id already in an existing `repo-run-models.md`, on the default branch or on the onboarding branch, counts as confirmed unless the person changes it in the plan. |
 | Effort per role | `medium` | Shown in the plan for the person to confirm. |
 | Dry run | no | Yes: survey, show the plan and the report, write nothing. |
 | Proceed without asking | no | Yes: show the plan and write without waiting for agreement. |
@@ -45,7 +45,7 @@ A field is never renamed. A released name is never changed.
 ## Rules
 
 - **Survey first, then show the plan.** Every run first reads the current state of every step, and writes nothing while it does. Then it shows a plan that marks each item as **create**, **change** (a write over an existing value, such as a different `PROJECT_URL`), **reuse** or **cannot do**, with the reason and, for cannot do, the owner's exact step. Show every file and body that would change as its full content or a diff. (Spec: Survey before any write.)
-- **Wait for agreement.** Write only after the person agrees to the plan. When the person said to proceed without asking, show the plan and write at once, except for what needs their choice: an implement model id they have not confirmed, and edits to files that refer to the old roster. Those are left out of this run and reported. (Spec: Survey before any write.)
+- **Wait for agreement.** Write only after the person agrees to the plan. When the person said to proceed without asking, show the plan and write at once, except for what needs their choice: an implement model id that is neither given nor in an existing `repo-run-models.md`, and edits to files that refer to the old roster. Those new choices are left out of this run and reported. What an earlier, approved run already put on the onboarding branch is not a new choice: it stays planned, so a repeated run reuses it instead of calling it a conflict. (Spec: Survey before any write.)
 - **A dry run writes nothing.** It stops after the plan and prints the report, with every owner step and the exact commands. Nothing on GitHub changes: no variable, field, file, branch, pull request or issue. Reading into a local clone in the scratchpad is allowed. (Spec: Survey before any write.)
 - **Look before every write.** Read the thing again just before writing it. If it changed since the survey, do not write it: report it. A step that already holds the planned value is reused. A run right after a completed run writes nothing. (Spec: Report and repeatability.)
 - **Change only what this procedure manages:** the variable `PROJECT_URL`, the three fields and the missing options of "Run phase", the two settings files, and the first line of keyless issue bodies. Keep every other key, option, field, file and byte.
@@ -86,7 +86,7 @@ Survey: read the repository's variables.
 | absent, and the agent is admin | create |
 | a different value, and the agent is admin | change: show the old and the new value |
 | the agent is not admin | cannot do: owner step, the exact `gh variable set` command with the real board URL |
-| the variables cannot be read | the value is "unknown, owner checks". With admin, create or change as above after reading again. Without admin, owner step as above |
+| the variables cannot be read | the value is "unknown, owner checks". With admin, read again just before the write; a value read then decides create, change or reuse as above. If the second read fails too, or without admin: owner step as above, and no write |
 
 Write: only when the agent is admin. Read the variable again, then set it. If setting it fails, do not retry another way: print the exact command for the owner.
 
@@ -120,7 +120,8 @@ Survey:
    - `repo-review-models.md` exists: search the repository for references to its path. A reference outside the file itself defers the roster migration: `repo-run-models.md` is not proposed, the old file stays, and the references are an owner step. The person can agree in the plan to edit those references in the same pull request; then the migration goes ahead and the edits are part of it. Without deferral, the new file carries the old file's reviewer table and presets unchanged, and the old file is removed in the same commit.
    - Only `repo-run-models.md` exists: it is the source of its own triggers, reviewer presets and models. Show its models as the ones to confirm; confirmed, the planned content equals the file, so it is reused and nothing is proposed. The file changes only when the person picks other models in the plan.
    - Neither exists: propose `repo-run-models.md` with the role table only.
-   - The implement model id is not confirmed: the model file is cannot do in this run. The harness key goes ahead.
+   - The implement model id is not confirmed: it is neither given by the person nor in an existing `repo-run-models.md` on the default branch or the onboarding branch. Then the model file is cannot do in this run. The harness key goes ahead.
+   - **Unattended carry-over.** When the person said to proceed without asking, a model file or reference edit that would be left out only because it needs their choice stays planned when the onboarding branch already holds it: the earlier run's approved plan made that choice. Plan it with the branch's model ids and the same reference edits, so the branch's content is the planned content.
 4. **Expected changes.** From the plan, list each planned path with its status against the default branch: `.agents/harness.json` modified or added, `repo-run-models.md` added (or modified), `repo-review-models.md` removed, each agreed reference edit modified.
 5. **Existing branch and pull request.** Compare what the branch holds with the expected changes, at one head commit, as the reference describes:
 
@@ -130,8 +131,8 @@ Survey:
 | no branch | create: one commit and one pull request |
 | an open pull request from the branch to another base, or from a fork | cannot do: conflict, report it |
 | the branch's changes and contents equal the expected ones | reuse the branch, and its pull request (open one if none is open) |
-| the branch's changes are a strict subset of the expected ones, each equal to its planned content | change: one more commit on the same branch adding the rest |
-| anything else, such as a change to another file or other content | cannot do: conflict, report it, do not push |
+| the branch's changes are a strict subset of the expected ones, each equal to its planned content, and the roster swap is either whole or absent on it | change: one more commit on the same branch adding the rest |
+| anything else, such as a change to another file, other content, or only one half of the roster swap (the added `repo-run-models.md` without the removal of `repo-review-models.md`, or the other way round) | cannot do: conflict, report it, do not push. The add and the removal must be in one commit |
 
 Write: as the reference describes, through a local clone in the scratchpad, never with force. Before reusing as is, check the pull request's head is still the commit you compared. Merging the pull request is the owner's step: report it.
 

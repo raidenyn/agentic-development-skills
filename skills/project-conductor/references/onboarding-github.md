@@ -125,12 +125,12 @@ jq -r 'select(.name == "Run phase") | .options[].name
   <work>/fields.json      # any output: a case-only option collision
 ```
 
-**An option sent without its `id` is created anew, and every item that had the old option loses its value.** So always send the complete list, with the `id`, `color` and `description` of every option that already exists, options this procedure does not use included. Build the list from the field you read:
+**An option sent without its `id` is created anew, and every item that had the old option loses its value.** So always send the complete list, with the `id`, `color` and `description` of every option that already exists, options this procedure does not use included. Build the list from the field you read. A planned name is added only when no existing option has it in any case, so a case-only collision such as "Plan" adds nothing beside it:
 
 ```bash
 jq -c 'select(.name == "Run phase") | .id as $field
        | [.options[] | {id, name, color, description}] as $old
-       | ($old | map(.name)) as $names
+       | ($old | map(.name | ascii_downcase)) as $names
        | {field: $field, options: ($old + [("plan", "implement", "closeout", "care")
            | select(. as $o | $names | index($o) | not)
            | {name: ., color: "GRAY", description: ""}])}' <work>/fields.json > <work>/run-phase.json
@@ -147,9 +147,10 @@ Read the field back: every old option keeps its id, and the four names are there
 
 ### Read
 
-Read each file from a ref: the default branch, or a commit SHA. The raw media type returns the file's exact bytes.
+Read each file from a ref: the default branch, or a commit SHA. The raw media type returns the file's exact bytes. Create the folders of the run first:
 
 ```bash
+mkdir -p <work>/<default> <work>/<sha> <work>/planned <work>/keys
 # <path> is .agents/harness.json, .agents/hooked-rules/repo-run-models.md or .agents/hooked-rules/repo-review-models.md
 if gh api -H 'Accept: application/vnd.github.raw+json' \
      "repos/<repo>/contents/<path>?ref=<ref>" > <work>/<ref>/<file> 2> <work>/err; then
@@ -169,7 +170,10 @@ gh api repos/<repo>/git/ref/heads/chore/project-conductor-onboarding --jq .objec
 
 ### The harness key
 
+Check in this order. First whether the file exists: when the read above answered `absent`, skip both checks and create the file as shown below. Only a file that is present is checked for valid JSON:
+
 ```bash
+test -f <work>/<default>/harness.json                                 # fails: absent, create it (below)
 jq -e 'type == "object"' <work>/<default>/harness.json > /dev/null   # fails: not valid JSON, this step stops
 jq -e '.["project-conductor"] == {"maxParallel": 2, "reviewRounds": 5, "reconcileMinutes": 30, "maxAttempts": 2}' \
   <work>/<default>/harness.json                                       # true: the key is reused
@@ -215,6 +219,10 @@ From the approved plan, against `<default>`:
 | `.agents/hooked-rules/repo-review-models.md` | `removed`, when it is replaced. Left out when deferred or absent |
 | each agreed reference edit | `modified` |
 
+With "proceed without asking", a model file, roster removal or reference edit that this run would leave out only because it needs the person's choice stays in the list when the onboarding branch already holds it (see "Unattended carry-over" in SKILL.md). Build its planned content from the branch: the model ids of the branch's `repo-run-models.md`, and the same path replacement in each referring file. A run that left it out would otherwise call the earlier run's approved work a conflict.
+
+The roster swap is one unit: `repo-run-models.md` `added` and `repo-review-models.md` `removed` are both in the list or both out.
+
 When the list is empty, everything is on the default branch: reuse, no branch and no pull request. If an open onboarding pull request is left over, report it for the owner to close.
 
 ### Compare with the branch and its pull request
@@ -240,7 +248,8 @@ GitHub may report the roster swap as one `renamed` entry. Read it as `removed <p
 | What the branch holds | Then |
 |---|---|
 | exactly the expected set of (status, path), each with its planned content | reuse as is |
-| a strict subset of the expected set, each present file equal to its planned content | partial work of an earlier run: complete it with one commit |
+| a strict subset of the expected set, each present file equal to its planned content, holding both halves of the roster swap or neither | partial work of an earlier run: complete it with one commit |
+| only one half of the roster swap: `added repo-run-models.md` without `removed repo-review-models.md`, or the other way round | conflict: the spec requires both in one commit. Report it, do not push |
 | anything else: another path, another status, other content | conflict: report it, do not push |
 
 Before reusing as is, check that the head has not moved:
@@ -277,7 +286,7 @@ git -C <work>/clone fetch -q origin <sha>
 git -C <work>/clone switch -q --detach <sha>
 # copy, remove and add only the expected changes the branch does not hold yet
 git -C <work>/clone commit -q -m "chore: onboard project-conductor settings"
-git -C <work>/clone push origin <commit>:refs/heads/chore/project-conductor-onboarding
+git -C <work>/clone push origin HEAD:refs/heads/chore/project-conductor-onboarding   # HEAD is the new commit
 ```
 
 The push is not forced, so it is rejected if the remote head moved after the compare. Then report the conflict and push nothing else.
@@ -514,7 +523,14 @@ diff <(jq -S --arg p <project id> '.data.repository.issue | {state, milestone: .
         edits: [.userContentEdits.nodes[] | {id, updatedAt}]}' <work>/keys/<issue>.now.json)
 ```
 
-Also check that the milestone's marker is unchanged, and that the issue is still open. Any difference: skip the issue, and list it under Pending as "changed during the run".
+Also check that the issue is still open (the `state` above) and that its milestone's marker is unchanged: run the milestones read of "Slugs" again into `milestones.now.tsv` and compare the issue's milestone line:
+
+```bash
+grep "^<milestone number>"$'\t' <work>/milestones.tsv
+grep "^<milestone number>"$'\t' <work>/milestones.now.tsv    # must print the same line
+```
+
+Save the survey's milestones read as `<work>/milestones.tsv` for this. Any difference: skip the issue, and list it under Pending as "changed during the run".
 
 Then read every key in the repository again, with the command above, into `keys.now.tsv`. A duplicate now stops the keying step. If another issue holds the planned key, skip this issue and report it as "key `<key>` was taken by #<other> during the run". Do not give it another number in this run.
 
@@ -544,9 +560,17 @@ gh api "repos/<repo>/rules/branches/<default>" \
 Classic branch protection:
 
 ```bash
-gh api "repos/<repo>/branches/<default>/protection" \
-  --jq '.required_pull_request_reviews.required_approving_review_count // 0'
+if out=$(gh api "repos/<repo>/branches/<default>/protection" \
+           --jq '.required_pull_request_reviews.required_approving_review_count // 0' 2>&1); then
+  echo "read: $out"                                    # the required count
+elif printf '%s' "$out" | grep -q 'Branch not protected'; then
+  echo "read: 0"                                       # counts as read only when .permissions.admin is true
+else
+  echo "not read: $out"
+fi
 ```
+
+On a 404, `gh` prints the error body (with its `message`) and `gh: ... (HTTP 404)`; the capture holds both.
 
 How to read them:
 
