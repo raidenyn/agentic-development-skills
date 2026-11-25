@@ -56,10 +56,10 @@
 
 ## 6. Onboard this repository
 
-- [ ] 6.1 `scripts/verify.mjs`: `edit` checks the one file by type, `task` and `turn-end` run `skills.py validate`, the Python unit tests, `npm test` and both tools' `check`; tests for the edit dispatch
-- [ ] 6.2 Run both `install` commands from `skills/*/assets/`, write `.agents/harness.json` with `command: ["node", "scripts/verify.mjs"]` and `base: "origin/main"`, review the generated `.claude/settings.json` and `opencode.json`, and add the verify line to `AGENTS.md`
-- [ ] 6.3 After the installs in 6.2: add `check` for both tools to `validate.yml`, and add `vendored.test.mjs` (byte parity of the vendored copies with the assets)
-- [ ] 6.4 Run every standard check: `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'`, `npm test`, and both `check` commands
+- [x] 6.1 `scripts/verify.mjs`: `edit` checks the one file by type, `task` and `turn-end` run `skills.py validate`, the Python unit tests, `npm test` and both tools' `check`; tests for the edit dispatch
+- [x] 6.2 Run both `install` commands from `skills/*/assets/`, write `.agents/harness.json` with `command: ["node", "scripts/verify.mjs"]` and `base: "origin/main"`, review the generated `.claude/settings.json` and `opencode.json`, and add the verify line to `AGENTS.md`
+- [x] 6.3 After the installs in 6.2: add `check` for both tools to `validate.yml`, and add `vendored.test.mjs` (byte parity of the vendored copies with the assets)
+- [x] 6.4 Run every standard check: `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'`, `npm test`, and both `check` commands
 
 ## 7. Live evidence (OpenCode first, then Claude Code)
 
