@@ -1,0 +1,957 @@
+[
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhLwZX4",
+    "type": "DRAFT_ISSUE",
+    "status": {
+      "name": "Backlog"
+    },
+    "phase": null,
+    "runPhase": {
+      "name": "implement"
+    },
+    "attempt": {
+      "number": 2.0
+    },
+    "runThread": null,
+    "content": {
+      "__typename": "DraftIssue"
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhLyfgw",
+    "type": "ISSUE",
+    "status": {
+      "name": "Backlog"
+    },
+    "phase": null,
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 1,
+      "title": "A: keyed task",
+      "state": "OPEN",
+      "body": "<!-- task: scratch-rfc/m1-scratch/1 -->\nTask A body.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhLyfkY",
+    "type": "ISSUE",
+    "status": {
+      "name": "Backlog"
+    },
+    "phase": null,
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 2,
+      "title": "P: plan issue",
+      "state": "OPEN",
+      "body": "<!-- plan: scratch-rfc/m1-scratch -->\nPlan of M1 scratch.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhLyfms",
+    "type": "ISSUE",
+    "status": {
+      "name": "Backlog"
+    },
+    "phase": null,
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 4,
+      "title": "B: keyless task",
+      "state": "OPEN",
+      "body": "<!-- task: scratch-rfc/m1-scratch/8 -->\nTask B without a key.\n\nSecond paragraph with `code` and trailing spaces.  \n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "editor": {
+              "login": "raidenyn-shadow"
+            },
+            "deletedAt": null
+          },
+          {
+            "editor": {
+              "login": "raidenyn-shadow"
+            },
+            "deletedAt": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhLyfqQ",
+    "type": "ISSUE",
+    "status": {
+      "name": "Backlog"
+    },
+    "phase": null,
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 5,
+      "title": "C: keyless CRLF task",
+      "state": "OPEN",
+      "body": "<!-- task: scratch-rfc/m1-scratch/9 -->\nTask C with CRLF line endings.\r\nSecond line.\r\nLast line without newline",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "editor": {
+              "login": "raidenyn-shadow"
+            },
+            "deletedAt": null
+          },
+          {
+            "editor": {
+              "login": "raidenyn-shadow"
+            },
+            "deletedAt": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhLyo4E",
+    "type": "ISSUE",
+    "status": {
+      "name": "Backlog"
+    },
+    "phase": null,
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 7,
+      "title": "D: keyless, to be edited by a second account",
+      "state": "OPEN",
+      "body": "Task D body, written by the agent account.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhLyo7U",
+    "type": "ISSUE",
+    "status": {
+      "name": "Backlog"
+    },
+    "phase": null,
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 8,
+      "title": "E: keyless, no milestone",
+      "state": "OPEN",
+      "body": "Task E body, no milestone.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhLyqP4",
+    "type": "ISSUE",
+    "status": {
+      "name": "Backlog"
+    },
+    "phase": null,
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 9,
+      "title": "M: malformed task marker",
+      "state": "OPEN",
+      "body": "<!-- task: scratch-rfc/m1-scratch -->\nMarker without a number.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhLyqTY",
+    "type": "ISSUE",
+    "status": {
+      "name": "Backlog"
+    },
+    "phase": null,
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 10,
+      "title": "X: keyless in another RFC milestone",
+      "state": "OPEN",
+      "body": "Task X in milestone of other-rfc.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhLyqVg",
+    "type": "ISSUE",
+    "status": {
+      "name": "Backlog"
+    },
+    "phase": null,
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 11,
+      "title": "W: keyless, edited after the survey",
+      "state": "OPEN",
+      "body": "Task W original body.\nEdited while the plan waited.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "editor": {
+              "login": "raidenyn-shadow"
+            },
+            "deletedAt": null
+          },
+          {
+            "editor": {
+              "login": "raidenyn-shadow"
+            },
+            "deletedAt": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhLyqZA",
+    "type": "ISSUE",
+    "status": {
+      "name": "Backlog"
+    },
+    "phase": null,
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 12,
+      "title": "V: keyless, key taken meanwhile",
+      "state": "OPEN",
+      "body": "Task V body.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhL25OI",
+    "type": "ISSUE",
+    "status": {
+      "name": "Ready"
+    },
+    "phase": {
+      "name": "Feature"
+    },
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 15,
+      "title": "R1: add a greeting function",
+      "state": "OPEN",
+      "body": "<!-- task: scratch-rfc/m1-scratch/20 -->\n\n**Goal:** Add src/greet.py with greet(name) returning 'Hello, <name>!'.\n\n**Ready to start when:** no conditions\n\n## Start\n\n1. **Reconcile this task with the code.** Read the whole task and the repository's `AGENTS.md`.\n2. **Report what differs.** If the repository differs from this task in a way that changes its scope, stop and tell the person.\n3. **Start by the repo's process:** `AGENTS.md`, on the branch you were given.\n\n## Acceptance criteria\n\n- [ ] greet('Ann') returns 'Hello, Ann!'.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhL25TY",
+    "type": "ISSUE",
+    "status": {
+      "name": "Ready"
+    },
+    "phase": {
+      "name": "Feature"
+    },
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 16,
+      "title": "R2: add a word counter",
+      "state": "OPEN",
+      "body": "<!-- task: scratch-rfc/m1-scratch/21 -->\n\n**Goal:** Add src/count.py with count_words(text) returning the number of words.\n\n**Ready to start when:** no conditions\n\n## Start\n\n1. **Reconcile this task with the code.** Read the whole task and the repository's `AGENTS.md`.\n2. **Report what differs.** If the repository differs from this task in a way that changes its scope, stop and tell the person.\n3. **Start by the repo's process:** `AGENTS.md`, on the branch you were given.\n\n## Acceptance criteria\n\n- [ ] count_words('a b c') returns 3.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhL25Z0",
+    "type": "ISSUE",
+    "status": {
+      "name": "Ready"
+    },
+    "phase": {
+      "name": "Feature"
+    },
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 17,
+      "title": "R3: add a reverser (only blocker closed as not planned)",
+      "state": "OPEN",
+      "body": "<!-- task: scratch-rfc/m1-scratch/22 -->\n\n**Goal:** Add src/rev.py with reverse(text) returning the reversed text.\n\n**Ready to start when:** no conditions\n\n## Start\n\n1. **Reconcile this task with the code.** Read the whole task and the repository's `AGENTS.md`.\n2. **Report what differs.** If the repository differs from this task in a way that changes its scope, stop and tell the person.\n3. **Start by the repo's process:** `AGENTS.md`, on the branch you were given.\n\n## Acceptance criteria\n\n- [ ] reverse('abc') returns 'cba'.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "number": 14,
+            "state": "CLOSED",
+            "stateReason": "NOT_PLANNED"
+          }
+        ]
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhL25f8",
+    "type": "ISSUE",
+    "status": {
+      "name": "Ready"
+    },
+    "phase": {
+      "name": "Feature"
+    },
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 18,
+      "title": "K: keyless task",
+      "state": "OPEN",
+      "body": "Probe issue without a key.\n\n**Goal:** Add src/k.py.\n\n**Ready to start when:** no conditions\n\n## Start\n\n1. **Reconcile this task with the code.** Read the whole task and the repository's `AGENTS.md`.\n2. **Report what differs.** If the repository differs from this task in a way that changes its scope, stop and tell the person.\n3. **Start by the repo's process:** `AGENTS.md`, on the branch you were given.\n\n## Acceptance criteria\n\n- [ ] it exists.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhL25lw",
+    "type": "ISSUE",
+    "status": {
+      "name": "Backlog"
+    },
+    "phase": {
+      "name": "Feature"
+    },
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 19,
+      "title": "C: task with an open start condition",
+      "state": "OPEN",
+      "body": "<!-- task: scratch-rfc/m1-scratch/23 -->\n\n**Goal:** Add src/c.py.\n\n**Ready to start when:** owner signs off\n\n## Start\n\n1. **Reconcile this task with the code.** Read the whole task and the repository's `AGENTS.md`.\n2. **Report what differs.** If the repository differs from this task in a way that changes its scope, stop and tell the person.\n3. **Start by the repo's process:** `AGENTS.md`, on the branch you were given.\n\n## Acceptance criteria\n\n- [ ] it exists.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhL25rc",
+    "type": "ISSUE",
+    "status": {
+      "name": "Ready"
+    },
+    "phase": {
+      "name": "Feature"
+    },
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 20,
+      "title": "L: task with a linked branch",
+      "state": "OPEN",
+      "body": "<!-- task: scratch-rfc/m1-scratch/24 -->\n\n**Goal:** Add src/l.py.\n\n**Ready to start when:** no conditions\n\n## Start\n\n1. **Reconcile this task with the code.** Read the whole task and the repository's `AGENTS.md`.\n2. **Report what differs.** If the repository differs from this task in a way that changes its scope, stop and tell the person.\n3. **Start by the repo's process:** `AGENTS.md`, on the branch you were given.\n\n## Acceptance criteria\n\n- [ ] it exists.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "ref": {
+              "name": "feat/20-l-preexisting"
+            }
+          }
+        ]
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhL25wY",
+    "type": "ISSUE",
+    "status": {
+      "name": "Ready"
+    },
+    "phase": {
+      "name": "Feature"
+    },
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 21,
+      "title": "E: task to be edited by a second account",
+      "state": "OPEN",
+      "body": "<!-- task: scratch-rfc/m1-scratch/25 -->\n\n**Goal:** Add src/e.py.\n\n**Ready to start when:** no conditions\n\n## Start\n\n1. **Reconcile this task with the code.** Read the whole task and the repository's `AGENTS.md`.\n2. **Report what differs.** If the repository differs from this task in a way that changes its scope, stop and tell the person.\n3. **Start by the repo's process:** `AGENTS.md`, on the branch you were given.\n\n## Acceptance criteria\n\n- [ ] it exists.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_lAHOD4ARxs4BtKTKzhL251o",
+    "type": "ISSUE",
+    "status": {
+      "name": "Ready"
+    },
+    "phase": {
+      "name": "Feature"
+    },
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 22,
+      "title": "O: task with an open blocker",
+      "state": "OPEN",
+      "body": "<!-- task: scratch-rfc/m1-scratch/26 -->\n\n**Goal:** Add src/o.py.\n\n**Ready to start when:** no conditions\n\n## Start\n\n1. **Reconcile this task with the code.** Read the whole task and the repository's `AGENTS.md`.\n2. **Report what differs.** If the repository differs from this task in a way that changes its scope, stop and tell the person.\n3. **Start by the repo's process:** `AGENTS.md`, on the branch you were given.\n\n## Acceptance criteria\n\n- [ ] it exists.\n",
+      "repository": {
+        "nameWithOwner": "raidenyn-shadow/task-run-scratch"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "number": 1,
+            "state": "OPEN",
+            "stateReason": null
+          }
+        ]
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  }
+]
