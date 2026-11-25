@@ -12,7 +12,7 @@ The verify gate SHALL run exactly one command: the argv in `.agents/harness.json
 - **THEN** the run counts as failed with a text naming the command
 
 ### Requirement: Handover to the command
-Every run SHALL set `VERIFY_TRIGGER` (`edit`, `task` or `turn-end`), `VERIFY_BASE` (the merge-base of HEAD and `verify-gate.base`, else HEAD) and `VERIFY_CHANGED_FILES` (the path of a file listing changed paths, one per line). For `edit` it SHALL also set `VERIFY_FILE`, the edited path relative to the repo root.
+Every run SHALL set `VERIFY_TRIGGER` (`edit`, `task` or `turn-end`), `VERIFY_BASE` (the merge-base of HEAD and `verify-gate.base`, else HEAD, else empty when there is no HEAD) and `VERIFY_CHANGED_FILES` (the path of `changed.txt` in the gate's state folder, a plain text file listing changed paths, one per line). For `edit` it SHALL also set `VERIFY_FILE`, the edited path relative to the repo root, and for other triggers it SHALL unset an inherited `VERIFY_FILE`.
 
 #### Scenario: Turn-end handover
 - **WHEN** a turn end fires with one tracked file modified against the base
@@ -27,7 +27,7 @@ Every run SHALL set `VERIFY_TRIGGER` (`edit`, `task` or `turn-end`), `VERIFY_BAS
 - **THEN** that path is in the changed list
 
 ### Requirement: Changed-file list
-The changed list SHALL include every path whose content differs from the base, every untracked non-ignored file of the real index, and every path whose stat entry changed since the last full pass.
+The changed list SHALL include every path whose content differs from the base, every untracked non-ignored file of the real index, and every path whose stat entry changed since the last full pass or that has gone since then.
 
 #### Scenario: Untracked with git rm --cached
 - **WHEN** an unchanged file is untracked with `git rm --cached` and another edit triggers a run
@@ -159,11 +159,15 @@ For the same session and failure, counting the root agent and all its subagents 
 - **THEN** exactly one of them is blocked, and the other gets the notice
 
 ### Requirement: Charge before delivery
-A block SHALL be charged to the session's count before it is delivered. The charge SHALL be refunded only when the block is known not to have been delivered (superseded, rejected, or the write failed). A charge whose acknowledgement never arrives SHALL stay charged.
+A block SHALL be charged to the session's count before it is delivered, as a charge `{id, key, confirmed}` in the session's `blocks.json` ledger. The acknowledgement SHALL mark the charge confirmed. The charge SHALL be removed only when the block is known not to have been delivered (superseded, rejected, or the write failed). A charge whose acknowledgement never arrives SHALL stay charged. If the ledger cannot be charged, the turn end SHALL NOT be blocked.
 
 #### Scenario: Acknowledgement lost
 - **WHEN** a block was delivered and its acknowledgement cannot finish before the deadline
 - **THEN** the block still counts toward the limit
+
+#### Scenario: Ledger busy
+- **WHEN** a turn end fails and the ledger's own lock is not free within 2 seconds
+- **THEN** the turn end is not blocked and gets a notice that the block counter was busy
 
 ### Requirement: Failure identity
 Two failures SHALL be the same when their exact argv, their exit status (with the signal name, if any) and their output tail match after normalizing only volatile fields: the repo root, temp paths, timestamps, durations, and hex values that cannot be decimal codes.
@@ -185,7 +189,7 @@ Two failures SHALL be the same when their exact argv, their exit status (with th
 - **THEN** they count as one failure
 
 ### Requirement: Content key
-The gate SHALL compute a content key from a private index kept in its state folder and built with `git read-tree HEAD`, so the real index is never changed and its flags are not inherited. The key SHALL be a git tree id over tracked and untracked non-ignored files, plus a digest of their filesystem stat data from `lstat` (path, mode, ctime, mtime, inode, size), plus a hash of the `verify-gate` config section.
+The gate SHALL compute a content key from a private index kept in its state folder and built with `git read-tree HEAD`, so the real index is never changed and its flags are not inherited. The key SHALL be a git tree id over tracked and untracked non-ignored files, plus a digest of their filesystem stat data from `lstat` (path, mode, ctime, mtime, inode, size), plus a hash of the `verify-gate` config section with its defaults filled in.
 
 #### Scenario: Unchanged commit
 - **WHEN** a full run passed and that content is committed unchanged
@@ -245,7 +249,7 @@ The verify gate SHALL register a proof named `verify-pass`. It SHALL hold, retur
 - **THEN** `verify-pass` fails with a text saying the content changed since the last pass
 
 ### Requirement: Manual run
-`node .agents/harness/verify-gate/cli.mjs run` SHALL run a full check outside any host, with the same shortcut and pass record rules. It SHALL print the result and exit non-zero on failure. Hook failure notices SHALL point to this command.
+`node .agents/harness/verify-gate/cli.mjs run` SHALL run a full check outside any host, with `VERIFY_TRIGGER=turn-end` and the same shortcut and pass record rules. It SHALL print the result, exit 0 on a pass or when nothing changed since the last full pass, and exit non-zero on failure or when another run held the lock until its deadline. Hook failure notices SHALL point to this command.
 
 #### Scenario: Manual full run
 - **WHEN** `cli.mjs run` is executed on a tree whose command passes

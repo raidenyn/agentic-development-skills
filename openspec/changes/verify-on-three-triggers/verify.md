@@ -48,7 +48,7 @@ verify-on-three-triggers change  valid   (also clean under --strict)
 |---|---|---|
 | agent-hook-runtime | ✗ pending sync | new capability; `openspec/specs/` has none yet; synced at archive |
 | verify-gate-triggers | ✗ pending sync | same |
-| harness-tool-install | ✗ pending sync | same. At sync, widen the "Onboard and Update sections" warning to name `.agents/harness.json`, as the skills now do (final review I2) |
+| harness-tool-install | ✗ pending sync | same. The "Onboard and Update sections" warning already names `.agents/harness.json`, as the skills do (final review I2) |
 
 ---
 
@@ -70,11 +70,21 @@ verify-gate skill has "Making it fast", and `validate.yml` runs both `check` com
 
 **Drift warnings** (non-blocking):
 
-- Task 10 recorded 12 places where the code, and the skill text that follows it, differ in detail from
-  design.md: the `blocks.json` ledger format, result kinds per event, `"handler": true`, and others
-  (`.superpowers/sdd/plan/task-10-report.md`). design.md should be reconciled with the code before
-  archive.
-- plan.md and tasks.md still name 18 OpenCode fixtures that Task 10 deleted because no test read them.
+- Reconciled: design.md and the three delta specs now describe what the code does (the `blocks.json`
+  charge ledger and its own lock, result kinds per event, `"handler": true`, version 0.1.1, the
+  `tasks.json`, `pass.json` and `pass-stat.json` schemas, `changed.txt` as a plain list, the trace path,
+  hook entries without a `matcher`, the tool-relative restore hint, the config hash over the section
+  with defaults, the worker message names, and others). No departure from an owner's decision or a
+  frozen RFC contract was found. One design point was weakened rather than reworded: a contender that
+  takes over a dead owner's gate lock does not kill the process groups recorded in it.
+- Remaining: the reconciliation added one requirement ("OpenCode notices") and four scenarios ("Turn-end
+  notice on OpenCode", "Notice before a command on OpenCode", "Entries and timeouts", "Ledger busy").
+  They describe existing code, but were not mapped to tests, so the coverage count above predates them.
+- Done: the harness-tool-install warning requirement now names `.agents/harness.json` and the scripts
+  `verify-gate.command` runs, as the skills do (final review I2), so it needs no widening at sync.
+- Done: plan.md names only the OpenCode fixtures that still exist; tasks.md named none of the 18 that
+  Task 10 deleted. spike.md still names deleted `event-session.*` fixtures in its findings, kept as the
+  spike's historical record.
 - Weak test coverage, counted as covered:
   - "Acknowledgement lost" has no test that drops an `ack`;
   - "Stuck import" is tested with a synchronous loop, not a never-settling top-level `await`;

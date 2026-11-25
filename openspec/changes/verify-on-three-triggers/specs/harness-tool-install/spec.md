@@ -34,7 +34,7 @@ Copied tool code SHALL be plain `.mjs` (or `.json` data), with no npm dependenci
 - **THEN** `verify-gate` `check` fails naming `colour`, and says nothing about `other-tool`
 
 ### Requirement: Repeated install and edited copies
-A repeated `install` of the same version with unchanged copied files SHALL change nothing and exit 0. `install` and `update` SHALL refuse to overwrite a copied file whose content differs from the lock, naming the file. There SHALL be no override flag; the message SHALL say how to restore the file or reinstall. `install` SHALL refuse when a different version is installed and point to `update`.
+A repeated `install` of the same version with unchanged copied files SHALL change nothing and exit 0. `install` and `update` SHALL refuse to overwrite a copied file whose content differs from the lock, naming the file. There SHALL be no override flag; the message SHALL say how to restore the file (`git checkout -- .agents/harness/<tool>/<file>`) or reinstall (delete the tool folder and its lock entry). `install` SHALL refuse when a different version is installed and point to `update`.
 
 #### Scenario: Repeated install
 - **WHEN** `install` runs twice
@@ -52,18 +52,22 @@ A repeated `install` of the same version with unchanged copied files SHALL chang
 - **THEN** the folder matches 0.2.0 exactly, the old file is gone, and the lock records 0.2.0
 
 ### Requirement: Check
-`check`, run from the copied folder, SHALL exit non-zero when any copied file is missing, extra or differs from the lock, when the tool's config section has an unknown key or lacks a required value, or, for `verify-gate`, when `hook-runtime` is not installed. Otherwise it SHALL exit 0. Each target repo's CI SHALL run `check` for every installed tool.
+`check`, run from the copied folder, SHALL exit non-zero when any copied file is missing, extra or differs from the lock, when the tool's config section has an unknown key, lacks a required value or has an invalid value, or, for `verify-gate`, when `hook-runtime` is not installed. Otherwise it SHALL exit 0. Each target repo's CI SHALL run `check` for every installed tool.
 
 #### Scenario: Differing file
 - **WHEN** one byte of `.agents/harness/verify-gate/handler.mjs` changes
 - **THEN** `check` exits non-zero naming that file
 
 ### Requirement: Host config merge
-`hook-runtime` `install` and `update` SHALL add the runtime's entries to `.claude/settings.json` (one hook entry per mapped Claude Code event running the `claude.mjs` command) and to `opencode.json` (the plugin folder in `plugins`). They SHALL create either file if absent, preserve every foreign key and entry unchanged and in order, and never add a duplicate entry. They SHALL refuse to rewrite a file they cannot parse as plain JSON, printing the entry to add by hand.
+`hook-runtime` `install` and `update` SHALL add the runtime's entries to `.claude/settings.json` (one hook entry without a `matcher` per mapped Claude Code event, running the `claude.mjs` command) and to `opencode.json` (the plugin folder in `plugins`). They SHALL create either file if absent, preserve every foreign key and entry unchanged and in order, and never add a duplicate entry. They SHALL refuse to rewrite a file they cannot parse as plain JSON, printing the entry to add by hand.
 
 #### Scenario: Foreign entries kept
 - **WHEN** `.claude/settings.json` already has a `PreToolUse` hook of another tool and an `enabledPlugins` key
 - **THEN** after install both are unchanged and the runtime's entry is added once
+
+#### Scenario: Entries and timeouts
+- **WHEN** `hook-runtime` `install` runs in a repo without `.claude/settings.json`
+- **THEN** each of the eight mapped events has one entry without a `matcher`, with a timeout of 1800 seconds for `PostToolUse`, `PostToolUseFailure`, `Stop` and `SubagentStop` and 10 seconds for the others
 
 #### Scenario: Install twice keeps one entry
 - **WHEN** `hook-runtime` `install` runs twice
@@ -77,7 +81,7 @@ A repeated `install` of the same version with unchanged copied files SHALL chang
 - **THEN** it exits non-zero naming `agent-harness-hook-runtime`, and changes nothing
 
 ### Requirement: Onboard and Update sections with the untrusted-checkout warning
-Each of the two skills SHALL have an Onboard section (run `install`, set the config values that need judgement, add `check` to CI, verify live) and an Update section (run `update`, review the diff, run `check`). Each SHALL carry the warning to read a checkout's hook config (`.claude/settings.json`, `opencode.json`, `.agents/harness/`) before starting an agent in an untrusted clone.
+Each of the two skills SHALL have an Onboard section (run `install`, set the config values that need judgement, add `check` to CI, verify live) and an Update section (run `update`, review the diff, run `check`). Each SHALL carry the warning to read a checkout's hook config (`.claude/settings.json`, `opencode.json`, `.agents/harness.json`, `.agents/harness/`) and the scripts that `verify-gate.command` runs before starting an agent in an untrusted clone.
 
 #### Scenario: Warning present
 - **WHEN** either SKILL.md is read

@@ -38,7 +38,7 @@ On OpenCode, the host SHALL import the plugin `.agents/harness/hook-runtime/open
 - **THEN** handlers receive `session.start` for that session before the `prompt`
 
 ### Requirement: Running subagents
-A `turn.end` SHALL carry `background`, the number of this session's subagents still running. On Claude Code it SHALL be read from a `Stop` payload's `background_tasks`. On OpenCode it SHALL come from each child's own lifecycle events, in arrival order, with the `subagent` launch result used only for a child whose lifecycle has not been seen yet.
+A `turn.end` SHALL carry `background`, the number of the ending agent's subagents still running. On Claude Code it SHALL be read from a `Stop` payload's `background_tasks`, and SHALL be 0 at a `SubagentStop`. On OpenCode it SHALL come from each child's own lifecycle events, in arrival order, with the `subagent` launch result used only for a child whose lifecycle has not been seen yet.
 
 #### Scenario: Running subagents are counted
 - **WHEN** a `Stop` payload lists one `background_tasks` entry of type `subagent` with status `running`
@@ -74,14 +74,14 @@ Every `handle` call SHALL receive the repo root, the host name, the session id, 
 - **THEN** the two calls receive different agent context ids and different state folders
 
 ### Requirement: Result delivery on Claude Code
-On Claude Code, the runtime SHALL write the host's hook JSON: a `PreToolUse` deny decision, `additionalContext` for context, and `{decision: "block", reason}` for a block. A turn-end notice SHALL be a `systemMessage`, which reaches the user only. It SHALL flush the output and exit 0 on every path. It SHALL call a block result's `ack` after the output is written, and its `release` on any path that does not write it.
+On Claude Code, the runtime SHALL write the host's hook JSON: a `PreToolUse` deny decision, `additionalContext` for context, and `{decision: "block", reason}` for a block. A turn-end notice or turn-end context SHALL be a `systemMessage`, which reaches the user only, and a `PreCompact` notice SHALL be dropped. It SHALL flush the output and exit 0 on every path. It SHALL call a block result's `ack` after the output is written, and its `release` on any path that does not write it.
 
 #### Scenario: Deny before a command on Claude Code
 - **WHEN** a handler returns `{deny: "no"}` for a `PreToolUse` of `Bash`
 - **THEN** `claude.mjs` prints a `PreToolUse` output whose permission decision is deny with reason `no`, and exits 0
 
 ### Requirement: Result delivery on OpenCode
-On OpenCode, the runtime SHALL deny by throwing an `Error` with the text from `execute.before`. It SHALL add context after a completed tool by appending a text item to the result's `content`, and deliver `prompt` and `session.start` context by appending a text item to `system` at the next `context` session hook. It SHALL turn a block into a synthetic message that resumes the session, and SHALL call the block's `ack` after that message is accepted.
+On OpenCode, the runtime SHALL deny by throwing an `Error` with the text from `execute.before`. It SHALL add context after a completed tool by appending a text item to the result's `content`, and deliver `prompt` and `session.start` context by appending a text item to `system` at the next `context` session hook. It SHALL turn a block into a synthetic message that resumes the session, and SHALL call the block's `ack` after that message is accepted and its `release` if it is rejected.
 
 #### Scenario: Deny before a command on OpenCode
 - **WHEN** a handler returns `{deny: "no"}` for `execute.before` of `shell`
@@ -90,6 +90,17 @@ On OpenCode, the runtime SHALL deny by throwing an `Error` with the text from `e
 #### Scenario: Block at turn end on OpenCode
 - **WHEN** a handler returns `{block: "fix it"}` for `turn.end` on OpenCode
 - **THEN** the plugin sends a synthetic message with text `fix it` that resumes the session
+
+### Requirement: OpenCode notices
+On OpenCode, turn-end context and notices SHALL be sent as a synthetic message that does not resume the session. A notice of an event with no channel of its own (`tool.before`, `compact`, a failed tool call) SHALL be appended to `system` at that session's next `context` hook call.
+
+#### Scenario: Turn-end notice on OpenCode
+- **WHEN** a handler returns `{context: "note"}` for `turn.end` on OpenCode
+- **THEN** the plugin sends a synthetic message with text `note` that does not resume the session
+
+#### Scenario: Notice before a command on OpenCode
+- **WHEN** a handler throws during `execute.before`
+- **THEN** the command runs, and the notice is appended to `system` at that session's next `context` hook call
 
 ### Requirement: OpenCode turn-end slot
 On OpenCode, turn-end work SHALL run detached, one slot per session. Turn ends that arrive while the slot is busy SHALL be queued in order, and each SHALL run. A result whose start generation was overtaken by a newer `session.execution.started` SHALL NOT be delivered, and its `release` SHALL be called.

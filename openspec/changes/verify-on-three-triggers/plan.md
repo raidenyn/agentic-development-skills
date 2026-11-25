@@ -42,7 +42,7 @@ Claude Code 2.1.332.
 
 **Files (exist):**
 - `tests/agent-harness/fixtures/claude/<HookEvent>[-<Tool>][-<source>][-agent[-internal]][-active].json`: `PreToolUse-Bash`, `PreToolUse-Edit`, `PostToolUse-Bash`, `PostToolUse-Edit`, `PostToolUse-Read`, `PostToolUse-Agent`, `PreToolUse-Bash-agent`, `PostToolUse-Bash-agent`, `PreToolUse-Write-agent`, `PostToolUse-Write-agent`, `UserPromptSubmit`, `Stop` (with a running `background_tasks` entry), `Stop-active`, `SubagentStop-agent`, `SubagentStop-agent-internal` (compaction, `agent_type: ""`), `PreCompact`, `SessionStart-startup`, `SessionStart-resume`, `SessionStart-compact`.
-- `tests/agent-harness/fixtures/opencode/`: `execute.before-{shell,read,patch,skill,subagent}[-child]`, `execute.after-<tool>-<status>[-child]`, `event-session.{created,execution.started,execution.succeeded,compaction.started,compaction.ended}`, `session.get-root`, `session.get-child`, `session.prompt`, `session.context`, `session.compaction`, `compact-called`.
+- `tests/agent-harness/fixtures/opencode/`: `execute.before-{shell,read,patch}`, `execute.before-shell-child`, `execute.after-{shell,read,patch,subagent}-completed`, `execute.after-shell-completed-child`, `execute.after-read-error-child`, `execute.after-patch-tick`, `session.prompt`, and `child-lifecycle.jsonl` (from the follow-up spike). Task 10 deleted the other spike payloads, which no test read.
 - `tests/agent-harness/fixtures/spike/`: the spike's plugin, hook and configs, for repeating the runs.
 
 Paths in fixtures are `/REPO` (the repo root), `/HOME` and `/SCRATCH`. Tests substitute `/REPO` with their temp repo.
@@ -387,7 +387,7 @@ cannot change the content id. It does not rely on model self-reports alone:
   4. For the final root turn: re-create the fail file **and** change a tracked file's content, so the content key differs from the last pass and the shortcut cannot apply. Then end the root turn and show it is blocked.
   5. **Expected order on OpenCode** (spike, "Subagent block on OpenCode"): the parent may be handed the child's pre-fix result, but it **must** be handed the child's result again after the child's resumed run passes, and the root's final turn end must verify. A missing second hand-off, or a child that never resumes after its block, is reported under the issue's stop rule. Record the child and parent session ids and the timestamps of each hand-off from the trace.
 
-  Save the correlated events (start, blocked turn end, resume, succeeded, interrupted) as `fixtures/opencode/child-lifecycle-*.json`.
+  Save the correlated events (start, blocked turn end, resume, succeeded, interrupted) as fixtures. (None were added; the lifecycle fixture in the tree is the spike's `fixtures/opencode/child-lifecycle.jsonl`.)
 - [ ] **Step 3: Claude Code.** Repeat Steps 1–2 with `claude -p` (compaction with `--resume <id> "/compact"`), and record `claude --version`. Claude Code's own child recipe:
   1. With the fail file present, the root launches a background `Agent` that edits a file; the shipped gate blocks that subagent's `SubagentStop`.
   2. The root's `Stop` while the subagent runs (`background_tasks` lists it) gets the notice.
