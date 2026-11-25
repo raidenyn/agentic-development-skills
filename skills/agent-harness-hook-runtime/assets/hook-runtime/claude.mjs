@@ -4,6 +4,7 @@
 import { spawn as spawnChild } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { capabilityNotice, HOST_CAPABILITIES } from './lib/capabilities.mjs';
 import { CLAUDE_EVENTS, HOST, toEvent, toOutput } from './lib/claude-adapter.mjs';
 import { createRuntime, failureNotice, loadHandlers, OUTPUT_MS } from './lib/runtime.mjs';
 
@@ -58,9 +59,12 @@ const parse = (text) => {
   }
 };
 
-// main({stdin, cwd, env}) -> {text, ack, release, cleanupDeadline}. `ack` is called once `text` was
-// written, `release` when it could not be; both are bounded by cleanupDeadline.
-export async function main({ stdin, cwd = process.cwd(), env = process.env, spawn = defaultSpawn, now = Date.now } = {}) {
+// main({stdin, cwd, env, spawn, now, capabilities}) -> {text, ack, release, cleanupDeadline}. `ack`
+// is called once `text` was written, `release` when it could not be; both are bounded by
+// cleanupDeadline.
+export async function main({
+  stdin, cwd = process.cwd(), env = process.env, spawn = defaultSpawn, now = Date.now, capabilities = HOST_CAPABILITIES,
+} = {}) {
   const start = now();
   const empty = { text: '', ack: null, release: null, cleanupDeadline: start };
   const payload = parse(String(stdin ?? ''));
@@ -81,6 +85,9 @@ export async function main({ stdin, cwd = process.cwd(), env = process.env, spaw
       sessionId: mapped.sessionId, agentId: mapped.agentId,
       hostDeadline, workDeadline: hostDeadline - HOST_MARGIN_MS,
     });
+    // The capability check runs at session.start and adds a context line when something is missing.
+    const missing = type === 'session.start' ? capabilityNotice(HOST, handlers, capabilities) : null;
+    if (missing) merged = { ...merged, notices: [...(merged.notices ?? []), missing] };
     const out = toOutput(name, merged);
     const text = out ? JSON.stringify(out) : '';
     const written = out && typeof out.reason === 'string' && out.decision === 'block';
