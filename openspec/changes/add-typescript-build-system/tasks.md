@@ -9,10 +9,10 @@
 
 ## 2. Tooling
 
-- [ ] 2.1 Add exact-pinned dev dependencies `typescript`, `@types/node` (major 22) and `@biomejs/biome`; regenerate `pnpm-lock.yaml`
-- [ ] 2.2 Add `biome.json` (two spaces, single quotes, semicolons, width 120, recommended lint rules; excludes `skills/*/assets/**`, `.agents/harness/**`, `openspec/**`, `tests/**/fixtures/**`, `pnpm-lock.yaml`)
-- [ ] 2.3 Add `tsconfig.json` (strict, `noEmit`, `nodenext`, `erasableSyntaxOnly`, `verbatimModuleSyntax`, `allowImportingTsExtensions`, `rootDirs` over the tool folders and `src/shared`, `allowJs` without `checkJs`; includes `src/**/*.mts`, `scripts/**/*.mts`) and `tsconfig.tests.json` (extends it; `allowJs`, `checkJs`, non-strict; includes `tests/**/*.mjs`)
-- [ ] 2.4 Add package scripts `build`, `build:check`, `typecheck`, `lint`, `format`, `check`, `harness:update` and update `test` (design D6)
+- [x] 2.1 Add exact-pinned dev dependencies `typescript`, `@types/node` (major 22) and `@biomejs/biome`; regenerate `pnpm-lock.yaml`
+- [x] 2.2 Add `biome.json` (two spaces, single quotes, semicolons, width 120, recommended lint rules; excludes `skills/*/assets/**`, `.agents/harness/**`, `openspec/**`, `tests/**/fixtures/**`, `pnpm-lock.yaml`)
+- [x] 2.3 Add `tsconfig.json` (strict, `noEmit`, `nodenext`, `erasableSyntaxOnly`, `verbatimModuleSyntax`, `allowImportingTsExtensions`, `rootDirs` over the tool folders and `src/shared`, `allowJs` without `checkJs`; includes `src/**/*.mts`, `scripts/**/*.mts`) and `tsconfig.tests.json` (extends it; `allowJs`, `checkJs`, non-strict; includes `tests/**/*.mjs`)
+- [x] 2.4 Add package scripts `build`, `build:check`, `typecheck`, `lint`, `format`, `check`, `harness:update` and update `test` (design D6)
 
 ## 3. Build script
 

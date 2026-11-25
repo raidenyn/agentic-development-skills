@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "strict": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2023",
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"],
+    "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": false,
+    "rootDirs": ["src/hook-runtime", "src/verify-gate", "src/shared"]
+  },
+  "include": ["src/**/*.mts", "scripts/**/*.mts", "scripts/**/*.d.ts"]
+}
