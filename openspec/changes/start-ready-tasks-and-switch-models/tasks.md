@@ -24,18 +24,18 @@
 
 ## 2. Conductor: wake procedure
 
-- [ ] 2.1 Add `references/run-github.md` with the preflight commands: settings and model file from the default branch, the board's fields and options by exact name, `blocked` label creation, and the model listing and resolution rule.
-- [ ] 2.2 Add the paginated board query: Status, Phase, run fields, assignees, labels, blockers with state and reason, linked branches, closing PRs with head repository and author, body, and edit history with `totalCount`. Check it on the scratch board.
-- [ ] 2.3 Add the `jq` filter. It prints `start` or `skip <reason>` per item. It decides Ready by exactly the owner's three conditions (a task in the project, no open blocker, Status Ready), and then the start guards (taken, trusted, overflow). Each reason must appear for the prepared issues of 1.6.
-- [ ] 2.4 Add the claim commands in their order: re-read, launch-key search, assignee, Status, Attempt, Run phase, `gh issue develop` with the sanitised `<type>/<n>-<slug>`, `t3_thread_launch` (title and `clientRequestId` = launch key, plan model and effort, worktree), Run thread. Each one is read back.
-- [ ] 2.5 Add the start and apply instruction texts and the wake sentence to the reference, verbatim.
-- [ ] 2.6 Add the Advance commands:
+- [x] 2.1 Add `references/run-github.md` with the preflight commands: settings and model file from the default branch, the board's fields and options by exact name, `blocked` label creation, and the model listing and resolution rule.
+- [x] 2.2 Add the paginated board query: Status, Phase, run fields, assignees, labels, blockers with state and reason, linked branches, closing PRs with head repository and author, body, and edit history with `totalCount`. Check it on the scratch board.
+- [x] 2.3 Add the `jq` filter. It prints `start` or `skip <reason>` per item. It decides Ready by exactly the owner's three conditions (a task in the project, no open blocker, Status Ready), and then the start guards (taken, trusted, overflow). Each reason must appear for the prepared issues of 1.6.
+- [x] 2.4 Add the claim commands in their order: re-read, launch-key search, assignee, Status, Attempt, Run phase, `gh issue develop` with the sanitised `<type>/<n>-<slug>`, `t3_thread_launch` (title and `clientRequestId` = launch key, plan model and effort, worktree), Run thread. Each one is read back.
+- [x] 2.5 Add the start and apply instruction texts and the wake sentence to the reference, verbatim.
+- [x] 2.6 Add the Advance commands:
   - collect the reports (triggering message plus kept reports since each claim);
   - drop recorded stops;
   - drop superseded reports;
   - the answer order, with the 5-minute `t3_thread_wait`, the change-folder check, `t3_thread_configure`, the fresh-context queue send, and the Run phase write;
   - the `blocked` label and stop comment format.
-- [ ] 2.7 Rewrite `skills/project-conductor/SKILL.md`:
+- [x] 2.7 Rewrite `skills/project-conductor/SKILL.md`:
   - the new description with the wake triggers;
   - the procedure "Run one wake", with the sections Repair (named, empty), Advance and Start, in that order;
   - the rules;
@@ -45,8 +45,8 @@
 
 ## 3. Task-run skill
 
-- [ ] 3.1 Run `python3 scripts/skills.py new task-run "<description>"` with a "Use when" description naming the start and apply instructions, and add the row to the README's Skills table.
-- [ ] 3.2 Write `skills/task-run/SKILL.md`:
+- [x] 3.1 Run `python3 scripts/skills.py new task-run "<description>"` with a "Use when" description naming the start and apply instructions, and add the row to the README's Skills table.
+- [x] 3.2 Write `skills/task-run/SKILL.md`:
   - reconcile by the task's Start section on the named branch;
   - plan by the repository's process with today's stops;
   - push, check that no background command runs, send the report and the wake sentence in queue mode with a fresh context, and end the turn;
@@ -54,18 +54,18 @@
 
 ## 4. Live proofs on the scratch ground
 
-- [ ] 4.0 Copy both skills into the scratch repository's `.claude/skills/`, and prove that a fresh Claude thread loads both and a fresh OpenCode thread on the implement model loads `task-run`. Re-copy after every skill edit.
+- [x] 4.0 Copy both skills into the scratch repository's `.claude/skills/`, and prove that a fresh Claude thread loads both and a fresh OpenCode thread on the implement model loads `task-run`. Re-copy after every skill edit.
 
-- [ ] 4.1 Wake the conductor with three Ready tasks and `maxParallel` 2. Record that exactly two threads start, that the board shows assignee, In progress, plan, Attempt 1, the thread id and a linked branch, and that the third stays Ready (criterion 1). Save the board read and the wake report to `evidence/`.
+- [x] 4.1 Wake the conductor with three Ready tasks and `maxParallel` 2. Record that exactly two threads start, that the board shows assignee, In progress, plan, Attempt 1, the thread id and a linked branch, and that the third stays Ready (criterion 1). Save the board read and the wake report to `evidence/`.
 - [ ] 4.2 Record the wake report for the keyless, edited-by-second-account, open-condition and linked-branch issues: each is reported and not started (criterion 2).
-- [ ] 4.3 Run one started thread through planning, with a codeword given only in a planning turn. Record:
+- [x] 4.3 Run one started thread through planning, with a codeword given only in a planning turn. Record:
   - the phase report;
   - the switch;
   - the thread's run list (provider and model per run);
   - "Run phase" implement;
   - the coding turn reading the named change folder and failing the codeword probe (criterion 3).
-- [ ] 4.4 Send four prepared reports, each with the item's Run phase stated: a repeat (handled), one while the thread is busy (not idle; then a manual wake acts), one from another thread (stop), and one with a wrong attempt (stop). Record each answer and the board after each (criterion 4).
-- [ ] 4.5 Clean up the scratch threads, branches and labels the proofs made, or record what is left on purpose.
+- [x] 4.4 Send four prepared reports, each with the item's Run phase stated: a repeat (handled), one while the thread is busy (not idle; then a manual wake acts), one from another thread (stop), and one with a wrong attempt (stop). Record each answer and the board after each (criterion 4).
+- [x] 4.5 Clean up the scratch threads, branches and labels the proofs made, or record what is left on purpose.
 
 ## 5. Checks and report
 
