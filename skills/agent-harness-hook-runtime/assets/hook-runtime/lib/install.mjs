@@ -1,6 +1,6 @@
 // Generated from src/shared/lib/install.mts by scripts/build.mts. Do not edit.
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
 import { readHarnessConfig } from './config.mjs';
 

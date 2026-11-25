@@ -62,7 +62,10 @@ async function settleGroup(pgid: number, killStart: number | null, cleanupDeadli
   }
   const room = Number.isFinite(cleanupDeadline) ? cleanupDeadline! - killStart - CONFIRM_MS : KILL_AFTER_MS;
   const killAt = killStart + Math.max(0, Math.min(KILL_AFTER_MS, room));
-  const giveUpAt = Math.max(killAt + CONFIRM_MS, Number.isFinite(cleanupDeadline) ? cleanupDeadline! : killAt + KILL_AFTER_MS);
+  const giveUpAt = Math.max(
+    killAt + CONFIRM_MS,
+    Number.isFinite(cleanupDeadline) ? cleanupDeadline! : killAt + KILL_AFTER_MS,
+  );
   let killed = false;
   while (groupAlive(pgid) && Date.now() < giveUpAt) {
     if (!killed && Date.now() >= killAt) {
@@ -88,8 +91,16 @@ function tailOf(stdout: string, stderr: string, maxBytes: number, tailLines: num
 }
 
 export async function runCommand({
-  spawn, argv, cwd, env, timeoutMs, signal, deadline, cleanupDeadline,
-  maxBytes = 1048576, tailLines = 60,
+  spawn,
+  argv,
+  cwd,
+  env,
+  timeoutMs,
+  signal,
+  deadline,
+  cleanupDeadline,
+  maxBytes = 1048576,
+  tailLines = 60,
 }: RunOptions): Promise<RunResult> {
   const ctl = new AbortController();
   let reason: string | null = null;
@@ -115,7 +126,10 @@ export async function runCommand({
   let spawnError: string | null = null;
   try {
     res = await spawn(argv, {
-      cwd, env, signal: ctl.signal, maxBytes,
+      cwd,
+      env,
+      signal: ctl.signal,
+      maxBytes,
       timeoutMs: Number.isFinite(limit) ? Math.max(1, Math.ceil(limit)) : undefined,
     });
   } catch (err) {

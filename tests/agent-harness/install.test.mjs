@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { existsSync, readFileSync, mkdirSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -22,7 +22,9 @@ const v1 = { 'a.mjs': 'a\n', 'lib/b.mjs': 'b\n' };
 
 async function setup() {
   const r = await tempRepo();
-  const src = (name, version, files = v1) => fakeTool(join(r.dir, '..', `src-${name}-${Date.now()}-${Math.random()}`), version, files);
+  /** @type {(name: string, version: string, files?: Record<string, string>) => string} */
+  const src = (name, version, files = v1) =>
+    fakeTool(join(r.dir, '..', `src-${name}-${Date.now()}-${Math.random()}`), version, files);
   return { r, src };
 }
 
@@ -129,7 +131,11 @@ test('a host-config refusal leaves everything unchanged', async () => {
   const { r, src } = await setup();
   await r.write('.claude/settings.json', '{\n  // comment\n}\n');
   const before = [r.git('status', '--porcelain'), snapshot(r.dir)];
-  const res = installHookRuntime({ sourceDir: src('a', '0.1.0'), repoRoot: r.dir, events: { PreToolUse: 10, Stop: 1800 } });
+  const res = installHookRuntime({
+    sourceDir: src('a', '0.1.0'),
+    repoRoot: r.dir,
+    events: { PreToolUse: 10, Stop: 1800 },
+  });
   assert.equal(res.code, 1);
   assert.deepEqual([r.git('status', '--porcelain'), snapshot(r.dir)], before);
   assert.equal(existsSync(join(r.dir, 'opencode.json')), false);

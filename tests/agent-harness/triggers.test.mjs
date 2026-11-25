@@ -48,8 +48,14 @@ test('detectTicks finds the tick in the Claude Code Edit fixture', () => {
 test('detectTicks finds the tick in the OpenCode patch fixture', () => {
   const patch = fixture('opencode/execute.after-patch-tick.json').result.metadata.files[0].patch;
   const body = patch.split('\n').filter((l) => /^[ +-]/.test(l) && !/^(\+\+\+|---) /.test(l));
-  const before = body.filter((l) => !l.startsWith('+')).map((l) => l.slice(1)).join('\n');
-  const after = body.filter((l) => !l.startsWith('-')).map((l) => l.slice(1)).join('\n');
+  const before = body
+    .filter((l) => !l.startsWith('+'))
+    .map((l) => l.slice(1))
+    .join('\n');
+  const after = body
+    .filter((l) => !l.startsWith('-'))
+    .map((l) => l.slice(1))
+    .join('\n');
   assert.match(before, /- \[x\] 1\.1 Done already/);
   assert.match(after, /- \[x\] 1\.4 Also done/);
   assert.deepEqual(ticks(before, after), ['1.2 Write the thing']);
@@ -96,7 +102,10 @@ test('an untick is not a tick', () => {
 
 test('suppressSeen subtracts ticks recorded after the call began', () => {
   const callAt = 1_000_000;
-  const snap = (at) => ({ version: 1, files: { 'openspec/changes/x/tasks.md': { A: { ticked: 2, unticked: 0, ticks: at } } } });
+  const snap = (at) => ({
+    version: 1,
+    files: { 'openspec/changes/x/tasks.md': { A: { ticked: 2, unticked: 0, ticks: at } } },
+  });
   // One tick recorded after the call began (a child's), and the call saw two: one is its own.
   assert.deepEqual(suppressSeen(['A', 'A'], snap([callAt + 10]), callAt), ['A']);
   // The call saw one; the one recorded after it began is the same tick.

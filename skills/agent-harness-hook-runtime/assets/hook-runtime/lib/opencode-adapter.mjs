@@ -101,7 +101,10 @@ export function createOpencodePlugin({
   capabilities = HOST_CAPABILITIES,
   now = Date.now,
 } = {}) {
-  return { id: PLUGIN_ID, setup: (ctx) => setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, now }) };
+  return {
+    id: PLUGIN_ID,
+    setup: (ctx) => setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, now }),
+  };
 }
 
 async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, now }) {
@@ -283,7 +286,10 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
   // Detached turn ends: one in flight per session, a FIFO behind it, every entry runs.
   function enqueueTurnEnd(sid, received) {
     let slot = slots.get(sid);
-    if (!slot) slots.set(sid, (slot = { busy: false, queue: [] }));
+    if (!slot) {
+      slot = { busy: false, queue: [] };
+      slots.set(sid, slot);
+    }
     slot.queue.push({ generation: generations.get(sid) ?? 0, received });
     if (!slot.busy) detached(drain(sid, slot));
   }

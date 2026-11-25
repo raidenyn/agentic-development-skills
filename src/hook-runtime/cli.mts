@@ -11,7 +11,12 @@ import { capabilityReport } from './lib/capabilities.mts';
 import { CLAUDE_EVENTS } from './lib/claude-adapter.mts';
 import { loadSection } from './lib/config.mts';
 import {
-  checkTool, DEFAULT_CLAUDE_COMMAND, DEFAULT_OPENCODE_PLUGIN, ensureSection, installHookRuntime, requireNode22,
+  checkTool,
+  DEFAULT_CLAUDE_COMMAND,
+  DEFAULT_OPENCODE_PLUGIN,
+  ensureSection,
+  installHookRuntime,
+  requireNode22,
 } from './lib/install.mts';
 import { EVENTS, loadHandlers } from './lib/runtime.mts';
 import type { HarnessEvent } from './lib/handler.types.mts';
@@ -43,7 +48,8 @@ function git(args: string[], cwd: string): string | null {
 // otherwise the git checkout around the working directory.
 function defaultRepo(): string {
   const harness = resolve(HERE, '..');
-  if (basename(harness) === 'harness' && basename(resolve(harness, '..')) === '.agents') return resolve(harness, '..', '..');
+  if (basename(harness) === 'harness' && basename(resolve(harness, '..')) === '.agents')
+    return resolve(harness, '..', '..');
   return git(['rev-parse', '--show-toplevel'], process.cwd()) || process.cwd();
 }
 
@@ -57,8 +63,10 @@ export function sectionErrors(repoRoot: string): string[] {
       errors.push(`"${TOOL}.deadlines" must be an object of event: milliseconds`);
     } else {
       for (const [event, ms] of Object.entries(d)) {
-        if (!EVENTS.includes(event as HarnessEvent)) errors.push(`unknown event "${event}" in "${TOOL}.deadlines" (allowed: ${EVENTS.join(', ')})`);
-        else if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) errors.push(`"${TOOL}.deadlines.${event}" must be a positive number of milliseconds`);
+        if (!EVENTS.includes(event as HarnessEvent))
+          errors.push(`unknown event "${event}" in "${TOOL}.deadlines" (allowed: ${EVENTS.join(', ')})`);
+        else if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0)
+          errors.push(`"${TOOL}.deadlines.${event}" must be a positive number of milliseconds`);
       }
     }
   }
@@ -68,7 +76,8 @@ export function sectionErrors(repoRoot: string): string[] {
 function install(repoRoot: string, mode: InstallMode, io: Io): number {
   const node = requireNode22();
   if (node) return io.fail([node]);
-  if (git(['rev-parse', '--is-inside-work-tree'], repoRoot) !== 'true') return io.fail([`${repoRoot} is not a git work tree`]);
+  if (git(['rev-parse', '--is-inside-work-tree'], repoRoot) !== 'true')
+    return io.fail([`${repoRoot} is not a git work tree`]);
   let errors: string[];
   try {
     errors = sectionErrors(repoRoot);
@@ -78,8 +87,12 @@ function install(repoRoot: string, mode: InstallMode, io: Io): number {
   if (errors.length) return io.fail(errors.map((e) => `.agents/harness.json: ${e}`));
   // Every refusal is decided before anything is written; the copies and the lock come last.
   const res = installHookRuntime({
-    sourceDir: HERE, repoRoot, mode, events: CLAUDE_EVENTS,
-    command: DEFAULT_CLAUDE_COMMAND, pluginPath: DEFAULT_OPENCODE_PLUGIN,
+    sourceDir: HERE,
+    repoRoot,
+    mode,
+    events: CLAUDE_EVENTS,
+    command: DEFAULT_CLAUDE_COMMAND,
+    pluginPath: DEFAULT_OPENCODE_PLUGIN,
   });
   if (res.code !== 0) return io.fail(res.messages);
   const messages = [...res.messages];
@@ -124,8 +137,14 @@ export async function main(
 ): Promise<number> {
   const io: Io = {
     out,
-    ok: (lines) => { for (const l of lines) out(`${l}\n`); return 0; },
-    fail: (lines) => { for (const l of lines) err(`${l}\n`); return 1; },
+    ok: (lines) => {
+      for (const l of lines) out(`${l}\n`);
+      return 0;
+    },
+    fail: (lines) => {
+      for (const l of lines) err(`${l}\n`);
+      return 1;
+    },
   };
   const [command, ...rest] = argv;
   let repo: string | undefined;
@@ -158,7 +177,12 @@ const isScript = (() => {
 
 if (isScript) {
   main(process.argv.slice(2)).then(
-    (code) => { process.exitCode = code; },
-    (e) => { process.stderr.write(`${TOOL}: ${errText(e)}\n`); process.exitCode = 1; },
+    (code) => {
+      process.exitCode = code;
+    },
+    (e) => {
+      process.stderr.write(`${TOOL}: ${errText(e)}\n`);
+      process.exitCode = 1;
+    },
   );
 }

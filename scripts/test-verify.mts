@@ -33,7 +33,9 @@ test('edit of a repo script lints it', () => {
 });
 
 test('edit of a harness test lints it', () => {
-  assert.deepEqual(editChecks('tests/agent-harness/run.test.mjs'), [[BIOME, 'check', 'tests/agent-harness/run.test.mjs']]);
+  assert.deepEqual(editChecks('tests/agent-harness/run.test.mjs'), [
+    [BIOME, 'check', 'tests/agent-harness/run.test.mjs'],
+  ]);
 });
 
 test('edit of a recorded fixture is not linted', () => {

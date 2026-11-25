@@ -10,7 +10,7 @@
     "build": "node scripts/build.mts",
     "build:check": "node scripts/build.mts --check",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.tests.json",
-    "lint": "biome check src scripts tests",
+    "lint": "biome check --error-on-warnings src scripts tests",
     "format": "biome check --write src scripts tests",
     "test": "node --test scripts/test-build.mts scripts/test-verify.mts scripts/test-release-rules.mts scripts/test-release-lifecycle.mts scripts/test-project-ready.mts \"tests/agent-harness/*.test.mjs\"",
     "check": "pnpm run build:check && pnpm run typecheck && pnpm run lint && pnpm test",

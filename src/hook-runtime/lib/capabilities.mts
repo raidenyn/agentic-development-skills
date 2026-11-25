@@ -5,9 +5,21 @@ import type { Handler } from './handler.types.mts';
 
 type CapabilityTable = Record<string, Record<string, boolean | string>>;
 
-export const CAPABILITIES = Object.freeze(['deny', 'contextAfterTool', 'blockTurnEnd', 'redeliverAfterCompact', 'perSubagentState']);
+export const CAPABILITIES = Object.freeze([
+  'deny',
+  'contextAfterTool',
+  'blockTurnEnd',
+  'redeliverAfterCompact',
+  'perSubagentState',
+]);
 
-const ALL = { deny: true, contextAfterTool: true, blockTurnEnd: true, redeliverAfterCompact: true, perSubagentState: true };
+const ALL = {
+  deny: true,
+  contextAfterTool: true,
+  blockTurnEnd: true,
+  redeliverAfterCompact: true,
+  perSubagentState: true,
+};
 
 export const HOST_CAPABILITIES: CapabilityTable = Object.freeze({
   'claude-code': Object.freeze({ ...ALL, verified: '2.1.332' }),
@@ -56,7 +68,8 @@ export function capabilityReport(
   const missing: string[] = [];
   for (const host of Object.keys(table)) {
     out.push(`${host} (verified on ${table[host]!.verified ?? 'unknown'})`);
-    for (const cap of CAPABILITIES) out.push(`  ${cap.padEnd(24)}${table[host]![cap] === true ? 'supported' : 'missing'}`);
+    for (const cap of CAPABILITIES)
+      out.push(`  ${cap.padEnd(24)}${table[host]![cap] === true ? 'supported' : 'missing'}`);
     for (const line of missingCapabilities(host, handlers, table)) missing.push(`  ${line}`);
   }
   if (missing.length) out.push('Handler events that need a missing capability:', ...missing);

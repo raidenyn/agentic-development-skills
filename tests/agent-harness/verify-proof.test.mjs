@@ -11,7 +11,9 @@ const { createVerifyHandler } = await import(pathToFileURL(join(ASSETS.verifyGat
 const h = createVerifyHandler();
 const proof = (r) => h.proofs['verify-pass'](proofCtx(r));
 const cleanups = [];
-after(async () => { for (const c of cleanups.reverse()) await c(); });
+after(async () => {
+  for (const c of cleanups.reverse()) await c();
+});
 
 async function repo() {
   const r = await verifyRepo({ files: { 'src/a.js': 'a\n' } });

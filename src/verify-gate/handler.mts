@@ -7,12 +7,34 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readHarnessConfig } from './lib/config.mts';
 import {
-  chargeBlock, confirmCharge, CONFIG_KEYS, CONTENDED, DEFAULTS, failureKey, localLock, localSpawn, MANUAL,
-  normalizeConfig, readJson, refundCharge, REQUIRED_KEYS, resolveConfig, runGate, verifyPass, waitLock,
+  chargeBlock,
+  confirmCharge,
+  CONFIG_KEYS,
+  CONTENDED,
+  DEFAULTS,
+  failureKey,
+  localLock,
+  localSpawn,
+  MANUAL,
+  normalizeConfig,
+  readJson,
+  refundCharge,
+  REQUIRED_KEYS,
+  resolveConfig,
+  runGate,
+  verifyPass,
+  waitLock,
 } from './lib/gate.mts';
 import { writeJsonAtomic } from './lib/state.mts';
 import { detectTicks, itemCounts, matchesGlob, suppressSeen } from './lib/triggers.mts';
-import type { EventPayload, Handler, HandlerContext, HandlerResult, HarnessEvent, WorkerContext } from './lib/handler.types.mts';
+import type {
+  EventPayload,
+  Handler,
+  HandlerContext,
+  HandlerResult,
+  HarnessEvent,
+  WorkerContext,
+} from './lib/handler.types.mts';
 import type { Failure, GateResult } from './lib/gate.mts';
 import type { Counts } from './lib/triggers.mts';
 
@@ -36,12 +58,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // The state layout (hook-runtime lib/state.mjs): <tool>/sessions/<host>-<session>/<agent>.
 const toolDirOf = (ctx: Ctx) => resolve(ctx.stateDir, '..', '..', '..');
 const sessionDirOf = (ctx: Ctx) => dirname(ctx.stateDir);
-const callFile = (ctx: Ctx, callId: unknown) => join(ctx.stateDir, 'calls', `${String(callId).replace(/[^A-Za-z0-9._-]/g, '_')}.json`);
+const callFile = (ctx: Ctx, callId: unknown) =>
+  join(ctx.stateDir, 'calls', `${String(callId).replace(/[^A-Za-z0-9._-]/g, '_')}.json`);
 const services = (ctx: Ctx) => ({ spawn: ctx.spawn ?? localSpawn, lock: ctx.lock ?? localLock });
 
 // timeoutSeconds from the installed copy's repo (<repo>/.agents/harness/verify-gate), else 900.
 function installedTimeoutSeconds(): number {
-  if (basename(dirname(HERE)) !== 'harness' || basename(resolve(HERE, '..', '..')) !== '.agents') return DEFAULTS.timeoutSeconds;
+  if (basename(dirname(HERE)) !== 'harness' || basename(resolve(HERE, '..', '..')) !== '.agents')
+    return DEFAULTS.timeoutSeconds;
   try {
     return normalizeConfig(readHarnessConfig(resolve(HERE, '..', '..', '..'))['verify-gate']).timeoutSeconds;
   } catch {
@@ -53,23 +77,36 @@ function installedTimeoutSeconds(): number {
 
 function listTaskFiles(repoRoot: string, patterns: readonly string[]): string[] {
   const out = new Set<string>();
-  const entries = (dir: string) => { try { return readdirSync(dir, { withFileTypes: true }); } catch { return []; } };
+  const entries = (dir: string) => {
+    try {
+      return readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+  };
   for (const pattern of patterns) {
-    const segs = String(pattern).replace(/\\/g, '/').split('/').filter((s) => s && s !== '.');
+    const segs = String(pattern)
+      .replace(/\\/g, '/')
+      .split('/')
+      .filter((s) => s && s !== '.');
     const walk = (dir: string, i: number, rel: string): void => {
       if (i === segs.length) {
-        try { if (statSync(dir).isFile()) out.add(rel); } catch {}
+        try {
+          if (statSync(dir).isFile()) out.add(rel);
+        } catch {}
         return;
       }
       const seg = segs[i] as string;
       const sub = (name: string) => (rel ? `${rel}/${name}` : name);
       if (seg === '**') {
         walk(dir, i + 1, rel);
-        for (const e of entries(dir)) if (e.isDirectory() && !SKIP_DIRS.has(e.name)) walk(join(dir, e.name), i, sub(e.name));
+        for (const e of entries(dir))
+          if (e.isDirectory() && !SKIP_DIRS.has(e.name)) walk(join(dir, e.name), i, sub(e.name));
       } else if (!/[*?]/.test(seg)) {
         walk(join(dir, seg), i + 1, sub(seg));
       } else {
-        for (const e of entries(dir)) if (!SKIP_DIRS.has(e.name) && matchesGlob(seg, e.name)) walk(join(dir, e.name), i + 1, sub(e.name));
+        for (const e of entries(dir))
+          if (!SKIP_DIRS.has(e.name) && matchesGlob(seg, e.name)) walk(join(dir, e.name), i + 1, sub(e.name));
       }
     };
     walk(repoRoot, 0, '');
@@ -86,17 +123,38 @@ function countsOf(repoRoot: string, rel: string): Record<string, Counts> {
 }
 
 function pruneCalls(dir: string, now: number = Date.now()): void {
-  for (const name of (() => { try { return readdirSync(dir); } catch { return []; } })()) {
+  for (const name of (() => {
+    try {
+      return readdirSync(dir);
+    } catch {
+      return [];
+    }
+  })()) {
     const f = join(dir, name);
-    try { if (now - statSync(f).mtimeMs > CALL_MAX_AGE_MS) rmSync(f, { force: true }); } catch {}
+    try {
+      if (now - statSync(f).mtimeMs > CALL_MAX_AGE_MS) rmSync(f, { force: true });
+    } catch {}
   }
 }
 
 // Every agent's calls folder in every session of this worktree.
 function pruneAllCalls(toolDir: string): void {
   const sessions = join(toolDir, 'sessions');
-  for (const s of (() => { try { return readdirSync(sessions); } catch { return []; } })()) {
-    for (const a of (() => { try { return readdirSync(join(sessions, s)); } catch { return []; } })()) pruneCalls(join(sessions, s, a, 'calls'));
+  for (const s of (() => {
+    try {
+      return readdirSync(sessions);
+    } catch {
+      return [];
+    }
+  })()) {
+    for (const a of (() => {
+      try {
+        return readdirSync(join(sessions, s));
+      } catch {
+        return [];
+      }
+    })())
+      pruneCalls(join(sessions, s, a, 'calls'));
   }
 }
 
@@ -130,7 +188,9 @@ async function ensureSnapshot(ctx: Ctx): Promise<void> {
     if (existsSync(file)) return;
     const snap = emptySnapshot();
     for (const rel of listTaskFiles(ctx.repoRoot, normalizeConfig(ctx.config).taskFiles)) {
-      snap.files[rel] = Object.fromEntries(Object.entries(countsOf(ctx.repoRoot, rel)).map(([k, c]) => [k, { ...c, ticks: [] }]));
+      snap.files[rel] = Object.fromEntries(
+        Object.entries(countsOf(ctx.repoRoot, rel)).map(([k, c]) => [k, { ...c, ticks: [] }]),
+      );
     }
     writeJsonAtomic(file, snap);
   } finally {
@@ -140,7 +200,11 @@ async function ensureSnapshot(ctx: Ctx): Promise<void> {
 
 // The ticks of this call, minus ticks of the same items recorded after its before-image. Returns
 // {ticks: [{path, key}]} or {contended: true}.
-async function detect(event: EventPayload, ctx: Ctx, until: number): Promise<{ ticks: Tick[]; contended?: undefined } | { contended: true; ticks?: undefined }> {
+async function detect(
+  event: EventPayload,
+  ctx: Ctx,
+  until: number,
+): Promise<{ ticks: Tick[]; contended?: undefined } | { contended: true; ticks?: undefined }> {
   const image = event.tool?.callId != null ? readJson(callFile(ctx, event.tool.callId)) : null;
   if (!image?.files) return { ticks: [] };
   const raw: Tick[] = [];
@@ -171,7 +235,11 @@ async function detect(event: EventPayload, ctx: Ctx, until: number): Promise<{ t
       }
       for (const [key, rec] of Object.entries(entry)) {
         const c = afterCounts[rel]![key] ?? { ticked: 0, unticked: 0 };
-        entry[key] = { ticked: c.ticked, unticked: c.unticked, ticks: (rec.ticks ?? []).filter((at: number) => now - at < TICK_KEEP_MS) };
+        entry[key] = {
+          ticked: c.ticked,
+          unticked: c.unticked,
+          ticks: (rec.ticks ?? []).filter((at: number) => now - at < TICK_KEEP_MS),
+        };
       }
       snap.files[rel] = entry;
     }
@@ -188,8 +256,15 @@ async function detect(event: EventPayload, ctx: Ctx, until: number): Promise<{ t
 function gateOptions(ctx: Ctx, deps: Deps) {
   const { spawn, lock } = services(ctx);
   return {
-    repoRoot: ctx.repoRoot, config: ctx.config, stateDir: toolDirOf(ctx), signal: ctx.signal,
-    deadline: ctx.deadline - RUN_MARGIN_MS, cleanupDeadline: ctx.deadline + CLEANUP_MS, spawn, lock, ...deps,
+    repoRoot: ctx.repoRoot,
+    config: ctx.config,
+    stateDir: toolDirOf(ctx),
+    signal: ctx.signal,
+    deadline: ctx.deadline - RUN_MARGIN_MS,
+    cleanupDeadline: ctx.deadline + CLEANUP_MS,
+    spawn,
+    lock,
+    ...deps,
   };
 }
 
@@ -211,7 +286,9 @@ async function afterTool(event: EventPayload, ctx: Ctx, deps: Deps, trace: Trace
     if (r.status === 'contended') return { context: CONTENDED };
     if (r.status !== 'failed') return null;
     const items = found.ticks!.map((t) => `"${t.key}" in ${t.path}`).join(', ');
-    return { context: `verify: a task was ticked while verification fails. Ticked: ${items}. ${cmd} failed: ${body(r)}` };
+    return {
+      context: `verify: a task was ticked while verification fails. Ticked: ${items}. ${cmd} failed: ${body(r)}`,
+    };
   }
   if (kind !== 'edit') return null;
   const texts: string[] = [];
@@ -240,21 +317,29 @@ async function turnEnd(event: EventPayload, ctx: Ctx, deps: Deps, trace: Trace):
   // A root turn end with running subagents is a notice and is never charged.
   const charging = !(root && background > 0);
   const onFailure = charging
-    ? async (failure: Failure) => ({ charge: await chargeBlock({ lock, sessionDir, key: failureKey(failure, ctx.repoRoot), max }) })
+    ? async (failure: Failure) => ({
+        charge: await chargeBlock({ lock, sessionDir, key: failureKey(failure, ctx.repoRoot), max }),
+      })
     : undefined;
   const r = await runGate({ ...gateOptions(ctx, deps), trigger: 'turn-end', onFailure });
   trace(r.status === 'skipped' ? 'no-change' : r.status === 'contended' ? 'contended' : 'ran');
   if (r.status === 'contended') return { context: CONTENDED };
   if (r.status !== 'failed' || r.aborted) return null;
   if (!charging) {
-    return { context: `verify: ${cmd} fails while ${background} subagent(s) still run; verification runs again at the next turn end. ${body(r)}` };
+    return {
+      context: `verify: ${cmd} fails while ${background} subagent(s) still run; verification runs again at the next turn end. ${body(r)}`,
+    };
   }
   const c = r.charge as { charged?: boolean; busy?: boolean; limit?: number; n?: number; id: string } | undefined;
   if (c?.busy) {
-    return { context: `verify: ${cmd} failed, and the block counter was busy, so this turn end is not blocked. ${MANUAL}\n\n${cmd} failed: ${body(r)}` };
+    return {
+      context: `verify: ${cmd} failed, and the block counter was busy, so this turn end is not blocked. ${MANUAL}\n\n${cmd} failed: ${body(r)}`,
+    };
   }
   if (!c?.charged) {
-    return { context: `verify: still failing after ${c?.limit ?? max} blocks; continuing. ${MANUAL}\n\n${cmd} failed: ${body(r)}` };
+    return {
+      context: `verify: still failing after ${c?.limit ?? max} blocks; continuing. ${MANUAL}\n\n${cmd} failed: ${body(r)}`,
+    };
   }
   return {
     block: `verify: ${cmd} failed (attempt ${c!.n} of ${max}). Fix the failure before ending the turn: ${body(r)}`,
@@ -282,10 +367,16 @@ export function createVerifyHandler({
     timeouts: { 'tool.after': budget, 'turn.end': budget },
     manual: MANUAL,
     proofs: {
-      'verify-pass': (ctx: HandlerContext) => verifyPass({
-        repoRoot: ctx.repoRoot, config: ctx.config, stateDir: toolDirOf(ctx as Ctx), signal: ctx.signal, deadline: ctx.deadline,
-        ...services(ctx as Ctx), ...(deps.contentKey ? { contentKey: deps.contentKey as never } : {}),
-      }),
+      'verify-pass': (ctx: HandlerContext) =>
+        verifyPass({
+          repoRoot: ctx.repoRoot,
+          config: ctx.config,
+          stateDir: toolDirOf(ctx as Ctx),
+          signal: ctx.signal,
+          deadline: ctx.deadline,
+          ...services(ctx as Ctx),
+          ...(deps.contentKey ? { contentKey: deps.contentKey as never } : {}),
+        }),
     },
     async handle(event: EventPayload, ctx: Ctx) {
       const trace = (o: string) => ctx.trace?.(o);
@@ -295,7 +386,8 @@ export function createVerifyHandler({
           await ensureSnapshot(ctx);
           return null;
         case 'tool.before':
-          if ((event.tool?.kind === 'shell' || event.tool?.kind === 'edit') && event.tool.callId != null) writeBeforeImage(event, ctx);
+          if ((event.tool?.kind === 'shell' || event.tool?.kind === 'edit') && event.tool.callId != null)
+            writeBeforeImage(event, ctx);
           return null;
         case 'tool.after':
           return afterTool(event, ctx, deps, trace);

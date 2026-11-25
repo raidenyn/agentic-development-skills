@@ -18,7 +18,9 @@ const COMMAND = 'node "$CLAUDE_PROJECT_DIR/.agents/harness/hook-runtime/claude.m
 const PLUGIN = './.agents/harness/hook-runtime/opencode';
 
 const cleanups = [];
-after(async () => { for (const c of cleanups.reverse()) await c(); });
+after(async () => {
+  for (const c of cleanups.reverse()) await c();
+});
 
 async function repo(files) {
   const r = await tempRepo({ files });
@@ -27,7 +29,8 @@ async function repo(files) {
 }
 
 const cli = (r, ...args) => runNode(CLI, [...args, '--repo', r.dir], { cwd: r.dir });
-const installed = (r, ...args) => runNode(join(r.dir, '.agents', 'harness', 'hook-runtime', 'cli.mjs'), args, { cwd: r.dir });
+const installed = (r, ...args) =>
+  runNode(join(r.dir, '.agents', 'harness', 'hook-runtime', 'cli.mjs'), args, { cwd: r.dir });
 const json = (r, rel) => JSON.parse(readFileSync(join(r.dir, rel), 'utf8'));
 
 // Every file outside .git, with its bytes.
@@ -107,11 +110,19 @@ for (const mode of ['install', 'update']) {
   });
 
   test(`${mode}: a foreign top-level key ignored`, async () => {
-    const r = await repo({ '.agents/harness.json': JSON.stringify({ 'other-tool': { x: 1 }, 'hook-runtime': { deadlines: { 'tool.after': 9000 } } }) });
+    const r = await repo({
+      '.agents/harness.json': JSON.stringify({
+        'other-tool': { x: 1 },
+        'hook-runtime': { deadlines: { 'tool.after': 9000 } },
+      }),
+    });
     const out = await cli(r, mode);
     assert.equal(out.code, 0, out.stderr + out.stdout);
     assert.doesNotMatch(out.stdout + out.stderr, /other-tool/);
-    assert.deepEqual(json(r, '.agents/harness.json'), { 'other-tool': { x: 1 }, 'hook-runtime': { deadlines: { 'tool.after': 9000 } } });
+    assert.deepEqual(json(r, '.agents/harness.json'), {
+      'other-tool': { x: 1 },
+      'hook-runtime': { deadlines: { 'tool.after': 9000 } },
+    });
     const check = await installed(r, 'check');
     assert.equal(check.code, 0, check.stderr + check.stdout);
     assert.doesNotMatch(check.stdout + check.stderr, /other-tool/);
@@ -160,26 +171,40 @@ test('capabilities prints both hosts and five rows each', async () => {
   const out = await installed(r, 'capabilities');
   assert.equal(out.code, 0, out.stderr);
   const lines = out.stdout.split('\n');
-  for (const [host, version] of [['claude-code', '2.1.332'], ['opencode', '2.4.1']]) {
+  for (const [host, version] of [
+    ['claude-code', '2.1.332'],
+    ['opencode', '2.4.1'],
+  ]) {
     const at = lines.findIndex((l) => l.startsWith(host));
     assert.ok(at >= 0, `${host} header`);
     assert.match(lines[at], new RegExp(`verified on ${version.replaceAll('.', '\\.')}`));
     const rows = lines.slice(at + 1, at + 6);
-    assert.deepEqual(rows.map((l) => l.trim().split(/\s+/)[0]),
-      ['deny', 'contextAfterTool', 'blockTurnEnd', 'redeliverAfterCompact', 'perSubagentState']);
+    assert.deepEqual(
+      rows.map((l) => l.trim().split(/\s+/)[0]),
+      ['deny', 'contextAfterTool', 'blockTurnEnd', 'redeliverAfterCompact', 'perSubagentState'],
+    );
     for (const row of rows) assert.match(row, /supported$/);
   }
   assert.match(out.stdout, /need a missing capability: none/);
 });
 
 test('HOST_CAPABILITIES and EVENT_NEEDS are the verified table', () => {
-  const all = { deny: true, contextAfterTool: true, blockTurnEnd: true, redeliverAfterCompact: true, perSubagentState: true };
+  const all = {
+    deny: true,
+    contextAfterTool: true,
+    blockTurnEnd: true,
+    redeliverAfterCompact: true,
+    perSubagentState: true,
+  };
   assert.deepEqual(HOST_CAPABILITIES, {
     'claude-code': { ...all, verified: '2.1.332' },
     opencode: { ...all, verified: '2.4.1' },
   });
   assert.deepEqual(EVENT_NEEDS, {
-    'tool.before': 'deny', 'tool.after': 'contextAfterTool', 'turn.end': 'blockTurnEnd', 'session.start': 'redeliverAfterCompact',
+    'tool.before': 'deny',
+    'tool.after': 'contextAfterTool',
+    'turn.end': 'blockTurnEnd',
+    'session.start': 'redeliverAfterCompact',
   });
   assert.deepEqual(missingCapabilities('opencode', [{ name: 'h', events: ['turn.end', 'tool.before'] }]), []);
 });
@@ -212,18 +237,32 @@ test('the capabilities check at session.start lists a capability that a handler 
   const { installTool } = await lib('install.mjs');
   const src = join(r2.dir, '.git', 'src-needy');
   await r2.write('.git/src-needy/tool.json', JSON.stringify({ name: 'needy', version: '0.1.0', handler: true }));
-  await r2.write('.git/src-needy/handler.mjs', "export default { name: 'needy', events: ['tool.after'], handle: () => null };\n");
+  await r2.write(
+    '.git/src-needy/handler.mjs',
+    "export default { name: 'needy', events: ['tool.after'], handle: () => null };\n",
+  );
   assert.equal(installTool({ sourceDir: src, repoRoot: r2.dir }).code, 0);
-  const payload = JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', 'claude', 'SessionStart-startup.json'), 'utf8').replaceAll('/REPO', r2.dir));
+  const payload = JSON.parse(
+    readFileSync(join(import.meta.dirname, 'fixtures', 'claude', 'SessionStart-startup.json'), 'utf8').replaceAll(
+      '/REPO',
+      r2.dir,
+    ),
+  );
   // main() leaves the handler's worker running, so it runs in a child process that exits itself.
-  await r2.write('.git/run-main.mjs', [
-    `import { main } from ${JSON.stringify(pathToFileURL(join(ASSETS.hookRuntime, 'claude.mjs')).href)};`,
-    `const stub = ${JSON.stringify(stub)};`,
-    'const chunks = []; for await (const c of process.stdin) chunks.push(c);',
-    `const res = await main({ stdin: Buffer.concat(chunks).toString(), env: { CLAUDE_PROJECT_DIR: ${JSON.stringify(r2.dir)} }, capabilities: stub });`,
-    'process.stdout.write(res.text, () => process.exit(0));',
-  ].join('\n'));
+  await r2.write(
+    '.git/run-main.mjs',
+    [
+      `import { main } from ${JSON.stringify(pathToFileURL(join(ASSETS.hookRuntime, 'claude.mjs')).href)};`,
+      `const stub = ${JSON.stringify(stub)};`,
+      'const chunks = []; for await (const c of process.stdin) chunks.push(c);',
+      `const res = await main({ stdin: Buffer.concat(chunks).toString(), env: { CLAUDE_PROJECT_DIR: ${JSON.stringify(r2.dir)} }, capabilities: stub });`,
+      'process.stdout.write(res.text, () => process.exit(0));',
+    ].join('\n'),
+  );
   const res = await runNode(join(r2.dir, '.git', 'run-main.mjs'), [], { cwd: r2.dir, input: JSON.stringify(payload) });
   assert.equal(res.code, 0, res.stderr);
-  assert.match(JSON.parse(res.stdout).hookSpecificOutput.additionalContext, /needy needs contextAfterTool for tool\.after, which claude-code lacks/);
+  assert.match(
+    JSON.parse(res.stdout).hookSpecificOutput.additionalContext,
+    /needy needs contextAfterTool for tool\.after, which claude-code lacks/,
+  );
 });

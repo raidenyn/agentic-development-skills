@@ -30,8 +30,13 @@ const TYPES: Record<string, HarnessEvent> = {
 
 const KINDS: Record<string, ToolKind> = {
   Bash: 'shell',
-  Edit: 'edit', Write: 'edit', MultiEdit: 'edit', NotebookEdit: 'edit',
-  Read: 'read', Glob: 'read', Grep: 'read',
+  Edit: 'edit',
+  Write: 'edit',
+  MultiEdit: 'edit',
+  NotebookEdit: 'edit',
+  Read: 'read',
+  Glob: 'read',
+  Grep: 'read',
 };
 
 const isObject = (v: unknown): v is Record<string, any> => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -79,7 +84,9 @@ export function toEvent(payload: unknown, repoRoot: string): AdaptedEvent | null
     // Only Stop reads background_tasks; on SubagentStop the list can include the stopping agent.
     // stop_hook_active is ignored: block counting is the handler's job.
     const tasks = name === 'Stop' && Array.isArray(payload.background_tasks) ? payload.background_tasks : [];
-    event.background = tasks.filter((t: unknown) => isObject(t) && t.type === 'subagent' && t.status === 'running').length;
+    event.background = tasks.filter(
+      (t: unknown) => isObject(t) && t.type === 'subagent' && t.status === 'running',
+    ).length;
   }
   return { event, sessionId: payload.session_id, agentId };
 }
@@ -90,7 +97,9 @@ const unique = (list: unknown[]): string[] => [...new Set(list.filter((t) => typ
 export function toOutput(hookEventName: string, merged: Partial<DispatchResult> = {}): Record<string, any> | null {
   const notices = unique(merged.notices ?? []);
   const text = (...parts: unknown[]) => unique(parts.flat()).join(JOIN);
-  const specific = (fields: Record<string, unknown>): { hookSpecificOutput: Record<string, unknown> } => ({ hookSpecificOutput: { hookEventName, ...fields } });
+  const specific = (fields: Record<string, unknown>): { hookSpecificOutput: Record<string, unknown> } => ({
+    hookSpecificOutput: { hookEventName, ...fields },
+  });
   switch (hookEventName) {
     case 'PreToolUse': {
       if (typeof merged.deny === 'string') {

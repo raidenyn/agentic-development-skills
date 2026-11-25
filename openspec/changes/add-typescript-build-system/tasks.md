@@ -38,8 +38,8 @@
 
 ## 6. Lint and format the rest
 
-- [ ] 6.1 Run `pnpm run format` over `src/`, `scripts/` and `tests/`; fix the remaining lint findings by hand, or disable a rule in `biome.json` with a one-line reason when it fights the code's style
-- [ ] 6.2 Fix what `tsc -p tsconfig.tests.json` reports in `tests/`
+- [x] 6.1 Run `pnpm run format` over `src/`, `scripts/` and `tests/`; fix the remaining lint findings by hand, or disable a rule in `biome.json` with a one-line reason when it fights the code's style
+- [x] 6.2 Fix what `tsc -p tsconfig.tests.json` reports in `tests/`
 
 ## 7. CI and documentation
 

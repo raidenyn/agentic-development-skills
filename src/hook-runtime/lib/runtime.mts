@@ -5,7 +5,14 @@ import { readHarnessConfig } from './config.mts';
 import { checkTool, readLock } from './install.mts';
 import { sessionStateDir, toolStateDir } from './state.mts';
 import { startWorker } from './supervisor.mts';
-import type { DispatchResult, EventPayload, Handler, HandlerContext, HarnessEvent, HostName } from './handler.types.mts';
+import type {
+  DispatchResult,
+  EventPayload,
+  Handler,
+  HandlerContext,
+  HarnessEvent,
+  HostName,
+} from './handler.types.mts';
 
 type RuntimeHandler = Handler & Record<string, any>;
 type Validated = {
@@ -40,7 +47,14 @@ export interface Runtime {
   problems: string[];
 }
 
-export const EVENTS: readonly HarnessEvent[] = Object.freeze(['tool.before', 'tool.after', 'prompt', 'turn.end', 'compact', 'session.start']);
+export const EVENTS: readonly HarnessEvent[] = Object.freeze([
+  'tool.before',
+  'tool.after',
+  'prompt',
+  'turn.end',
+  'compact',
+  'session.start',
+]);
 export const RESULT_KINDS: Readonly<Record<HarnessEvent, readonly string[]>> = Object.freeze({
   'tool.before': ['deny'],
   'tool.after': ['context'],
@@ -60,7 +74,8 @@ const byName = (a: { name: string }, b: { name: string }) => (a.name < b.name ? 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 const isObject = (v: unknown): v is Record<string, any> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const MAX_TIMER_MS = 2 ** 31 - 1; // setTimeout fires at once above this
-const positive = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.min(v, MAX_TIMER_MS) : undefined);
+const positive = (v: unknown): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.min(v, MAX_TIMER_MS) : undefined;
 
 // With AGENT_HARNESS_TRACE=1, one JSON line per dispatched event in
 // <hook-runtime state>/trace.jsonl (design D7): {event, processStart, hostCreatedAt?, receivedAt,
@@ -82,14 +97,20 @@ export function failureNotice(name: string, event: string, reason: unknown, manu
 // A referenced timer (never unref): a handler whose promise never settles cannot let Node exit early.
 function timer(ms: number): { p: Promise<void>; clear: () => void } {
   let id: NodeJS.Timeout | undefined;
-  const p = new Promise<void>((resolve) => { id = setTimeout(resolve, Math.max(0, ms)); });
+  const p = new Promise<void>((resolve) => {
+    id = setTimeout(resolve, Math.max(0, ms));
+  });
   return { p, clear: () => clearTimeout(id) };
 }
 
 const TIMED_OUT = Symbol('timed out');
 
 // Resolves to the promise's value, or TIMED_OUT once `until` passes.
-async function within<T>(promise: Promise<T>, until: number, now: () => number): Promise<Awaited<T> | typeof TIMED_OUT> {
+async function within<T>(
+  promise: Promise<T>,
+  until: number,
+  now: () => number,
+): Promise<Awaited<T> | typeof TIMED_OUT> {
   if (!Number.isFinite(until)) return promise as Promise<Awaited<T>>;
   const t = timer(until - now());
   try {
@@ -103,7 +124,8 @@ function validate(result: unknown, type: HarnessEvent): Validated {
   if (result === null || result === undefined) return { kind: null };
   if (!isObject(result)) return { error: 'returned an invalid result' };
   const kinds = KINDS.filter((k) => result[k] !== undefined);
-  if (kinds.length !== 1) return { error: `returned an invalid result (${kinds.length ? kinds.join(' and ') : 'no result kind'})` };
+  if (kinds.length !== 1)
+    return { error: `returned an invalid result (${kinds.length ? kinds.join(' and ') : 'no result kind'})` };
   const [kind] = kinds as [string];
   if (!RESULT_KINDS[type].includes(kind)) return { error: `returned ${kind}, which ${type} does not accept` };
   if (typeof result[kind] !== 'string') return { error: `returned a ${kind} that is not text` };
@@ -125,22 +147,22 @@ function callQuietly(fn: () => unknown): Promise<unknown> {
 
 const toolOf = (h: RuntimeHandler): string => h.tool ?? h.name;
 
-export function createRuntime({
-  repoRoot,
-  host,
-  handlers = [],
-  problems = [],
-  now = Date.now,
-  budgetMs,
-}: RuntimeOptions = {} as RuntimeOptions): Runtime {
+export function createRuntime(
+  { repoRoot, host, handlers = [], problems = [], now = Date.now, budgetMs }: RuntimeOptions = {} as RuntimeOptions,
+): Runtime {
   const sorted = [...handlers].sort(byName);
 
-  function stateDirFor(handler: RuntimeHandler, { sessionId, agentId }: { sessionId?: unknown; agentId?: unknown }): string {
+  function stateDirFor(
+    handler: RuntimeHandler,
+    { sessionId, agentId }: { sessionId?: unknown; agentId?: unknown },
+  ): string {
     return sessionStateDir({ repoRoot, tool: toolOf(handler), host, sessionId, agentId });
   }
 
   async function proof(name: string, ctx: ProofCtx = {}): Promise<string | null> {
-    const owner = sorted.find((h) => isObject(h.proofs) && Object.hasOwn(h.proofs, name) && typeof h.proofs[name] === 'function');
+    const owner = sorted.find(
+      (h) => isObject(h.proofs) && Object.hasOwn(h.proofs, name) && typeof h.proofs[name] === 'function',
+    );
     if (!owner) return `proof ${name} is not registered`;
     const deadline = ctx.deadline ?? now() + DEFAULT_DEADLINE_MS;
     let config: unknown = {};
@@ -153,7 +175,11 @@ export function createRuntime({
     if (ctx.signal?.aborted) forward();
     else ctx.signal?.addEventListener('abort', forward, { once: true });
     const ownerCtx: Record<string, any> = {
-      ...ctx, repoRoot, host, deadline, config,
+      ...ctx,
+      repoRoot,
+      host,
+      deadline,
+      config,
       signal: controller.signal,
       trace() {},
     };
@@ -190,12 +216,23 @@ export function createRuntime({
     let open = true;
     let traced: string | undefined;
     const ctx: HandlerContext = {
-      repoRoot, host, sessionId: opts.sessionId, agentId: opts.agentId, deadline,
-      signal: controller.signal, stateDir: undefined, config: config[toolOf(handler)] ?? {},
+      repoRoot,
+      host,
+      sessionId: opts.sessionId,
+      agentId: opts.agentId,
+      deadline,
+      signal: controller.signal,
+      stateDir: undefined,
+      config: config[toolOf(handler)] ?? {},
       proof: (name: string) => proof(name, ctx as ProofCtx),
-      trace: (outcome: unknown) => { if (open) traced = String(outcome); },
+      trace: (outcome: unknown) => {
+        if (open) traced = String(outcome);
+      },
     };
-    const fail = (reason: unknown) => ({ failure: failureNotice(handler.name, type, reason, handler.manual), outcome: 'failed' });
+    const fail = (reason: unknown) => ({
+      failure: failureNotice(handler.name, type, reason, handler.manual),
+      outcome: 'failed',
+    });
 
     let pending: Promise<unknown>;
     try {
@@ -224,7 +261,9 @@ export function createRuntime({
       });
       return {
         ...fail(`timed out after ${Math.max(0, Math.round(deadline - t0))} ms`),
-        cleanup, cleanupDeadline, spent: deadline >= workDeadline,
+        cleanup,
+        cleanupDeadline,
+        spent: deadline >= workDeadline,
       };
     }
     if (!first.ok) return fail(errText(first.error));
@@ -272,7 +311,12 @@ export function createRuntime({
         continue;
       }
       const r = await runHandler(handler, event, {
-        workDeadline, deadlines, config, hostDeadline, sessionId, agentId,
+        workDeadline,
+        deadlines,
+        config,
+        hostDeadline,
+        sessionId,
+        agentId,
       });
       outcomes[handler.name] = r.outcome;
       if (r.failure) notices.push(r.failure);
@@ -294,8 +338,14 @@ export function createRuntime({
     if (texts.deny!.length) out.deny = texts.deny!.join(JOIN);
     if (texts.block!.length) out.block = texts.block!.join(JOIN);
     if (texts.context!.length && !out.deny) out.context = texts.context!.join(JOIN);
-    if (acks.length) out.ack = async () => { for (const fn of acks) await callQuietly(fn); };
-    if (releases.length) out.release = async () => { for (const fn of releases) await callQuietly(fn); };
+    if (acks.length)
+      out.ack = async () => {
+        for (const fn of acks) await callQuietly(fn);
+      };
+    if (releases.length)
+      out.release = async () => {
+        for (const fn of releases) await callQuietly(fn);
+      };
     return out;
   }
 
@@ -306,7 +356,8 @@ export async function loadHandlers(
   repoRoot: string,
   { loadBudgetMs = LOAD_BUDGET_MS }: { loadBudgetMs?: number } = {},
 ): Promise<{ handlers: RuntimeHandler[]; problems: string[] }> {
-  const notLoaded = (name: string, reason: unknown) => `hook ${name} was not loaded: ${String(reason).replace(/[.\s]+$/, '')}. Do this step by hand.`;
+  const notLoaded = (name: string, reason: unknown) =>
+    `hook ${name} was not loaded: ${String(reason).replace(/[.\s]+$/, '')}. Do this step by hand.`;
   let lock: ReturnType<typeof readLock>;
   try {
     lock = readLock(repoRoot);
@@ -314,23 +365,27 @@ export async function loadHandlers(
     return { handlers: [], problems: [notLoaded('hook-runtime', errText(err))] };
   }
   type Loaded = { handler?: RuntimeHandler; problem?: string } | null;
-  const results: Loaded[] = await Promise.all(Object.keys(lock.tools).sort().map(async (name): Promise<Loaded> => {
-    const toolDir = join(repoRoot, '.agents', 'harness', name);
-    let meta: { handler?: unknown } | null;
-    try {
-      meta = JSON.parse(readFileSync(join(toolDir, 'tool.json'), 'utf8'));
-    } catch (err) {
-      return { problem: notLoaded(name, `cannot read tool.json (${errText(err)})`) };
-    }
-    if (meta?.handler !== true) return null;
-    const issues = checkTool({ toolDir, repoRoot });
-    if (issues.length) return { problem: notLoaded(name, `its copy differs from the lock: ${issues.join('; ')}`) };
-    try {
-      return { handler: await startWorker(toolDir, { loadBudgetMs, tool: name }) };
-    } catch (err) {
-      return { problem: notLoaded(name, errText(err)) };
-    }
-  }));
+  const results: Loaded[] = await Promise.all(
+    Object.keys(lock.tools)
+      .sort()
+      .map(async (name): Promise<Loaded> => {
+        const toolDir = join(repoRoot, '.agents', 'harness', name);
+        let meta: { handler?: unknown } | null;
+        try {
+          meta = JSON.parse(readFileSync(join(toolDir, 'tool.json'), 'utf8'));
+        } catch (err) {
+          return { problem: notLoaded(name, `cannot read tool.json (${errText(err)})`) };
+        }
+        if (meta?.handler !== true) return null;
+        const issues = checkTool({ toolDir, repoRoot });
+        if (issues.length) return { problem: notLoaded(name, `its copy differs from the lock: ${issues.join('; ')}`) };
+        try {
+          return { handler: await startWorker(toolDir, { loadBudgetMs, tool: name }) };
+        } catch (err) {
+          return { problem: notLoaded(name, errText(err)) };
+        }
+      }),
+  );
   return {
     handlers: results.filter((r) => r?.handler).map((r) => r!.handler as RuntimeHandler),
     problems: results.filter((r) => r?.problem).map((r) => r!.problem as string),

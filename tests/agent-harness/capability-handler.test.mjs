@@ -8,16 +8,22 @@ import { pathToFileURL } from 'node:url';
 import { ASSETS, fakeOpencodeCtx, runNode, tempRepo, until } from './helpers.mjs';
 
 const { installTool } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'install.mjs')).href);
-const { createOpencodePlugin } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'opencode-adapter.mjs')).href);
+const { createOpencodePlugin } = await import(
+  pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'opencode-adapter.mjs')).href
+);
 const { sessionStateDir } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'state.mjs')).href);
 
 const HANDLER_SRC = join(import.meta.dirname, 'fixtures', 'capability-handler');
 const CLAUDE_MJS = join(ASSETS.hookRuntime, 'claude.mjs');
 const fixture = (host, name, root) =>
-  JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', host, `${name}.json`), 'utf8').replaceAll('/REPO', root));
+  JSON.parse(
+    readFileSync(join(import.meta.dirname, 'fixtures', host, `${name}.json`), 'utf8').replaceAll('/REPO', root),
+  );
 
 const cleanups = [];
-after(async () => { for (const c of cleanups.reverse()) await c(); });
+after(async () => {
+  for (const c of cleanups.reverse()) await c();
+});
 
 async function repoWithFixture() {
   const r = await tempRepo();
@@ -30,7 +36,9 @@ test('Claude Code: deny, after-text per agent, block then pass, and re-delivery'
   const r = await repoWithFixture();
   const run = async (name, edit = (p) => p) => {
     const out = await runNode(CLAUDE_MJS, [], {
-      cwd: r.dir, input: JSON.stringify(edit(fixture('claude', name, r.dir))), env: { CLAUDE_PROJECT_DIR: r.dir },
+      cwd: r.dir,
+      input: JSON.stringify(edit(fixture('claude', name, r.dir))),
+      env: { CLAUDE_PROJECT_DIR: r.dir },
     });
     assert.equal(out.code, 0, out.stderr);
     return out.stdout ? JSON.parse(out.stdout) : null;
@@ -74,7 +82,16 @@ test('OpenCode: deny, after-text per agent, block then pass, and re-delivery', a
   assert.deepEqual(f.calls.synthetic[0], { sessionID: ROOT, text: 'HARNESS_BLOCK', resume: true });
   f.emit('session.execution.started', ROOT);
   f.emit('session.execution.succeeded', ROOT);
-  const blocked = join(sessionStateDir({ repoRoot: r.dir, tool: 'capability-fixture', host: 'opencode', sessionId: ROOT, agentId: 'main' }), 'blocked');
+  const blocked = join(
+    sessionStateDir({
+      repoRoot: r.dir,
+      tool: 'capability-fixture',
+      host: 'opencode',
+      sessionId: ROOT,
+      agentId: 'main',
+    }),
+    'blocked',
+  );
   assert.ok(existsSync(blocked));
   await new Promise((res) => setTimeout(res, 300));
   assert.equal(f.calls.synthetic.length, 1, 'the second turn end passes');

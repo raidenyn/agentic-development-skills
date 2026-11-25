@@ -8,9 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ASSETS } from './helpers.mjs';
-import {
-  edit, editBefore, fire, proofCtx, shellAfter, shellBefore, turnEnd, verifyRepo,
-} from './verify-helpers.mjs';
+import { edit, editBefore, fire, proofCtx, shellAfter, shellBefore, turnEnd, verifyRepo } from './verify-helpers.mjs';
 
 const vg = (f) => import(pathToFileURL(join(ASSETS.verifyGate, f)).href);
 const handlerMod = await vg('handler.mjs');
@@ -22,15 +20,21 @@ const { toToolEvent } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib
 
 const h = createVerifyHandler();
 const cleanups = [];
-after(async () => { for (const c of cleanups.reverse()) await c(); });
+after(async () => {
+  for (const c of cleanups.reverse()) await c();
+});
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const TASKS = 'openspec/changes/x/tasks.md';
-const TASKS_TEXT = '## 1. Work\n\n- [x] 1.1 Done already\n- [ ] 1.2 Write the thing\n- [ ] 1.3 Test the thing\n- [x] 1.4 Also done\n';
+const TASKS_TEXT =
+  '## 1. Work\n\n- [x] 1.1 Done already\n- [ ] 1.2 Write the thing\n- [ ] 1.3 Test the thing\n- [x] 1.4 Also done\n';
 const tick = (text, key) => text.replace(`- [ ] ${key}`, `- [x] ${key}`);
 
 async function repo(opts = {}) {
-  const r = await verifyRepo({ files: { [TASKS]: TASKS_TEXT, 'src/a.js': 'a\n', 'docs/notes.md': '- [ ] note\n' }, ...opts });
+  const r = await verifyRepo({
+    files: { [TASKS]: TASKS_TEXT, 'src/a.js': 'a\n', 'docs/notes.md': '- [ ] note\n' },
+    ...opts,
+  });
   cleanups.push(r.cleanup);
   return r;
 }
@@ -41,11 +45,14 @@ async function call(r, before, change, afterEvent, opts) {
   await change();
   return fire(h, r, afterEvent, opts);
 }
-const tickCall = (r, key = '1.2 Write the thing', callId = 'c1', opts = {}) => call(
-  r, editBefore([TASKS], callId),
-  () => r.write(TASKS, tick(readFileSync(join(r.dir, TASKS), 'utf8'), key)),
-  edit([TASKS], callId), opts,
-);
+const tickCall = (r, key = '1.2 Write the thing', callId = 'c1', opts = {}) =>
+  call(
+    r,
+    editBefore([TASKS], callId),
+    () => r.write(TASKS, tick(readFileSync(join(r.dir, TASKS), 'utf8'), key)),
+    edit([TASKS], callId),
+    opts,
+  );
 
 // ---- edit trigger -------------------------------------------------------------------------------
 
@@ -83,7 +90,10 @@ test('tick in a matching tasks.md runs a full run with VERIFY_TRIGGER=task and s
   const r = await repo();
   const { result } = await tickCall(r);
   assert.equal(result, null);
-  assert.deepEqual(r.log().map((l) => l.trigger), ['task']);
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task'],
+  );
   assert.equal(r.log()[0].file, '<unset>');
   assert.equal(r.passRecord().trigger, 'task');
 });
@@ -99,14 +109,25 @@ test('tick failure context starts "verify: a task was ticked"', async () => {
 test('tick in docs/notes.md runs only the edit run', async () => {
   const r = await repo();
   await call(r, editBefore(['docs/notes.md']), () => r.write('docs/notes.md', '- [x] note\n'), edit(['docs/notes.md']));
-  assert.deepEqual(r.log().map((l) => l.trigger), ['edit']);
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['edit'],
+  );
 });
 
 test('a sed -i tick after a shell tool.after runs a task run', async () => {
   const r = await repo();
-  const { result } = await call(r, shellBefore('sh1'), () => r.write(TASKS, tick(TASKS_TEXT, '1.3 Test the thing')), shellAfter('sh1'));
+  const { result } = await call(
+    r,
+    shellBefore('sh1'),
+    () => r.write(TASKS, tick(TASKS_TEXT, '1.3 Test the thing')),
+    shellAfter('sh1'),
+  );
   assert.equal(result, null);
-  assert.deepEqual(r.log().map((l) => l.trigger), ['task']);
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task'],
+  );
 });
 
 test('a shell call that ticks nothing runs nothing', async () => {
@@ -119,18 +140,26 @@ test('a new tasks file created ticked runs only the edit run', async () => {
   const r = await repo();
   const y = 'openspec/changes/y/tasks.md';
   await call(r, editBefore([y], 'w1'), () => r.write(y, '- [x] 1.1 Done\n'), edit([y], 'w1'));
-  assert.deepEqual(r.log().map((l) => l.trigger), ['edit']);
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['edit'],
+  );
 });
 
 test('an added done item is not a tick', async () => {
   const r = await repo();
   await call(r, editBefore([TASKS], 'w1'), () => r.write(TASKS, `${TASKS_TEXT}- [x] 9.9 New\n`), edit([TASKS], 'w1'));
-  assert.deepEqual(r.log().map((l) => l.trigger), ['edit']);
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['edit'],
+  );
 });
 
 test('a shell tool.before and tool.after are matched by tool.callId (Claude tool_use_id, OpenCode id)', async () => {
-  const claudeFix = (name) => JSON.parse(readFileSync(new URL(`./fixtures/claude/${name}.json`, import.meta.url), 'utf8'));
-  const ocFix = (name) => JSON.parse(readFileSync(new URL(`./fixtures/opencode/${name}.json`, import.meta.url), 'utf8'));
+  const claudeFix = (name) =>
+    JSON.parse(readFileSync(new URL(`./fixtures/claude/${name}.json`, import.meta.url), 'utf8'));
+  const ocFix = (name) =>
+    JSON.parse(readFileSync(new URL(`./fixtures/opencode/${name}.json`, import.meta.url), 'utf8'));
   for (const host of ['claude', 'opencode']) {
     const r = await repo();
     const ev = (type, callId) => {
@@ -150,7 +179,11 @@ test('a shell tool.before and tool.after are matched by tool.callId (Claude tool
     await fire(h, r, ev('tool.after', 'Y'));
     assert.deepEqual(r.log(), [], `${host}: Y saw no tick`);
     await fire(h, r, ev('tool.after', 'X'));
-    assert.deepEqual(r.log().map((l) => l.trigger), ['task'], `${host}: X's own before-image shows the tick`);
+    assert.deepEqual(
+      r.log().map((l) => l.trigger),
+      ['task'],
+      `${host}: X's own before-image shows the tick`,
+    );
   }
 });
 
@@ -181,61 +214,104 @@ test('a contended run whose deadline passes reports that nothing was checked', a
   }
 });
 
-test('interleaved agents: a subagent\'s tick is detected once, and the root\'s later edit of the same file does not re-detect it', async () => {
+test("interleaved agents: a subagent's tick is detected once, and the root's later edit of the same file does not re-detect it", async () => {
   const r = await repo();
   const sub = { agentId: 'agent-1' };
   await fire(h, r, editBefore([TASKS], 'sub1'), sub);
   await fire(h, r, editBefore([TASKS], 'root1')); // root begins before the child's tick lands
   await r.write(TASKS, tick(TASKS_TEXT, '1.2 Write the thing'));
   await fire(h, r, edit([TASKS], 'sub1'), sub);
-  assert.deepEqual(r.log().map((l) => l.trigger), ['task']);
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task'],
+  );
   await r.write(TASKS, `${readFileSync(join(r.dir, TASKS), 'utf8')}\nA note.\n`);
   await fire(h, r, edit([TASKS], 'root1'));
-  assert.deepEqual(r.log().map((l) => l.trigger), ['task', 'edit'], 'the root call reports no second tick');
-  await call(r, editBefore([TASKS], 'root2'), () => r.write(TASKS, `${readFileSync(join(r.dir, TASKS), 'utf8')}More.\n`), edit([TASKS], 'root2'));
-  assert.deepEqual(r.log().map((l) => l.trigger), ['task', 'edit', 'edit']);
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task', 'edit'],
+    'the root call reports no second tick',
+  );
+  await call(
+    r,
+    editBefore([TASKS], 'root2'),
+    () => r.write(TASKS, `${readFileSync(join(r.dir, TASKS), 'utf8')}More.\n`),
+    edit([TASKS], 'root2'),
+  );
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task', 'edit', 'edit'],
+  );
 });
 
 test('a tick moved from one hunk to another is detected', async () => {
   const r = await repo();
-  const moved = '## 1. Work\n\n- [x] 1.1 Done already\n- [ ] 1.3 Test the thing\n- [x] 1.4 Also done\n\n## 2. Later\n\n- [x] 1.2 Write the thing\n';
+  const moved =
+    '## 1. Work\n\n- [x] 1.1 Done already\n- [ ] 1.3 Test the thing\n- [x] 1.4 Also done\n\n## 2. Later\n\n- [x] 1.2 Write the thing\n';
   await call(r, editBefore([TASKS], 'm1'), () => r.write(TASKS, moved), edit([TASKS], 'm1'));
-  assert.deepEqual(r.log().map((l) => l.trigger), ['task']);
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task'],
+  );
 });
 
-test('a child\'s tick followed by an overlapping root shell call that began earlier reports the tick once', async () => {
+test("a child's tick followed by an overlapping root shell call that began earlier reports the tick once", async () => {
   const r = await repo();
   await fire(h, r, shellBefore('rootsh')); // long root shell call starts
   await sleep(5);
   await tickCall(r, '1.2 Write the thing', 'child1', { agentId: 'child' });
-  assert.deepEqual(r.log().map((l) => l.trigger), ['task']);
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task'],
+  );
   const { result, traced } = await fire(h, r, shellAfter('rootsh'));
   assert.equal(result, null);
   assert.deepEqual(traced, [], 'the root shell call detects no tick, so it starts no task run at all');
-  assert.deepEqual(r.log().map((l) => l.trigger), ['task'], 'the root shell call does not report it again');
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task'],
+    'the root shell call does not report it again',
+  );
 });
 
 test('two real ticks of one label: the overlapping shell call still reports one tick', async () => {
   const r = await repo({ files: { [TASKS]: '- [ ] A\n- [ ] A\n', 'src/a.js': 'a\n' } });
   await fire(h, r, shellBefore('rootsh'));
   await sleep(5);
-  await call(r, editBefore([TASKS], 'child1'), () => r.write(TASKS, '- [x] A\n- [ ] A\n'), edit([TASKS], 'child1'), { agentId: 'child' });
+  await call(r, editBefore([TASKS], 'child1'), () => r.write(TASKS, '- [x] A\n- [ ] A\n'), edit([TASKS], 'child1'), {
+    agentId: 'child',
+  });
   await r.write(TASKS, '- [x] A\n- [x] A\n');
   r.fail();
   const { result } = await fire(h, r, shellAfter('rootsh'));
-  assert.deepEqual(r.log().map((l) => l.trigger), ['task', 'task']);
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task', 'task'],
+  );
   assert.equal(result.context.split(`"A" in ${TASKS}`).length - 1, 1, result.context);
 });
 
-test('an untick between sessions followed by a whole-file Write tick is detected from the call\'s before-image', async () => {
+test("an untick between sessions followed by a whole-file Write tick is detected from the call's before-image", async () => {
   const r = await repo();
   await tickCall(r, '1.2 Write the thing', 'c1', { sessionId: 's1' });
-  assert.deepEqual(r.log().map((l) => l.trigger), ['task']);
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task'],
+  );
   await r.write(TASKS, TASKS_TEXT); // the user unticks between sessions
   await sleep(5);
   await fire(h, r, { type: 'session.start', host: 'claude-code', afterCompact: false }, { sessionId: 's2' });
-  await call(r, editBefore([TASKS], 'w2'), () => r.write(TASKS, tick(TASKS_TEXT, '1.2 Write the thing')), edit([TASKS], 'w2'), { sessionId: 's2' });
-  assert.deepEqual(r.log().map((l) => l.trigger), ['task', 'task']);
+  await call(
+    r,
+    editBefore([TASKS], 'w2'),
+    () => r.write(TASKS, tick(TASKS_TEXT, '1.2 Write the thing')),
+    edit([TASKS], 'w2'),
+    { sessionId: 's2' },
+  );
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task', 'task'],
+  );
 });
 
 test('session.start creates the worktree tasks snapshot if absent', async () => {
@@ -290,13 +366,16 @@ test('a root turn end with background 1 runs and returns the background notice, 
   r.fail();
   const { result } = await fire(h, r, turnEnd(1));
   assert.equal(result.block, undefined);
-  assert.match(result.context, /^verify: sh .*verify\.sh fails while 1 subagent\(s\) still run; verification runs again at the next turn end\./);
+  assert.match(
+    result.context,
+    /^verify: sh .*verify\.sh fails while 1 subagent\(s\) still run; verification runs again at the next turn end\./,
+  );
   assert.match(result.context, /E101/);
   assert.equal(r.log().length, 1);
   assert.deepEqual(r.blocks()?.charges ?? [], []);
 });
 
-test('a subagent\'s failing turn end is blocked', async () => {
+test("a subagent's failing turn end is blocked", async () => {
   const r = await repo();
   r.fail();
   const { result } = await fire(h, r, turnEnd(0), { agentId: 'agent-7' });
@@ -322,7 +401,8 @@ test('the fourth turn end with the same failure passes with the notice, even wit
 test('a different failure gets its own three blocks; E101 then E202 are two failures', async () => {
   const r = await repo();
   r.fail('E101 broke\n');
-  for (let i = 1; i <= 3; i++) assert.match((await fire(h, r, turnEnd())).result.block, new RegExp(`attempt ${i} of 3`));
+  for (let i = 1; i <= 3; i++)
+    assert.match((await fire(h, r, turnEnd())).result.block, new RegExp(`attempt ${i} of 3`));
   r.fail('E202 broke\n');
   assert.match((await fire(h, r, turnEnd())).result.block, /attempt 1 of 3/);
 });
@@ -352,7 +432,8 @@ test('after 10 blocks in total the gate only notifies', async () => {
 test('maxBlocks 9 in config still blocks at most 3 times; maxBlocks 1 blocks once', async () => {
   const r = await repo({ config: { maxBlocks: 9 } });
   r.fail();
-  for (let i = 1; i <= 3; i++) assert.match((await fire(h, r, turnEnd())).result.block, new RegExp(`attempt ${i} of 3`));
+  for (let i = 1; i <= 3; i++)
+    assert.match((await fire(h, r, turnEnd())).result.block, new RegExp(`attempt ${i} of 3`));
   assert.match((await fire(h, r, turnEnd())).result.context, /still failing after 3 blocks/);
   const r1 = await repo({ config: { maxBlocks: 1 } });
   r1.fail();
@@ -360,7 +441,7 @@ test('maxBlocks 9 in config still blocks at most 3 times; maxBlocks 1 blocks onc
   assert.match((await fire(h, r1, turnEnd())).result.context, /still failing after 1 blocks/);
 });
 
-test('a subagent\'s two blocks and the root\'s one block on the same failure exhaust the session\'s limit', async () => {
+test("a subagent's two blocks and the root's one block on the same failure exhaust the session's limit", async () => {
   const r = await repo();
   r.fail();
   assert.match((await fire(h, r, turnEnd(), { agentId: 'sub' })).result.block, /attempt 1 of 3/);
@@ -393,7 +474,10 @@ test('failureKey: exact argv, exit status with signal name, normalized tail', ()
   assert.equal(k({}), k({ tail: 'E101 at /work/repo/a.js\n' }));
   assert.notEqual(k({}), k({ tail: 'E202 at /work/repo/a.js\n' }));
   assert.notEqual(k({}), k({ argv: ['npm', 'test', '--'] }));
-  assert.notEqual(k({ exitKind: 'signal', code: null, signal: 'SIGSEGV' }), k({ exitKind: 'signal', code: null, signal: 'SIGABRT' }));
+  assert.notEqual(
+    k({ exitKind: 'signal', code: null, signal: 'SIGSEGV' }),
+    k({ exitKind: 'signal', code: null, signal: 'SIGABRT' }),
+  );
   assert.notEqual(k({}), k({ code: 2 }));
   assert.equal(k({ tail: '# duration_ms 845.2\nok\n' }), k({ tail: '# duration_ms 12.3\nok\n' }));
 });
@@ -427,8 +511,14 @@ test('handover for each trigger: VERIFY_TRIGGER, VERIFY_FILE only for edit, VERI
   await r.write('src/a.js', 'modified thrice\n');
   await fire(h, r, turnEnd());
   const log = r.log();
-  assert.deepEqual(log.map((l) => l.trigger), ['edit', 'task', 'turn-end']);
-  assert.deepEqual(log.map((l) => l.file), ['src/a.js', '<unset>', '<unset>']);
+  assert.deepEqual(
+    log.map((l) => l.trigger),
+    ['edit', 'task', 'turn-end'],
+  );
+  assert.deepEqual(
+    log.map((l) => l.file),
+    ['src/a.js', '<unset>', '<unset>'],
+  );
   for (const l of log) {
     assert.equal(l.base, mainSha);
     assert.equal(l.changedPath, join(r.toolDir, 'changed.txt'));
@@ -515,8 +605,11 @@ test('runGate: a run whose deadline passes while waiting reports contended', asy
   try {
     const t0 = Date.now();
     const out = await runGate({
-      repoRoot: r.dir, trigger: 'turn-end', config: JSON.parse(readFileSync(join(r.dir, '.agents/harness.json'), 'utf8'))['verify-gate'],
-      stateDir: r.toolDir, deadline: Date.now() + 600,
+      repoRoot: r.dir,
+      trigger: 'turn-end',
+      config: JSON.parse(readFileSync(join(r.dir, '.agents/harness.json'), 'utf8'))['verify-gate'],
+      stateDir: r.toolDir,
+      deadline: Date.now() + 600,
     });
     assert.equal(out.status, 'contended');
     assert.equal(out.text, 'verify: verification already running; nothing was checked.');
@@ -532,7 +625,10 @@ test('a concurrent proof read during a run returns "verification is running" or 
   const run = fire(h, r, turnEnd());
   await sleep(400);
   const v = await h.proofs['verify-pass'](proofCtx(r));
-  assert.ok(v === null || /^verify-pass: (verification is running|no full pass yet|the content changed)/.test(v), String(v));
+  assert.ok(
+    v === null || /^verify-pass: (verification is running|no full pass yet|the content changed)/.test(v),
+    String(v),
+  );
   await run;
   assert.equal(await h.proofs['verify-pass'](proofCtx(r)), null);
 });
@@ -553,7 +649,10 @@ test('the edit, run and key functions are injectable', async () => {
   const r = await repo();
   const calls = [];
   const fake = createVerifyHandler({
-    runCommand: async (o) => { calls.push(o.env.VERIFY_TRIGGER); return { code: 0, exitKind: 'exit', signal: null, timedOut: false, spawnError: null, tail: '' }; },
+    runCommand: async (o) => {
+      calls.push(o.env.VERIFY_TRIGGER);
+      return { code: 0, exitKind: 'exit', signal: null, timedOut: false, spawnError: null, tail: '' };
+    },
   });
   await r.write('src/a.js', 'q\n');
   await fire(fake, r, edit(['src/a.js']));

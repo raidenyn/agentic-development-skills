@@ -15,7 +15,9 @@ const EVENTS = { PreToolUse: 10, Stop: 1800 };
 test('mergeClaudeSettings keeps foreign entries and is idempotent', async () => {
   const foreign = { matcher: 'Bash', hooks: [{ type: 'command', command: 'other' }] };
   const r = await tempRepo({
-    files: { '.claude/settings.json': JSON.stringify({ enabledPlugins: { x: true }, hooks: { PreToolUse: [foreign] } }) },
+    files: {
+      '.claude/settings.json': JSON.stringify({ enabledPlugins: { x: true }, hooks: { PreToolUse: [foreign] } }),
+    },
   });
   assert.equal(mergeClaudeSettings(r.dir, COMMAND, EVENTS).code, 0);
   const file = join(r.dir, '.claude/settings.json');

@@ -95,7 +95,9 @@ const unique = (list) => [...new Set(list.filter((t) => typeof t === 'string' &&
 export function toOutput(hookEventName, merged = {}) {
   const notices = unique(merged.notices ?? []);
   const text = (...parts) => unique(parts.flat()).join(JOIN);
-  const specific = (fields) => ({ hookSpecificOutput: { hookEventName, ...fields } });
+  const specific = (fields) => ({
+    hookSpecificOutput: { hookEventName, ...fields },
+  });
   switch (hookEventName) {
     case 'PreToolUse': {
       if (typeof merged.deny === 'string') {

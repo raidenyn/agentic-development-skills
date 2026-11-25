@@ -1,8 +1,15 @@
 import { execFileSync } from 'node:child_process';
 import {
-  linkSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync,
+  linkSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
 } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 export interface SessionKey {
   repoRoot: string;
@@ -24,7 +31,9 @@ let tmpCounter = 0;
 
 export function gitDir(repoRoot: string): string {
   return execFileSync('git', ['rev-parse', '--absolute-git-dir'], {
-    cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
 }
 
@@ -34,7 +43,7 @@ export function toolStateDir(repoRoot: string, tool: string): string {
 
 const clean = (id: unknown): string => {
   const s = String(id ?? '').replace(/[^A-Za-z0-9._-]/g, '_');
-  return s === '' || /^\.+$/.test(s) ? '_' + s : s;
+  return s === '' || /^\.+$/.test(s) ? `_${s}` : s;
 };
 
 export function rootSessionStateDir({ repoRoot, tool, host, sessionId }: SessionKey): string {
@@ -59,7 +68,9 @@ export function writeJsonAtomic(path: string, value: unknown): void {
   try {
     renameSync(tmp, path);
   } catch (err) {
-    try { unlinkSync(tmp); } catch {}
+    try {
+      unlinkSync(tmp);
+    } catch {}
     throw err;
   }
 }
@@ -139,7 +150,9 @@ export function acquireGateLock(dir: string, { beforeLink }: { beforeLink?: () =
     if ((err as NodeJS.ErrnoException).code === 'EEXIST') return null;
     throw err;
   } finally {
-    try { unlinkSync(tmp); } catch {}
+    try {
+      unlinkSync(tmp);
+    } catch {}
   }
 
   const after = listLocks(dir);

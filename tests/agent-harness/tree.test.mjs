@@ -27,14 +27,15 @@ async function setup(opts) {
   return { ...repo, stateDir, spawn, calls, key, touchR };
 }
 
-const withRepo = (name, opts, fn) => test(name, async () => {
-  const r = await setup(opts);
-  try {
-    await fn(r);
-  } finally {
-    await r.cleanup();
-  }
-});
+const withRepo = (name, opts, fn) =>
+  test(name, async () => {
+    const r = await setup(opts);
+    try {
+      await fn(r);
+    } finally {
+      await r.cleanup();
+    }
+  });
 
 withRepo('two consecutive no-change calls give equal keys', {}, async (r) => {
   const a = await r.key();
@@ -54,18 +55,22 @@ withRepo('an edit within the same second as the last key computation changes the
   assert.notEqual(a.id, b.id);
 });
 
-withRepo('a same-size rewrite followed by touch -r to the old mtime changes the key', { files: { 'f.txt': 'aaaa\n' } }, async (r) => {
-  r.git('config', 'core.trustctime', 'false');
-  r.git('config', 'core.checkStat', 'minimal');
-  await r.write('ref.stamp', '');
-  r.touchR('f.txt', 'ref.stamp');
-  const a = await r.key();
-  await new Promise((res) => setTimeout(res, 20));
-  await r.write('f.txt', 'bbbb\n');
-  r.touchR('ref.stamp', 'f.txt');
-  const b = await r.key();
-  assert.notEqual(a.id, b.id);
-});
+withRepo(
+  'a same-size rewrite followed by touch -r to the old mtime changes the key',
+  { files: { 'f.txt': 'aaaa\n' } },
+  async (r) => {
+    r.git('config', 'core.trustctime', 'false');
+    r.git('config', 'core.checkStat', 'minimal');
+    await r.write('ref.stamp', '');
+    r.touchR('f.txt', 'ref.stamp');
+    const a = await r.key();
+    await new Promise((res) => setTimeout(res, 20));
+    await r.write('f.txt', 'bbbb\n');
+    r.touchR('ref.stamp', 'f.txt');
+    const b = await r.key();
+    assert.notEqual(a.id, b.id);
+  },
+);
 
 withRepo('under a test clean filter that lowercases, editing A to a changes the key', {}, async (r) => {
   r.git('config', 'filter.lower.clean', 'tr A-Z a-z');
@@ -78,17 +83,21 @@ withRepo('under a test clean filter that lowercases, editing A to a changes the 
   assert.notEqual(a.stat, b.stat);
 });
 
-withRepo('LF to CRLF under text=auto changes stat but not tree', { files: { '.gitattributes': '* text=auto\n', 'e.txt': 'one\ntwo\n' } }, async (r) => {
-  const a = await r.key();
-  await r.write('e.txt', 'one\r\ntwo\r\n');
-  const b = await r.key();
-  assert.equal(a.tree, b.tree);
-  assert.notEqual(a.stat, b.stat);
-  assert.notEqual(a.statMap.get('e.txt'), b.statMap.get('e.txt'));
-  assert.equal(a.statMap.get('README.md'), b.statMap.get('README.md'));
-});
+withRepo(
+  'LF to CRLF under text=auto changes stat but not tree',
+  { files: { '.gitattributes': '* text=auto\n', 'e.txt': 'one\ntwo\n' } },
+  async (r) => {
+    const a = await r.key();
+    await r.write('e.txt', 'one\r\ntwo\r\n');
+    const b = await r.key();
+    assert.equal(a.tree, b.tree);
+    assert.notEqual(a.stat, b.stat);
+    assert.notEqual(a.statMap.get('e.txt'), b.statMap.get('e.txt'));
+    assert.equal(a.statMap.get('README.md'), b.statMap.get('README.md'));
+  },
+);
 
-withRepo('an assume-unchanged file\'s edit changes the key', { files: { 'au.txt': 'one\n' } }, async (r) => {
+withRepo("an assume-unchanged file's edit changes the key", { files: { 'au.txt': 'one\n' } }, async (r) => {
   r.git('update-index', '--assume-unchanged', 'au.txt');
   const a = await r.key();
   await r.write('au.txt', 'two\n');
@@ -114,7 +123,9 @@ withRepo('linked worktree reads membership from its own index', { files: { '.git
     // The main worktree's own index never tracked secret.log.
     assert.equal(r.git('ls-files', 'secret.log').trim(), '');
   } finally {
-    try { r.git('worktree', 'remove', '--force', wt); } catch {}
+    try {
+      r.git('worktree', 'remove', '--force', wt);
+    } catch {}
     rmSync(wt, { recursive: true, force: true });
   }
 });
@@ -147,7 +158,10 @@ withRepo('git rm --cached of an ignored file drops it', { files: { '.gitignore':
 withRepo('private index is reused', {}, async (r) => {
   await r.key();
   assert.ok(existsSync(join(r.stateDir, 'index')));
-  assert.ok(r.calls.some((a) => a.includes('read-tree')), 'first call builds the index');
+  assert.ok(
+    r.calls.some((a) => a.includes('read-tree')),
+    'first call builds the index',
+  );
   r.calls.length = 0;
   await r.key();
   assert.ok(!r.calls.some((a) => a.includes('read-tree')), 'second call reuses it');
@@ -221,56 +235,114 @@ withRepo('works in a repo with no commits', { commit: false, files: { 'a.txt': '
 
 // changedFiles
 
-withRepo('lists a modified tracked file and an untracked file against merge-base', { files: { 'a.txt': '1\n', 'b.txt': '1\n' } }, async (r) => {
-  const init = r.git('rev-parse', 'HEAD').trim();
-  r.git('update-ref', 'refs/remotes/origin/main', init);
-  await r.write('b.txt', '2\n');
-  r.git('commit', '-q', '-am', 'b');
-  await r.write('a.txt', '2\n');
-  await r.write('c.txt', 'new\n');
-  const k = await r.key();
-  const res = await changedFiles({ repoRoot: r.dir, baseRef: 'origin/main', stateDir: r.stateDir, statMap: k.statMap, lastStatMap: k.statMap, spawn: r.spawn });
-  assert.equal(res.base, init);
-  assert.deepEqual(res.files, ['a.txt', 'b.txt', 'c.txt']);
-});
+withRepo(
+  'lists a modified tracked file and an untracked file against merge-base',
+  { files: { 'a.txt': '1\n', 'b.txt': '1\n' } },
+  async (r) => {
+    const init = r.git('rev-parse', 'HEAD').trim();
+    r.git('update-ref', 'refs/remotes/origin/main', init);
+    await r.write('b.txt', '2\n');
+    r.git('commit', '-q', '-am', 'b');
+    await r.write('a.txt', '2\n');
+    await r.write('c.txt', 'new\n');
+    const k = await r.key();
+    const res = await changedFiles({
+      repoRoot: r.dir,
+      baseRef: 'origin/main',
+      stateDir: r.stateDir,
+      statMap: k.statMap,
+      lastStatMap: k.statMap,
+      spawn: r.spawn,
+    });
+    assert.equal(res.base, init);
+    assert.deepEqual(res.files, ['a.txt', 'b.txt', 'c.txt']);
+  },
+);
 
 withRepo('falls back to HEAD without origin/main', { files: { 'a.txt': '1\n' } }, async (r) => {
   await r.write('a.txt', '2\n');
   const k = await r.key();
-  const res = await changedFiles({ repoRoot: r.dir, baseRef: 'origin/main', stateDir: r.stateDir, statMap: k.statMap, lastStatMap: null, spawn: r.spawn });
+  const res = await changedFiles({
+    repoRoot: r.dir,
+    baseRef: 'origin/main',
+    stateDir: r.stateDir,
+    statMap: k.statMap,
+    lastStatMap: null,
+    spawn: r.spawn,
+  });
   assert.equal(res.base, r.git('rev-parse', 'HEAD').trim());
   assert.deepEqual(res.files, ['a.txt']);
 });
 
-withRepo('no HEAD gives base "" and all files', { commit: false, files: { 'a.txt': '1\n', 'd/b.txt': '1\n' } }, async (r) => {
-  const k = await r.key();
-  const res = await changedFiles({ repoRoot: r.dir, baseRef: 'origin/main', stateDir: r.stateDir, statMap: k.statMap, lastStatMap: null, spawn: r.spawn });
-  assert.equal(res.base, '');
-  assert.deepEqual(res.files, ['a.txt', 'd/b.txt']);
-});
+withRepo(
+  'no HEAD gives base "" and all files',
+  { commit: false, files: { 'a.txt': '1\n', 'd/b.txt': '1\n' } },
+  async (r) => {
+    const k = await r.key();
+    const res = await changedFiles({
+      repoRoot: r.dir,
+      baseRef: 'origin/main',
+      stateDir: r.stateDir,
+      statMap: k.statMap,
+      lastStatMap: null,
+      spawn: r.spawn,
+    });
+    assert.equal(res.base, '');
+    assert.deepEqual(res.files, ['a.txt', 'd/b.txt']);
+  },
+);
 
-withRepo('an LF-to-CRLF edit is listed via the stat map', { files: { '.gitattributes': '* text=auto\n', 'e.txt': 'one\n' } }, async (r) => {
-  const pass = await r.key();
-  await r.write('e.txt', 'one\r\n');
-  const k = await r.key();
-  assert.equal(pass.tree, k.tree);
-  const lastStatMap = { ...Object.fromEntries(pass.statMap) };
-  const res = await changedFiles({ repoRoot: r.dir, baseRef: 'origin/main', stateDir: r.stateDir, statMap: k.statMap, lastStatMap, spawn: r.spawn });
-  assert.deepEqual(res.files, ['e.txt']);
-});
+withRepo(
+  'an LF-to-CRLF edit is listed via the stat map',
+  { files: { '.gitattributes': '* text=auto\n', 'e.txt': 'one\n' } },
+  async (r) => {
+    const pass = await r.key();
+    await r.write('e.txt', 'one\r\n');
+    const k = await r.key();
+    assert.equal(pass.tree, k.tree);
+    const lastStatMap = { ...Object.fromEntries(pass.statMap) };
+    const res = await changedFiles({
+      repoRoot: r.dir,
+      baseRef: 'origin/main',
+      stateDir: r.stateDir,
+      statMap: k.statMap,
+      lastStatMap,
+      spawn: r.spawn,
+    });
+    assert.deepEqual(res.files, ['e.txt']);
+  },
+);
 
 withRepo('an assume-unchanged edit is listed via the private index', { files: { 'au.txt': 'one\n' } }, async (r) => {
   r.git('update-index', '--assume-unchanged', 'au.txt');
   await r.write('au.txt', 'two\n');
   assert.equal(r.git('diff', '--name-only'), '', 'git itself does not see it');
   const k = await r.key();
-  const res = await changedFiles({ repoRoot: r.dir, baseRef: 'origin/main', stateDir: r.stateDir, statMap: k.statMap, lastStatMap: null, spawn: r.spawn });
+  const res = await changedFiles({
+    repoRoot: r.dir,
+    baseRef: 'origin/main',
+    stateDir: r.stateDir,
+    statMap: k.statMap,
+    lastStatMap: null,
+    spawn: r.spawn,
+  });
   assert.deepEqual(res.files, ['au.txt']);
 });
 
-withRepo('a file untracked with git rm --cached is listed via the real index', { files: { 'r.txt': 'one\n' } }, async (r) => {
-  r.git('rm', '-q', '--cached', 'r.txt');
-  const k = await r.key();
-  const res = await changedFiles({ repoRoot: r.dir, baseRef: 'origin/main', stateDir: r.stateDir, statMap: k.statMap, lastStatMap: k.statMap, spawn: r.spawn });
-  assert.deepEqual(res.files, ['r.txt']);
-});
+withRepo(
+  'a file untracked with git rm --cached is listed via the real index',
+  { files: { 'r.txt': 'one\n' } },
+  async (r) => {
+    r.git('rm', '-q', '--cached', 'r.txt');
+    const k = await r.key();
+    const res = await changedFiles({
+      repoRoot: r.dir,
+      baseRef: 'origin/main',
+      stateDir: r.stateDir,
+      statMap: k.statMap,
+      lastStatMap: k.statMap,
+      spawn: r.spawn,
+    });
+    assert.deepEqual(res.files, ['r.txt']);
+  },
+);

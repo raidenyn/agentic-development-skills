@@ -10,7 +10,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const LOCK_RE = /^gate\.lock\.(\d+)$/;
 const PRUNE_AGE_MS = 3600 * 1000;
@@ -30,7 +30,7 @@ export function toolStateDir(repoRoot, tool) {
 
 const clean = (id) => {
   const s = String(id ?? '').replace(/[^A-Za-z0-9._-]/g, '_');
-  return s === '' || /^\.+$/.test(s) ? '_' + s : s;
+  return s === '' || /^\.+$/.test(s) ? `_${s}` : s;
 };
 
 export function rootSessionStateDir({ repoRoot, tool, host, sessionId }) {

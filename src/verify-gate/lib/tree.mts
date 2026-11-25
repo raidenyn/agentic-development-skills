@@ -28,7 +28,8 @@ export interface ContentKey {
 const CHUNK = 500;
 // Keep git's own refresh strict whatever the repo sets, so the tree id cannot miss a same-size edit.
 const STRICT = ['-c', 'core.trustctime=true', '-c', 'core.checkStat=default'];
-const CORRUPT = /index file corrupt|bad index file|bad signature|index file smaller than expected|unknown index entry format|index uses .* extension/i;
+const CORRUPT =
+  /index file corrupt|bad index file|bad signature|index file smaller than expected|unknown index entry format|index uses .* extension/i;
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 const splitZ = (s: string) => s.split('\0').filter(Boolean);
@@ -133,7 +134,8 @@ export async function contentKey({ repoRoot, stateDir, spawn, signal }: GitInput
   }
 }
 
-const entriesOf = (m: unknown): Map<string, unknown> => (m instanceof Map ? m : new Map(Object.entries((m as Record<string, unknown>) ?? {})));
+const entriesOf = (m: unknown): Map<string, unknown> =>
+  m instanceof Map ? m : new Map(Object.entries((m as Record<string, unknown>) ?? {}));
 
 // Call after contentKey, under the same gate lock, so the private index is current.
 export async function changedFiles({
@@ -144,7 +146,10 @@ export async function changedFiles({
   lastStatMap,
   spawn,
   signal,
-}: GitInput & { baseRef?: string; statMap?: unknown; lastStatMap?: unknown }): Promise<{ base: string; files: string[] }> {
+}: GitInput & { baseRef?: string; statMap?: unknown; lastStatMap?: unknown }): Promise<{
+  base: string;
+  files: string[];
+}> {
   const g = gitRunner({ repoRoot, stateDir, spawn, signal });
   const { ok, run, real, priv } = g;
   let base = '';

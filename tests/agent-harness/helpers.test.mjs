@@ -13,8 +13,8 @@ test('tempRepo creates a committed repo', async () => {
 });
 
 test('ASSETS point at the tool folders and runNode runs a script', async () => {
-  assert.ok(existsSync(ASSETS.hookRuntime + '/tool.json'));
-  assert.ok(existsSync(ASSETS.verifyGate + '/tool.json'));
+  assert.ok(existsSync(`${ASSETS.hookRuntime}/tool.json`));
+  assert.ok(existsSync(`${ASSETS.verifyGate}/tool.json`));
   const r = await runNode('-e', ['console.log(1)'], { input: '' });
   assert.equal(r.code, 0);
 });
