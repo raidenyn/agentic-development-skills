@@ -69,7 +69,7 @@
 
 ## 5. Checks and report
 
-- [ ] 5.1 Run `pnpm install --frozen-lockfile`, `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'` and `pnpm run check`. All must pass (criterion 5).
+- [x] 5.1 Run `pnpm install --frozen-lockfile`, `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'` and `pnpm run check`. All must pass (criterion 5).
 - [ ] 5.2 Write the PR report, including the effect of the model-cell format on onboarding's defaults:
   - each criterion with its evidence;
   - the contracts changed (Run record, Phase report with the `seq` weakening);
