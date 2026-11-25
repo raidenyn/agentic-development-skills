@@ -9,7 +9,9 @@ import { pathToFileURL } from 'node:url';
 import { ASSETS, fakeOpencodeCtx, runNode, until } from './helpers.mjs';
 import { installBoth, verifyRepo } from './verify-helpers.mjs';
 
-const { createOpencodePlugin } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'opencode-adapter.mjs')).href);
+const { createOpencodePlugin } = await import(
+  pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'opencode-adapter.mjs')).href
+);
 const { installTool } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'install.mjs')).href);
 const CLAUDE_MJS = join(ASSETS.hookRuntime, 'claude.mjs');
 const STOP = JSON.parse(readFileSync(new URL('./fixtures/claude/Stop.json', import.meta.url), 'utf8'));
@@ -20,7 +22,9 @@ const CH2 = 'ses_child000000000000000000002';
 const SESSIONS = { [ROOT]: { id: ROOT }, [CH1]: { id: CH1, parentID: ROOT }, [CH2]: { id: CH2, parentID: ROOT } };
 
 const cleanups = [];
-after(async () => { for (const c of cleanups.reverse()) await c(); });
+after(async () => {
+  for (const c of cleanups.reverse()) await c();
+});
 
 async function installed() {
   const r = await verifyRepo({ files: { 'src/a.js': 'a\n' } });
@@ -29,6 +33,7 @@ async function installed() {
   return r;
 }
 
+/** @param {any} r @param {{ agent?: string, env?: Record<string, string> }} [opts] */
 function stop(r, { agent, env = {} } = {}) {
   const p = { ...STOP, cwd: r.dir, background_tasks: [] };
   if (agent) Object.assign(p, { hook_event_name: 'SubagentStop', agent_id: agent, agent_type: 'general-purpose' });
@@ -48,7 +53,10 @@ test('through spawned claude.mjs, three identical Stop failures leave three comm
   const ledger = r.blocks('claude-code', SID);
   assert.equal(ledger.version, 1);
   assert.equal(ledger.charges.length, 3);
-  assert.ok(ledger.charges.every((c) => c.confirmed === true), 'ack was awaited before exit');
+  assert.ok(
+    ledger.charges.every((c) => c.confirmed === true),
+    'ack was awaited before exit',
+  );
   assert.equal(new Set(ledger.charges.map((c) => c.key)).size, 1);
   const fourth = await stop(r);
   assert.equal(out(fourth).decision, undefined);
@@ -64,7 +72,11 @@ test('two simultaneous failures at count two (two spawned claude.mjs): exactly o
   const [a, b] = await Promise.all([stop(r), stop(r, { agent: 'sub-2' })]);
   const results = [out(a), out(b)];
   assert.equal(results.filter((x) => x?.decision === 'block').length, 1, JSON.stringify(results));
-  assert.equal(results.filter((x) => /still failing after 3 blocks/.test(x?.systemMessage ?? '')).length, 1, JSON.stringify(results));
+  assert.equal(
+    results.filter((x) => /still failing after 3 blocks/.test(x?.systemMessage ?? '')).length,
+    1,
+    JSON.stringify(results),
+  );
   assert.equal(r.blocks('claude-code', SID).charges.length, 3);
 });
 
@@ -75,24 +87,37 @@ test('a no-change Stop prints nothing and its trace line says no-change', async 
   const res = await stop(r, { env: { AGENT_HARNESS_TRACE: '1' } });
   assert.equal(res.stdout, '');
   assert.equal(r.log().length, 1);
-  const lines = readFileSync(join(r.gitDir, 'agent-harness', 'hook-runtime', 'trace.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const lines = readFileSync(join(r.gitDir, 'agent-harness', 'hook-runtime', 'trace.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
   assert.equal(lines.length, 1);
   const t = lines[0];
   assert.equal(t.event, 'turn.end');
   assert.deepEqual(t.outcomes, { 'verify-gate': 'no-change' });
-  for (const k of ['processStart', 'receivedAt', 'handlersLoadedAt', 'settledAt']) assert.equal(typeof t[k], 'number', k);
+  for (const k of ['processStart', 'receivedAt', 'handlersLoadedAt', 'settledAt'])
+    assert.equal(typeof t[k], 'number', k);
   assert.ok(t.processStart <= t.receivedAt && t.receivedAt <= t.handlersLoadedAt && t.handlersLoadedAt <= t.settledAt);
 });
 
+/** @param {any} r @param {{ synthetic?: Function }} [opts] */
 async function opencode(r, { synthetic } = {}) {
   const f = fakeOpencodeCtx(r.dir, { sessions: SESSIONS, synthetic });
   const dispose = await createOpencodePlugin().setup(f.ctx);
   let done = false;
-  const close = async () => { if (!done) { done = true; await dispose(); } };
+  const close = async () => {
+    if (!done) {
+      done = true;
+      await dispose();
+    }
+  };
   cleanups.push(close);
   return { ...f, close };
 }
-const turn = (emit, sid) => { emit('session.execution.started', sid); emit('session.execution.succeeded', sid); };
+const turn = (emit, sid) => {
+  emit('session.execution.started', sid);
+  emit('session.execution.succeeded', sid);
+};
 
 test('two simultaneous failures at count two (two OpenCode sessions sharing a root): exactly one block, one notice', async () => {
   const r = await installed();
@@ -102,14 +127,21 @@ test('two simultaneous failures at count two (two OpenCode sessions sharing a ro
   await until(() => p.calls.synthetic.length === 1, 15000, 'first block');
   turn(p.emit, CH2);
   await until(() => p.calls.synthetic.length === 2, 15000, 'second block');
-  assert.deepEqual(p.calls.synthetic.map((s) => s.resume), [true, true]);
+  assert.deepEqual(
+    p.calls.synthetic.map((s) => s.resume),
+    [true, true],
+  );
   await until(() => r.blocks('opencode', ROOT)?.charges.filter((c) => c.confirmed).length === 2, 5000, 'two acks');
   turn(p.emit, CH1);
   turn(p.emit, CH2);
   await until(() => p.calls.synthetic.length === 4, 20000, 'two more results');
   const last = p.calls.synthetic.slice(2);
   assert.equal(last.filter((s) => s.resume === true && /attempt 3 of 3/.test(s.text)).length, 1, JSON.stringify(last));
-  assert.equal(last.filter((s) => s.resume === false && /still failing after 3 blocks/.test(s.text)).length, 1, JSON.stringify(last));
+  assert.equal(
+    last.filter((s) => s.resume === false && /still failing after 3 blocks/.test(s.text)).length,
+    1,
+    JSON.stringify(last),
+  );
   await until(() => r.blocks('opencode', ROOT)?.charges.length === 3, 5000, 'three charges');
   await p.close();
 });
@@ -126,7 +158,11 @@ test('OpenCode: a no-change turn end writes a trace line with hostCreatedAt', as
     p.emit('session.execution.started', ROOT);
     p.emit('session.execution.succeeded', ROOT, {});
     await until(() => existsSync(file) && readFileSync(file, 'utf8').includes('turn.end'), 10000, 'trace line');
-    const t = readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).find((l) => l.event === 'turn.end');
+    const t = readFileSync(file, 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l))
+      .find((l) => l.event === 'turn.end');
     assert.deepEqual(t.outcomes, { 'verify-gate': 'no-change' });
     assert.equal(typeof t.hostCreatedAt, 'number');
     assert.ok(t.receivedAt <= t.settledAt);
@@ -142,10 +178,14 @@ test('an OpenCode handler that spawns with default settings gets 5 s of work', a
   const src = join(r.gitDir, 'src-spawner');
   mkdirSync(src, { recursive: true });
   writeFileSync(join(src, 'tool.json'), JSON.stringify({ name: 'spawner', version: '0.1.0', handler: true }));
-  writeFileSync(join(src, 'handler.mjs'), "export default { name: 'spawner', events: ['turn.end'],\n"
-    + '  async handle(e, c) { const room = c.deadline - Date.now(); const t0 = Date.now();\n'
-    + "    const res = await c.spawn([process.execPath, '-e', 'setTimeout(() => {}, 4000)'], { cwd: c.repoRoot });\n"
-    + "    return { context: `spawner room ${room} took ${Date.now() - t0} code ${res.code}` }; } };\n");
+  writeFileSync(
+    join(src, 'handler.mjs'),
+    "export default { name: 'spawner', events: ['turn.end'],\n" +
+      '  async handle(e, c) { const room = c.deadline - Date.now(); const t0 = Date.now();\n' +
+      "    const res = await c.spawn([process.execPath, '-e', 'setTimeout(() => {}, 4000)'], { cwd: c.repoRoot });\n" +
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the string is shell or source text that holds ${...} on purpose
+      '    return { context: `spawner room ${room} took ${Date.now() - t0} code ${res.code}` }; } };\n',
+  );
   assert.equal(installTool({ sourceDir: src, repoRoot: r.dir }).code, 0);
   const p = await opencode(r);
   turn(p.emit, ROOT);

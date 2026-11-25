@@ -11,14 +11,18 @@ const { readHarnessConfig, loadSection, ConfigError } = await import(
 const opts = { keys: ['command'], required: [], defaults: {} };
 
 test('loadSection rejects an unknown own key', async () => {
-  const r = await tempRepo({ files: { '.agents/harness.json': JSON.stringify({ 'verify-gate': { command: ['true'], colour: 1 } }) } });
+  const r = await tempRepo({
+    files: { '.agents/harness.json': JSON.stringify({ 'verify-gate': { command: ['true'], colour: 1 } }) },
+  });
   const { errors } = loadSection(r.dir, 'verify-gate', opts);
   assert.ok(errors.some((e) => e.includes('colour')));
   await r.cleanup();
 });
 
 test("loadSection ignores other tools' keys", async () => {
-  const r = await tempRepo({ files: { '.agents/harness.json': JSON.stringify({ 'other-tool': { x: 1 }, 'verify-gate': { command: ['true'] } }) } });
+  const r = await tempRepo({
+    files: { '.agents/harness.json': JSON.stringify({ 'other-tool': { x: 1 }, 'verify-gate': { command: ['true'] } }) },
+  });
   assert.deepEqual(loadSection(r.dir, 'verify-gate', opts).errors, []);
   await r.cleanup();
 });

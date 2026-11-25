@@ -66,12 +66,17 @@ test('a handler that loops synchronously in its import is skipped after 2 s', as
     const elapsed = Date.now() - start;
     proxies.push(...handlers);
     assert.ok(elapsed >= 1900 && elapsed < 4000, `took ${elapsed} ms`);
-    assert.deepEqual(handlers.map((h) => h.name), ['bgood']);
+    assert.deepEqual(
+      handlers.map((h) => h.name),
+      ['bgood'],
+    );
     assert.equal(problems.length, 1);
     assert.match(problems[0], /aloop/);
     assert.match(problems[0], /loading/);
-    const out = await createRuntime({ repoRoot: r.dir, host: 'claude-code', handlers, problems })
-      .dispatch({ type: 'prompt' }, ids);
+    const out = await createRuntime({ repoRoot: r.dir, host: 'claude-code', handlers, problems }).dispatch(
+      { type: 'prompt' },
+      ids,
+    );
     assert.equal(out.context, 'ok');
   } finally {
     await r.cleanup();
@@ -80,7 +85,9 @@ test('a handler that loops synchronously in its import is skipped after 2 s', as
 
 test('a handler that loops synchronously in handle before its first await: notice at the deadline, then a fresh worker', async () => {
   const dir = scratch('spin');
-  const p = await proxy('spin', `
+  const p = await proxy(
+    'spin',
+    `
     import { existsSync, writeFileSync } from 'node:fs';
     import { threadId } from 'node:worker_threads';
     export default {
@@ -90,7 +97,8 @@ test('a handler that loops synchronously in handle before its first await: notic
         return { context: 'fresh ' + threadId };
       },
     };
-  `);
+  `,
+  );
   const marker = join(dir, 'looped');
   const start = Date.now();
   const first = await rt([p]).dispatch({ type: 'tool.after', marker }, { ...ids, hostDeadline: Date.now() + 8000 });
@@ -107,7 +115,9 @@ test('a worker terminated during a spawned git add leaves no git process, no hel
   const dir = scratch('git');
   await repo.write('f.txt', 'hello\n');
   await repo.write('.gitattributes', 'f.txt filter=slow\n');
-  const p = await proxy('gitter', `
+  const p = await proxy(
+    'gitter',
+    `
     export default {
       name: 'gitter', events: ['tool.after'], timeouts: { 'tool.after': 1500 },
       async handle(ev, c) {
@@ -119,12 +129,20 @@ test('a worker terminated during a spawned git add leaves no git process, no hel
         return { context: 'done' };
       },
     };
-  `);
-  const ev = { type: 'tool.after', gateDir: join(dir, 'gate'), marker: join(dir, 'filter-ran'), index: join(dir, 'index') };
+  `,
+  );
+  const ev = {
+    type: 'tool.after',
+    gateDir: join(dir, 'gate'),
+    marker: join(dir, 'filter-ran'),
+    index: join(dir, 'index'),
+  };
   const out = await rt([p]).dispatch(ev, { ...ids, hostDeadline: Date.now() + 10000 });
   assert.match(out.notices[0], /timed out/);
   assert.ok(existsSync(ev.marker), 'git add was running its clean filter');
-  const locks = readdirSync(ev.gateDir).filter((f) => /^gate\.lock\.\d+$/.test(f)).sort();
+  const locks = readdirSync(ev.gateDir)
+    .filter((f) => /^gate\.lock\.\d+$/.test(f))
+    .sort();
   const body = JSON.parse(readFileSync(join(ev.gateDir, locks[locks.length - 1]), 'utf8'));
   assert.equal(body.released, true, 'gate lock released');
   assert.ok(body.pgids.length >= 1, 'the spawned group was recorded in the lock');
@@ -136,7 +154,9 @@ test('a worker terminated during a spawned git add leaves no git process, no hel
 test('a worker terminated right after requesting a spawn leaves no orphan', async () => {
   const dir = scratch('orphan');
   const tag = `orphan-tag-${process.pid}-${Date.now()}`;
-  const p = await proxy('orphan', `
+  const p = await proxy(
+    'orphan',
+    `
     export default {
       name: 'orphan', events: ['tool.after'], timeouts: { 'tool.after': 500 },
       handle(ev, c) {
@@ -144,7 +164,8 @@ test('a worker terminated right after requesting a spawn leaves no orphan', asyn
         while (true) {}
       },
     };
-  `);
+  `,
+  );
   const marker = join(dir, 'started');
   const out = await rt([p]).dispatch({ type: 'tool.after', marker, tag }, { ...ids, hostDeadline: Date.now() + 10000 });
   assert.match(out.notices[0], /timed out/);
@@ -154,7 +175,9 @@ test('a worker terminated right after requesting a spawn leaves no orphan', asyn
 });
 
 test('a late trace from a terminated event is dropped', async () => {
-  const p = await proxy('tracer', `
+  const p = await proxy(
+    'tracer',
+    `
     export default {
       name: 'tracer', events: ['prompt'], timeouts: { prompt: 1000 },
       async handle(ev, c) {
@@ -169,7 +192,8 @@ test('a late trace from a terminated event is dropped', async () => {
         return { context: 'normal' };
       },
     };
-  `);
+  `,
+  );
   const r = rt([p]);
   const o1 = await r.dispatch({ type: 'prompt', mode: 'late' }, ids);
   assert.equal(o1.outcomes.tracer, 'result');
@@ -179,17 +203,20 @@ test('a late trace from a terminated event is dropped', async () => {
   const o3 = await r.dispatch({ type: 'prompt', mode: 'spin' }, { ...ids, hostDeadline: Date.now() + 8000 });
   assert.equal(o3.outcomes.tracer, 'failed');
   const o4 = await r.dispatch({ type: 'prompt' }, ids);
-  assert.equal(o4.outcomes.tracer, "result", JSON.stringify(o4));
+  assert.equal(o4.outcomes.tracer, 'result', JSON.stringify(o4));
 });
 
 test('a proof of the same handler is answered while that handler awaits it', async () => {
-  const p = await proxy('prover', `
+  const p = await proxy(
+    'prover',
+    `
     export default {
       name: 'prover', events: ['prompt'],
       proofs: { mine: (c) => 'mine for ' + c.agentId, fine: () => null },
       async handle(ev, c) { return { context: (await c.proof('mine')) + ' / ' + (await c.proof('fine')) }; },
     };
-  `);
+  `,
+  );
   assert.deepEqual(p.events, ['prompt']);
   const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
   assert.equal(out.context, 'mine for main / null');
@@ -198,7 +225,9 @@ test('a proof of the same handler is answered while that handler awaits it', asy
 
 test('ack and release reach the worker that produced the block', async () => {
   const dir = scratch('ack');
-  const p = await proxy('acker', `
+  const p = await proxy(
+    'acker',
+    `
     import { writeFileSync } from 'node:fs';
     import { join } from 'node:path';
     import { randomUUID } from 'node:crypto';
@@ -214,9 +243,13 @@ test('ack and release reach the worker that produced the block', async () => {
         };
       },
     };
-  `);
+  `,
+  );
   const r = rt([p]);
-  const [a, b] = await Promise.all([r.dispatch({ type: 'turn.end', dir }, ids), r.dispatch({ type: 'turn.end', dir }, ids)]);
+  const [a, b] = await Promise.all([
+    r.dispatch({ type: 'turn.end', dir }, ids),
+    r.dispatch({ type: 'turn.end', dir }, ids),
+  ]);
   assert.notEqual(a.block, b.block, 'two workers of the pool answered');
   await a.ack();
   await b.release();
@@ -226,9 +259,12 @@ test('ack and release reach the worker that produced the block', async () => {
 });
 
 test('config changes between events reach the worker', async () => {
-  const p = await proxy('cfg', `
+  const p = await proxy(
+    'cfg',
+    `
     export default { name: 'cfg', events: ['prompt'], handle: (ev, c) => ({ context: JSON.stringify(c.config) }) };
-  `);
+  `,
+  );
   const r = rt([p]);
   await repo.write('.agents/harness.json', JSON.stringify({ cfg: { n: 1 } }));
   assert.equal((await r.dispatch({ type: 'prompt' }, ids)).context, '{"n":1}');
@@ -238,7 +274,9 @@ test('config changes between events reach the worker', async () => {
 });
 
 test('spawn runs through the supervisor and returns exit status and output', async () => {
-  const p = await proxy('spawner', `
+  const p = await proxy(
+    'spawner',
+    `
     import { isMainThread } from 'node:worker_threads';
     export default {
       name: 'spawner', events: ['prompt'],
@@ -249,16 +287,25 @@ test('spawn runs through the supervisor and returns exit status and output', asy
           pgid: typeof r.pgid, timedOut: t.timedOut, tsig: t.signal }) };
       },
     };
-  `);
+  `,
+  );
   const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
   assert.deepEqual(JSON.parse(out.context), {
-    main: false, code: 3, stdout: 'out\n', stderr: 'err\n', pgid: 'number', timedOut: true, tsig: 'SIGTERM',
+    main: false,
+    code: 3,
+    stdout: 'out\n',
+    stderr: 'err\n',
+    pgid: 'number',
+    timedOut: true,
+    tsig: 'SIGTERM',
   });
 });
 
 test('a deadline that passes while the event waits for a worker to load: no post, no leak, lock free', async () => {
   const dir = scratch('loadwait');
-  const p = await proxy('loadwait', `
+  const p = await proxy(
+    'loadwait',
+    `
     import { writeFileSync } from 'node:fs';
     export default {
       name: 'loadwait', events: ['prompt'],
@@ -269,10 +316,14 @@ test('a deadline that passes while the event waits for a worker to load: no post
         await new Promise(() => {});
       },
     };
-  `);
+  `,
+  );
   const r = rt([p]);
   const ev = { type: 'prompt', mode: 'hang', gate: join(dir, 'gate'), marker: join(dir, 'ran') };
-  const o1 = await r.dispatch({ type: 'prompt', mode: 'spin' }, { ...ids, workDeadline: Date.now() + 200, hostDeadline: Date.now() + 5000 });
+  const o1 = await r.dispatch(
+    { type: 'prompt', mode: 'spin' },
+    { ...ids, workDeadline: Date.now() + 200, hostDeadline: Date.now() + 5000 },
+  );
   assert.match(o1.notices[0], /timed out/);
   // The replacement worker is still loading now; this event's deadline passes before it is ready.
   const start = Date.now();
@@ -283,11 +334,15 @@ test('a deadline that passes while the event waits for a worker to load: no post
   await new Promise((res) => setTimeout(res, 800));
   assert.equal(existsSync(ev.marker), false, 'the event was not posted to the worker');
   const held = existsSync(ev.gate)
-    ? readdirSync(ev.gate).filter((f) => /^gate\.lock\.\d+$/.test(f))
-      .filter((f) => JSON.parse(readFileSync(join(ev.gate, f), 'utf8')).released !== true)
+    ? readdirSync(ev.gate)
+        .filter((f) => /^gate\.lock\.\d+$/.test(f))
+        .filter((f) => JSON.parse(readFileSync(join(ev.gate, f), 'utf8')).released !== true)
     : [];
   assert.deepEqual(held, [], 'no gate lock is held');
   assert.equal(p.workerGens().length, 1, 'one live worker, none leaked');
-  const o3 = await r.dispatch({ type: 'prompt', mode: 'spin' }, { ...ids, workDeadline: Date.now() + 300, hostDeadline: Date.now() + 5000 });
+  const o3 = await r.dispatch(
+    { type: 'prompt', mode: 'spin' },
+    { ...ids, workDeadline: Date.now() + 300, hostDeadline: Date.now() + 5000 },
+  );
   assert.match(o3.notices[0], /timed out/);
 });

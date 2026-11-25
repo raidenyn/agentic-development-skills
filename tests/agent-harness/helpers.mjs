@@ -13,8 +13,7 @@ export const ASSETS = {
 
 export async function tempRepo({ commit = true, files = {} } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'agent-harness-'));
-  const git = (...args) =>
-    execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   const write = async (rel, text) => {
     const file = join(dir, rel);
     await mkdir(dirname(file), { recursive: true });
@@ -33,6 +32,7 @@ export async function tempRepo({ commit = true, files = {} } = {}) {
   return { dir, git, write, cleanup: () => rm(dir, { recursive: true, force: true }) };
 }
 
+/** @param {string} script @param {string[]} [args] @param {{ cwd?: string, input?: string, env?: Record<string, string | undefined> }} [opts] */
 export function runNode(script, args = [], { cwd, input, env } = {}) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, [script, ...args], {
@@ -53,6 +53,7 @@ export function runNode(script, args = [], { cwd, input, env } = {}) {
 
 // A fake OpenCode 2.4.1 plugin ctx (see fixtures/spike/opencode-plugin.mjs) that records hook
 // registrations, session lookups and synthetic messages. `emit` feeds the event stream.
+/** @param {string} dir @param {{ sessions?: Record<string, unknown>, synthetic?: Function }} [opts] */
 export function fakeOpencodeCtx(dir, { sessions = {}, synthetic } = {}) {
   const hooks = {};
   const calls = { synthetic: [], get: [] };
@@ -61,9 +62,15 @@ export function fakeOpencodeCtx(dir, { sessions = {}, synthetic } = {}) {
   let evtCounter = 0;
   const ctx = {
     location: { directory: dir },
-    tool: { hook: async (name, fn) => { hooks[name] = fn; } },
+    tool: {
+      hook: async (name, fn) => {
+        hooks[name] = fn;
+      },
+    },
     session: {
-      hook: async (name, fn) => { hooks[`session.${name}`] = fn; },
+      hook: async (name, fn) => {
+        hooks[`session.${name}`] = fn;
+      },
       get: async ({ sessionID }) => {
         calls.get.push(sessionID);
         if (!Object.hasOwn(sessions, sessionID)) throw new Error(`session ${sessionID} not found`);
@@ -76,13 +83,20 @@ export function fakeOpencodeCtx(dir, { sessions = {}, synthetic } = {}) {
       },
     },
     event: {
-      subscribe: ({ signal }) => (async function* stream() {
-        while (!signal?.aborted) {
-          if (queue.length) { yield queue.shift(); continue; }
-          await new Promise((r) => { wake = r; signal?.addEventListener('abort', r, { once: true }); });
-          wake = null;
-        }
-      })(),
+      subscribe: ({ signal }) =>
+        (async function* stream() {
+          while (!signal?.aborted) {
+            if (queue.length) {
+              yield queue.shift();
+              continue;
+            }
+            await new Promise((r) => {
+              wake = r;
+              signal?.addEventListener('abort', r, { once: true });
+            });
+            wake = null;
+          }
+        })(),
     },
   };
   const emit = (type, sessionID, data = {}) => {
@@ -105,12 +119,16 @@ export async function until(fn, ms = 4000, what = 'condition') {
 // arguments and result shape, each child in its own process group (`detached: true`). On abort or
 // timeout the group gets SIGTERM, then SIGKILL after 5 s if it is still alive. Rejects on a spawn
 // error.
+/** @param {string[]} argv @param {{ cwd?: string, env?: Record<string, string | undefined>, timeoutMs?: number, signal?: AbortSignal, maxBytes?: number }} [opts] */
 export function directSpawn(argv, { cwd, env, timeoutMs, signal, maxBytes = Infinity } = {}) {
   return new Promise((resolvePromise, reject) => {
     let child;
     try {
       child = spawn(argv[0], argv.slice(1), {
-        cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+        cwd,
+        env: { ...process.env, ...env },
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
     } catch (err) {
       reject(err);
@@ -142,11 +160,23 @@ export function directSpawn(argv, { cwd, env, timeoutMs, signal, maxBytes = Infi
     let killTimer;
     const kill = () => {
       if (!pgid) return;
-      try { process.kill(-pgid, 'SIGTERM'); } catch {}
-      killTimer ??= setTimeout(() => { try { process.kill(-pgid, 'SIGKILL'); } catch {} }, 5000);
+      try {
+        process.kill(-pgid, 'SIGTERM');
+      } catch {}
+      killTimer ??= setTimeout(() => {
+        try {
+          process.kill(-pgid, 'SIGKILL');
+        } catch {}
+      }, 5000);
       killTimer.unref();
     };
-    const timer = timeoutMs > 0 ? setTimeout(() => { timedOut = true; kill(); }, timeoutMs) : null;
+    const timer =
+      timeoutMs > 0
+        ? setTimeout(() => {
+            timedOut = true;
+            kill();
+          }, timeoutMs)
+        : null;
     const onAbort = () => kill();
     if (signal?.aborted) onAbort();
     else signal?.addEventListener('abort', onAbort, { once: true });
@@ -156,12 +186,20 @@ export function directSpawn(argv, { cwd, env, timeoutMs, signal, maxBytes = Infi
       clearTimeout(timer);
       signal?.removeEventListener('abort', onAbort);
     };
-    child.on('error', (err) => { if (done) return; finish(); reject(err); });
+    child.on('error', (err) => {
+      if (done) return;
+      finish();
+      reject(err);
+    });
     child.on('close', (code, sig) => {
       if (done) return;
       finish();
       resolvePromise({
-        code, signal: sig, pgid, timedOut, truncated,
+        code,
+        signal: sig,
+        pgid,
+        timedOut,
+        truncated,
         stdout: Buffer.concat(out.stdout).toString('utf8'),
         stderr: Buffer.concat(out.stderr).toString('utf8'),
       });

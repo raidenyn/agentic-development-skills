@@ -12,7 +12,9 @@ const { createVerifyHandler } = await import(pathToFileURL(join(ASSETS.verifyGat
 const HR_CLI = join(ASSETS.hookRuntime, 'cli.mjs');
 const VG_CLI = join(ASSETS.verifyGate, 'cli.mjs');
 const cleanups = [];
-after(async () => { for (const c of cleanups.reverse()) await c(); });
+after(async () => {
+  for (const c of cleanups.reverse()) await c();
+});
 
 const vg = (r, ...args) => runNode(VG_CLI, [...args, '--repo', r.dir], { cwd: r.dir });
 const installedVg = (r, ...args) => runNode(join(r.dir, '.agents/harness/verify-gate/cli.mjs'), args, { cwd: r.dir });
@@ -68,13 +70,13 @@ test('check passes once the command is set', async () => {
 test('maxBlocks 5 is rejected by check; other bad values too', async () => {
   const r = await withRuntime();
   assert.equal((await vg(r, 'install')).code, 0);
-  for (const [section, re] of [
+  for (const [section, re] of /** @type {[object, RegExp][]} */ ([
     [{ command: ['x'], maxBlocks: 5 }, /maxBlocks.*1.*3/],
     [{ command: ['x'], maxBlocks: 0 }, /maxBlocks.*1.*3/],
     [{ command: ['x'], timeoutSeconds: -1 }, /timeoutSeconds/],
     [{ command: ['x'], taskFiles: 'a' }, /taskFiles/],
     [{ command: 'npm test' }, /set verify-gate\.command/],
-  ]) {
+  ])) {
     setSection(r, section);
     const check = await installedVg(r, 'check');
     assert.equal(check.code, 1, JSON.stringify(section));
@@ -161,8 +163,11 @@ test('four consecutive turn ends with a real, consistently failing node:test fil
   const r = await verifyRepo({ files: { 'src/a.js': 'a\n' } });
   cleanups.push(r.cleanup);
   const testFile = join(r.gitDir, 'fail.test.mjs');
-  writeFileSync(testFile, "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\n"
-    + "test('always fails', async () => { await new Promise((r) => setTimeout(r, Math.random() * 30)); assert.equal(1 + 1, 3); });\n");
+  writeFileSync(
+    testFile,
+    "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\n" +
+      "test('always fails', async () => { await new Promise((r) => setTimeout(r, Math.random() * 30)); assert.equal(1 + 1, 3); });\n",
+  );
   // The outer node --test exports NODE_TEST_CONTEXT, which would make the inner run report to it.
   await r.setConfig({ command: ['env', '-u', 'NODE_TEST_CONTEXT', process.execPath, '--test', testFile] });
   const h = createVerifyHandler();

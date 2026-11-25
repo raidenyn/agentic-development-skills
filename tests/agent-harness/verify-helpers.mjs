@@ -42,15 +42,31 @@ export async function verifyRepo({ files = {}, config = {}, commit = true } = {}
     setExit: (code) => writeFileSync(ctl('verify.exit'), String(code)),
     setOut: (text) => writeFileSync(ctl('verify.out'), text),
     setSleep: (s) => (s ? writeFileSync(ctl('verify.sleep'), String(s)) : rmSync(ctl('verify.sleep'), { force: true })),
-    setTouch: (rel) => (rel ? writeFileSync(ctl('verify.touch'), join(r.dir, rel)) : rmSync(ctl('verify.touch'), { force: true })),
-    fail: (text = 'E101 something broke\n') => { writeFileSync(ctl('verify.exit'), '1'); writeFileSync(ctl('verify.out'), text); },
-    pass: () => { writeFileSync(ctl('verify.exit'), '0'); rmSync(ctl('verify.out'), { force: true }); },
+    setTouch: (rel) =>
+      rel ? writeFileSync(ctl('verify.touch'), join(r.dir, rel)) : rmSync(ctl('verify.touch'), { force: true }),
+    fail: (text = 'E101 something broke\n') => {
+      writeFileSync(ctl('verify.exit'), '1');
+      writeFileSync(ctl('verify.out'), text);
+    },
+    pass: () => {
+      writeFileSync(ctl('verify.exit'), '0');
+      rmSync(ctl('verify.out'), { force: true });
+    },
     log: () => {
       if (!existsSync(ctl('verify.log'))) return [];
-      return readFileSync(ctl('verify.log'), 'utf8').split('\n').filter(Boolean).map((l) => {
-        const [trigger, file, base, changedPath, changed] = l.split('\t');
-        return { trigger, file, base, changedPath, changed: changed === '<none>' ? null : changed.split(',').filter(Boolean) };
-      });
+      return readFileSync(ctl('verify.log'), 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => {
+          const [trigger, file, base, changedPath, changed] = l.split('\t');
+          return {
+            trigger,
+            file,
+            base,
+            changedPath,
+            changed: changed === '<none>' ? null : changed.split(',').filter(Boolean),
+          };
+        });
     },
     setConfig: async (patch) => {
       const cfg = readHarnessConfig(r.dir);
@@ -70,12 +86,27 @@ export async function verifyRepo({ files = {}, config = {}, commit = true } = {}
 
 // Calls a handler in process with a worker-like context (directSpawn as `spawn`, no `lock`, so the
 // gate falls back to the local gate lock).
-export async function fire(handler, r, event, {
-  agentId = 'main', sessionId = 's1', host = 'claude-code', budgetMs = 60000, signal, spawn = directSpawn, lock,
-} = {}) {
+/** @param {any} handler @param {any} r @param {any} event @param {{ agentId?: string, sessionId?: string, host?: string, budgetMs?: number, signal?: AbortSignal, spawn?: Function, lock?: object }} [opts] */
+export async function fire(
+  handler,
+  r,
+  event,
+  {
+    agentId = 'main',
+    sessionId = 's1',
+    host = 'claude-code',
+    budgetMs = 60000,
+    signal,
+    spawn = directSpawn,
+    lock,
+  } = {},
+) {
   const traced = [];
   const ctx = {
-    repoRoot: r.dir, host, sessionId, agentId,
+    repoRoot: r.dir,
+    host,
+    sessionId,
+    agentId,
     deadline: Date.now() + budgetMs,
     signal: signal ?? new AbortController().signal,
     stateDir: sessionStateDir({ repoRoot: r.dir, tool: 'verify-gate', host, sessionId, agentId }),
@@ -91,7 +122,10 @@ export async function fire(handler, r, event, {
 
 export function proofCtx(r, { budgetMs = 10000, host = 'claude-code', sessionId = 's1' } = {}) {
   return {
-    repoRoot: r.dir, host, sessionId, agentId: 'main',
+    repoRoot: r.dir,
+    host,
+    sessionId,
+    agentId: 'main',
     deadline: Date.now() + budgetMs,
     signal: new AbortController().signal,
     stateDir: sessionStateDir({ repoRoot: r.dir, tool: 'verify-gate', host, sessionId, agentId: 'main' }),
@@ -100,10 +134,30 @@ export function proofCtx(r, { budgetMs = 10000, host = 'claude-code', sessionId 
   };
 }
 
-export const edit = (files, callId = 'c-edit') => ({ type: 'tool.after', host: 'claude-code', tool: { name: 'Edit', kind: 'edit', input: {}, callId }, files });
-export const editBefore = (files, callId = 'c-edit') => ({ type: 'tool.before', host: 'claude-code', tool: { name: 'Edit', kind: 'edit', input: {}, callId }, files });
-export const shellBefore = (callId, command = 'sed -i') => ({ type: 'tool.before', host: 'claude-code', tool: { name: 'Bash', kind: 'shell', input: { command }, callId }, command });
-export const shellAfter = (callId, command = 'sed -i') => ({ type: 'tool.after', host: 'claude-code', tool: { name: 'Bash', kind: 'shell', input: { command }, callId }, command });
+export const edit = (files, callId = 'c-edit') => ({
+  type: 'tool.after',
+  host: 'claude-code',
+  tool: { name: 'Edit', kind: 'edit', input: {}, callId },
+  files,
+});
+export const editBefore = (files, callId = 'c-edit') => ({
+  type: 'tool.before',
+  host: 'claude-code',
+  tool: { name: 'Edit', kind: 'edit', input: {}, callId },
+  files,
+});
+export const shellBefore = (callId, command = 'sed -i') => ({
+  type: 'tool.before',
+  host: 'claude-code',
+  tool: { name: 'Bash', kind: 'shell', input: { command }, callId },
+  command,
+});
+export const shellAfter = (callId, command = 'sed -i') => ({
+  type: 'tool.after',
+  host: 'claude-code',
+  tool: { name: 'Bash', kind: 'shell', input: { command }, callId },
+  command,
+});
 export const turnEnd = (background = 0) => ({ type: 'turn.end', host: 'claude-code', background });
 
 // Installs hook-runtime and verify-gate through their CLIs and sets the verify command.

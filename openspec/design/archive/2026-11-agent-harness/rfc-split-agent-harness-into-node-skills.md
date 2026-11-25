@@ -115,6 +115,7 @@ The audit skill stays global and decides what a repo needs. Each improvement is 
 Settled in discussion on 2026-11-24 and 2026-11-25, and in review comments on 2026-11-25.
 
 - <a id="node-only"></a>**Node only.** All copied code is plain `.mjs` with no build step. Node is already required in four of the five repositories, Python in two.
+  Superseded by amendment [TypeScript source](#amend-typescript-source), see Amendments.
 - <a id="vendored-copy"></a>**Vendored copy.** Code is copied into the repo, so CI, other hosts and other contributors need no install.
 - <a id="placement-test"></a>**Placement test.** If a fresh clone on a CI runner or a teammate's machine lacks it and something breaks or weakens, it belongs in the repo; otherwise it stays global.
 - <a id="audit-entry"></a>**Audit as the entry point.** The audit analyses the repo, prioritizes, and names the skill for each finding.
@@ -266,7 +267,7 @@ Legend: an arrow means the right milestone needs what the label names from the l
 | Three onboardings | Each milestone is proven in this repo, veles and line-mcp, in that order | yes | agreed | Three onboardings are the evidence that a milestone is done | [link](#veles-switch) |
 | Host order | OpenCode, then Claude Code; other hosts out of scope | yes | agreed | No rationale given | [link](#host-order) |
 | PR budget | At most ten PRs in total | yes | agreed | No rationale given | [link](#pr-budget) |
-| Node only | Copied code is dependency-free Node | routine (owner, 2026-11-25) | agreed | Long-term support; OpenCode parity | [link](#node-only) |
+| Node only | Copied code is dependency-free Node | routine (owner, 2026-11-25) | agreed; superseded by [TypeScript source](#amend-typescript-source) | Long-term support; OpenCode parity | [link](#node-only) |
 | Vendored copy | Code is copied into each repo | routine (owner, 2026-11-24) | agreed | No rationale given | [link](#vendored-copy) |
 | Placement test | In the repo if a fresh clone weakens without it | routine (owner, 2026-11-25) | agreed | "It's good framework" | [link](#placement-test) |
 | Audit as entry point | The audit names the fixing skill | routine (owner, 2026-11-24) | agreed | Prioritize for the repo's own situation | [link](#audit-entry) |
@@ -301,6 +302,15 @@ Accepted on 2026-11-25 by the repository owner (raidenyn), with no conditions. A
 - **2026-11-25, fourth round.** Skill names, Vendored tool layout and Hook handler interface: approved as written. The interface stays provisional until M1's live runs, as its contract says. Every decision is now agreed; the RFC itself is not yet accepted.
 
 - **2026-11-25, acceptance.** Commit checks in line-mcp: the owner confirmed that onboarding replaces husky and npm commitlint; folded into Three onboardings and removed from the open questions. Diagrams: the owner confirmed that the three Mermaid diagrams render. The owner accepted the RFC; status set to Accepted and the folder moved to the archive.
+
+## Amendments
+
+- <a id="amend-typescript-source"></a>**Amendment: TypeScript source, 2026-11-25. Status: approved.** Supersedes [Node only](#node-only).
+  - **New decision.** What a target repository receives does not change: plain `.mjs` with no npm dependencies, running on Node 22.0.0 or newer, with no build step in that repository. The source is TypeScript (`.mts` under `src/`) in this repository. A build here strips the types and writes the `.mjs` files into each skill's `assets/`, and the built files are committed. File names, the [Vendored tool layout](#vendored-tool-layout), the lock and every repository's hook config stay as they are.
+  - **Reason (owner, 2026-11-25).** A lot of Node code is about to be written, in parallel worktrees, and it needs better checking, tests and lints; the owner asked for TypeScript as the source language.
+  - **What it does not change.** The Goals line "The copied code has no npm dependencies and runs on Node 22 or newer" still holds. No contract changes. The only effect on onboarded repositories is that the next `update` brings files with a one-line "generated" header and reformatted code, under a patch version.
+  - **Approved by:** the repository owner (raidenyn), 2026-11-25, wording approved as written.
+  - **Implemented by:** OpenSpec change `add-typescript-build-system` (`openspec/changes/archive/2026-11-25-add-typescript-build-system/`).
 
 ## Appendix
 

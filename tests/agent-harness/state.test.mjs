@@ -8,10 +8,14 @@ import { pathToFileURL } from 'node:url';
 import { ASSETS, tempRepo } from './helpers.mjs';
 
 const S = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'state.mjs')).href);
-const { acquireGateLock, writeJsonAtomic, sessionStateDir, rootSessionStateDir, gitDir, toolStateDir, updateGateLock } = S;
+const { acquireGateLock, writeJsonAtomic, sessionStateDir, rootSessionStateDir, gitDir, toolStateDir, updateGateLock } =
+  S;
 
 const dir = () => mkdtempSync(join(tmpdir(), 'gate-'));
-const locks = (d) => readdirSync(d).filter((f) => /^gate\.lock\.\d+$/.test(f)).sort((a, b) => Number(a.split('.')[2]) - Number(b.split('.')[2]));
+const locks = (d) =>
+  readdirSync(d)
+    .filter((f) => /^gate\.lock\.\d+$/.test(f))
+    .sort((a, b) => Number(a.split('.')[2]) - Number(b.split('.')[2]));
 const put = (d, n, v) => writeFileSync(join(d, `gate.lock.${n}`), JSON.stringify(v));
 const deadPid = () => {
   const r = spawnSync(process.execPath, ['-e', '0']);
@@ -20,7 +24,13 @@ const deadPid = () => {
 
 test('sessionStateDir differs per agent', async () => {
   const r = await tempRepo();
-  const a = sessionStateDir({ repoRoot: r.dir, tool: 'verify-gate', host: 'claude', sessionId: 's/1', agentId: 'main' });
+  const a = sessionStateDir({
+    repoRoot: r.dir,
+    tool: 'verify-gate',
+    host: 'claude',
+    sessionId: 's/1',
+    agentId: 'main',
+  });
   const b = sessionStateDir({ repoRoot: r.dir, tool: 'verify-gate', host: 'claude', sessionId: 's/1', agentId: 'a1' });
   assert.notEqual(a, b);
   assert.ok(existsSync(a) && existsSync(b));
@@ -153,10 +163,13 @@ test('writeJsonAtomic leaves no partial file (reader never sees invalid JSON)', 
   writeJsonAtomic(f, { n: 0 });
   const big = 'z'.repeat(300000);
   const script = join(d, 'writer.mjs');
-  writeFileSync(script, `
+  writeFileSync(
+    script,
+    `
     import { writeJsonAtomic } from ${JSON.stringify(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'state.mjs')).href)};
     for (let i = 1; i <= 200; i++) writeJsonAtomic(${JSON.stringify(f)}, { n: i, big: ${JSON.stringify(big)} });
-  `);
+  `,
+  );
   const child = spawn(process.execPath, [script], { stdio: ['ignore', 'ignore', 'pipe'] });
   let stderr = '';
   child.stderr.on('data', (c) => (stderr += c));
@@ -187,7 +200,9 @@ test('two real processes: exactly one acquires the same lock dir', async () => {
   const go = join(d, 'go');
   const script = join(d, 'contender.mjs');
   const url = pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'state.mjs')).href;
-  writeFileSync(script, `
+  writeFileSync(
+    script,
+    `
     import { existsSync } from 'node:fs';
     import { acquireGateLock } from ${JSON.stringify(url)};
     const lockDir = ${JSON.stringify(join(d, 'locks'))};
@@ -195,12 +210,13 @@ test('two real processes: exactly one acquires the same lock dir', async () => {
     const h = acquireGateLock(lockDir);
     console.log(h ? h.path : 'null');
     if (h) { await new Promise((r) => setTimeout(r, 1000)); h.release(); }
-  `);
+  `,
+  );
   const run = () => {
     const c = spawn(process.execPath, [script], { stdio: ['ignore', 'pipe', 'pipe'] });
     const r = { out: '', err: '', ready: null };
     r.done = new Promise((res) => c.on('close', (code) => res({ code, out: r.out.trim(), err: r.err })));
-    r.first = new Promise((res) => c.stdout.once('data', () => res()));
+    r.first = new Promise((/** @type {(v?: unknown) => void} */ res) => c.stdout.once('data', () => res()));
     c.stdout.on('data', (x) => (r.out += x));
     c.stderr.on('data', (x) => (r.err += x));
     return r;

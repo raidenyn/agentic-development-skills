@@ -23,7 +23,9 @@ const SESSIONS = { [ROOT]: { id: ROOT }, [ROOT2]: { id: ROOT2 }, [CHILD]: { id: 
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const cleanups = [];
-after(async () => { for (const c of cleanups.reverse()) await c(); });
+after(async () => {
+  for (const c of cleanups.reverse()) await c();
+});
 
 async function repo() {
   const r = await tempRepo();
@@ -32,27 +34,47 @@ async function repo() {
 }
 
 // A plugin over in-process handler objects (the real createRuntime), or over installed handlers.
+/** @param {{ dir?: string, handlers?: object[], sessions?: Record<string, unknown>, synthetic?: Function, factory?: Function, capabilities?: object }} [opts] */
 async function plugin({ dir, handlers, sessions, synthetic, factory, capabilities } = {}) {
   dir ??= (await repo()).dir;
   const f = fakeOpencodeCtx(dir, { sessions: sessions ?? SESSIONS, synthetic });
-  const runtimeFactory = factory
-    ?? (handlers ? async ({ repoRoot, host }) => createRuntime({ repoRoot, host, handlers }) : undefined);
+  const runtimeFactory =
+    factory ?? (handlers ? async ({ repoRoot, host }) => createRuntime({ repoRoot, host, handlers }) : undefined);
   const p = createOpencodePlugin({ runtimeFactory, capabilities });
   assert.equal(p.id, 'agent-harness-hook-runtime');
   const dispose = await p.setup(f.ctx);
   let disposed = false;
-  const once = async () => { if (!disposed) { disposed = true; await dispose(); } };
+  const once = async () => {
+    if (!disposed) {
+      disposed = true;
+      await dispose();
+    }
+  };
   cleanups.push(once);
   return { ...f, dir, dispose: once };
 }
 
 const contextInput = (sessionID) => ({ sessionID, system: [{ type: 'text', text: 'base' }], messages: [] });
 const systemTexts = (input) => input.system.slice(1).map((s) => s.text);
-const turn = (emit, sid) => { emit('session.execution.started', sid); emit('session.execution.succeeded', sid); };
+const turn = (emit, sid) => {
+  emit('session.execution.started', sid);
+  emit('session.execution.succeeded', sid);
+};
 
+/** @param {string[]} events @param {(e: any, c: any, seen: any[]) => unknown} [fn] */
 function recorder(events, fn = () => null) {
   const seen = [];
-  return { seen, handler: { name: 'rec', events, handle: (e, c) => { seen.push({ e, agentId: c.agentId, sessionId: c.sessionId }); return fn(e, c, seen); } } };
+  return {
+    seen,
+    handler: {
+      name: 'rec',
+      events,
+      handle: (e, c) => {
+        seen.push({ e, agentId: c.agentId, sessionId: c.sessionId });
+        return fn(e, c, seen);
+      },
+    },
+  };
 }
 
 async function installHandler(dir, source, name = 'test-handler') {
@@ -73,16 +95,24 @@ test('eventDeadlines takes the largest declared budget, else 5000, plus 6000 for
   ];
   assert.deepEqual(eventDeadlines(hs, 'turn.end', 1000), { workDeadline: 10000, hostDeadline: 16000 });
   assert.deepEqual(eventDeadlines(hs, { type: 'tool.before' }, 0), { workDeadline: 5000, hostDeadline: 11000 });
-  assert.deepEqual(eventDeadlines(hs, 'tool.before', 0, { 'tool.before': 7000 }), { workDeadline: 7000, hostDeadline: 13000 });
+  assert.deepEqual(eventDeadlines(hs, 'tool.before', 0, { 'tool.before': 7000 }), {
+    workDeadline: 7000,
+    hostDeadline: 13000,
+  });
   assert.deepEqual(eventDeadlines([], 'prompt', 0), { workDeadline: 5000, hostDeadline: 11000 });
 });
 
 // ---- tool hooks ---------------------------------------------------------------------------------
 
 test('execute.before denies by throwing an Error with the text', async () => {
-  const { handler } = recorder(['tool.before'], (e) => (e.command?.includes('HARNESS_DENY') ? { deny: `no ${e.tool.kind}` } : null));
+  const { handler } = recorder(['tool.before'], (e) =>
+    e.command?.includes('HARNESS_DENY') ? { deny: `no ${e.tool.kind}` } : null,
+  );
   const p = await plugin({ handlers: [handler] });
-  await assert.rejects(p.hooks['execute.before'](fx('execute.before-shell', p.dir)), (err) => err instanceof Error && err.message === 'no shell');
+  await assert.rejects(
+    p.hooks['execute.before'](fx('execute.before-shell', p.dir)),
+    (err) => err instanceof Error && err.message === 'no shell',
+  );
   await p.hooks['execute.before'](fx('execute.before-read', p.dir));
 });
 
@@ -114,7 +144,14 @@ test('execute.after on an error status delivers nothing and reports it', async (
 });
 
 test('a handler that throws on execute.after with status error: the notice goes to system at the next context call', async () => {
-  const handler = { name: 'thrower', events: ['tool.after'], manual: 'Check by hand.', handle: () => { throw new Error('boom'); } };
+  const handler = {
+    name: 'thrower',
+    events: ['tool.after'],
+    manual: 'Check by hand.',
+    handle: () => {
+      throw new Error('boom');
+    },
+  };
   const p = await plugin({ handlers: [handler] });
   await p.hooks['execute.after'](fx('execute.after-read-error-child', p.dir));
   const other = contextInput(ROOT);
@@ -138,7 +175,14 @@ test('patch files come from metadata, edit and write files from input.filePath',
   assert.deepEqual(seen[1].e.files, ['openspec/changes/x/tasks.md']);
   await p.hooks['execute.before'](fx('execute.before-patch', p.dir));
   assert.deepEqual(seen[2].e.files, []);
-  const base = { codemode: false, sessionID: ROOT, agent: 'build', messageID: 'm', status: 'completed', result: { content: [] } };
+  const base = {
+    codemode: false,
+    sessionID: ROOT,
+    agent: 'build',
+    messageID: 'm',
+    status: 'completed',
+    result: { content: [] },
+  };
   await p.hooks['execute.after']({ ...base, tool: 'edit', id: 'c1', input: { filePath: join(p.dir, 'src', 'a.js') } });
   await p.hooks['execute.after']({ ...base, tool: 'write', id: 'c2', input: { filePath: '/elsewhere/b.js' } });
   assert.deepEqual(seen[3].e.files, ['src/a.js']);
@@ -156,7 +200,13 @@ test('a child session gets the child id as agentId', async () => {
   const p = await plugin({ handlers: [handler] });
   await p.hooks['execute.before'](fx('execute.before-shell-child', p.dir));
   await p.hooks['execute.before'](fx('execute.before-shell', p.dir));
-  assert.deepEqual(seen.map((s) => [s.sessionId, s.agentId]), [[ROOT2, CHILD], [ROOT, 'main']]);
+  assert.deepEqual(
+    seen.map((s) => [s.sessionId, s.agentId]),
+    [
+      [ROOT2, CHILD],
+      [ROOT, 'main'],
+    ],
+  );
 });
 
 test('a failed session lookup makes the session root', async () => {
@@ -175,10 +225,18 @@ test('a parent cycle makes the session root', async () => {
 });
 
 test('session.start is dispatched for the first event of a session, before the prompt', async () => {
-  const { handler, seen } = recorder(['session.start', 'prompt'], (e) => (e.type === 'session.start' ? { context: 'start rule' } : { context: 'prompt rule' }));
+  const { handler, seen } = recorder(['session.start', 'prompt'], (e) =>
+    e.type === 'session.start' ? { context: 'start rule' } : { context: 'prompt rule' },
+  );
   const p = await plugin({ handlers: [handler] });
   await p.hooks['session.prompt'](fx('session.prompt', p.dir));
-  assert.deepEqual(seen.map((s) => [s.e.type, s.e.afterCompact]), [['session.start', false], ['prompt', undefined]]);
+  assert.deepEqual(
+    seen.map((s) => [s.e.type, s.e.afterCompact]),
+    [
+      ['session.start', false],
+      ['prompt', undefined],
+    ],
+  );
   assert.equal(seen[1].e.prompt, fx('session.prompt', p.dir).prompt.text);
   const ctxIn = contextInput(ROOT);
   await p.hooks['session.context'](ctxIn);
@@ -188,7 +246,13 @@ test('session.start is dispatched for the first event of a session, before the p
 });
 
 test('a throwing handler never throws out of a hook', async () => {
-  const handler = { name: 'thrower', events: ['tool.before', 'tool.after', 'prompt', 'session.start', 'turn.end', 'compact'], handle: () => { throw new Error('boom'); } };
+  const handler = {
+    name: 'thrower',
+    events: ['tool.before', 'tool.after', 'prompt', 'session.start', 'turn.end', 'compact'],
+    handle: () => {
+      throw new Error('boom');
+    },
+  };
   const p = await plugin({ handlers: [handler] });
   await p.hooks['execute.before'](fx('execute.before-shell', p.dir));
   const after = fx('execute.after-shell-completed', p.dir);
@@ -204,7 +268,13 @@ test('a throwing handler never throws out of a hook', async () => {
 });
 
 test('a broken runtime never throws out of a hook', async () => {
-  const factory = async () => ({ handlers: [], problems: [], dispatch: async () => { throw new Error('broken'); } });
+  const factory = async () => ({
+    handlers: [],
+    problems: [],
+    dispatch: async () => {
+      throw new Error('broken');
+    },
+  });
   const p = await plugin({ factory });
   await p.hooks['execute.before'](fx('execute.before-shell', p.dir));
   await p.hooks['execute.after'](fx('execute.after-shell-completed', p.dir));
@@ -214,7 +284,10 @@ test('a broken runtime never throws out of a hook', async () => {
 
 // ---- compaction ---------------------------------------------------------------------------------
 
-const redeliver = () => recorder(['session.start', 'compact'], (e) => (e.type === 'session.start' && e.afterCompact ? { context: 'rule' } : null));
+const redeliver = () =>
+  recorder(['session.start', 'compact'], (e) =>
+    e.type === 'session.start' && e.afterCompact ? { context: 'rule' } : null,
+  );
 
 test('compaction.started dispatches compact', async () => {
   const { handler, seen } = redeliver();
@@ -228,7 +301,10 @@ test('compaction.ended then context pushes onto system once', async () => {
   const p = await plugin({ handlers: [handler] });
   await p.hooks['session.context'](contextInput(ROOT2));
   p.emit('session.compaction.ended', ROOT2);
-  const mark = join(sessionStateDir({ repoRoot: p.dir, tool: 'hook-runtime', host: 'opencode', sessionId: ROOT2, agentId: 'main' }), 'compacted');
+  const mark = join(
+    sessionStateDir({ repoRoot: p.dir, tool: 'hook-runtime', host: 'opencode', sessionId: ROOT2, agentId: 'main' }),
+    'compacted',
+  );
   await until(() => existsSync(mark), 2000, 'compaction mark');
   const first = contextInput(ROOT2);
   await p.hooks['session.context'](first);
@@ -237,14 +313,20 @@ test('compaction.ended then context pushes onto system once', async () => {
   const second = contextInput(ROOT2);
   await p.hooks['session.context'](second);
   assert.deepEqual(systemTexts(second), []);
-  assert.deepEqual(seen.filter((s) => s.e.type === 'session.start').map((s) => s.e.afterCompact), [false, true]);
+  assert.deepEqual(
+    seen.filter((s) => s.e.type === 'session.start').map((s) => s.e.afterCompact),
+    [false, true],
+  );
 });
 
 test('the compaction mark survives a new plugin instance', async () => {
   const r = await repo();
   const one = await plugin({ dir: r.dir, handlers: [redeliver().handler] });
   one.emit('session.compaction.ended', CHILD);
-  const mark = join(sessionStateDir({ repoRoot: r.dir, tool: 'hook-runtime', host: 'opencode', sessionId: ROOT2, agentId: CHILD }), 'compacted');
+  const mark = join(
+    sessionStateDir({ repoRoot: r.dir, tool: 'hook-runtime', host: 'opencode', sessionId: ROOT2, agentId: CHILD }),
+    'compacted',
+  );
   await until(() => existsSync(mark), 2000, 'compaction mark');
   await one.dispose();
   const two = await plugin({ dir: r.dir, handlers: [redeliver().handler] });
@@ -299,7 +381,10 @@ test('a fast child whose succeeded arrives before its launch result counts idle'
 
 test('a child resumed by a block counts running again (recorded child lifecycle)', async () => {
   const { handler, seen } = recorder(['turn.end', 'prompt']);
-  const lines = readFileSync(join(FIXTURES, 'child-lifecycle.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const lines = readFileSync(join(FIXTURES, 'child-lifecycle.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
   const sessions = {};
   for (const { v } of lines) if (v.id) sessions[v.id] = v.parent ? { id: v.id, parentID: v.parent } : { id: v.id };
   const p = await plugin({ handlers: [handler], sessions });
@@ -320,8 +405,18 @@ test('a child resumed by a block counts running again (recorded child lifecycle)
 
 test('turn end sends a synthetic resume for a block, and ack follows the synthetic', async () => {
   const order = [];
-  const handler = { name: 'b', events: ['turn.end'], handle: () => ({ block: 'fix it', ack: () => order.push('ack'), release: () => order.push('release') }) };
-  const p = await plugin({ handlers: [handler], synthetic: async () => { await sleep(50); order.push('synthetic'); } });
+  const handler = {
+    name: 'b',
+    events: ['turn.end'],
+    handle: () => ({ block: 'fix it', ack: () => order.push('ack'), release: () => order.push('release') }),
+  };
+  const p = await plugin({
+    handlers: [handler],
+    synthetic: async () => {
+      await sleep(50);
+      order.push('synthetic');
+    },
+  });
   turn(p.emit, ROOT);
   await until(() => order.includes('ack'), 2000, 'ack');
   assert.deepEqual(p.calls.synthetic, [{ sessionID: ROOT, text: 'fix it', resume: true }]);
@@ -338,20 +433,32 @@ test('a turn-end notice is a synthetic message that does not resume', async () =
 
 test('a rejected synthetic calls release, not ack', async () => {
   const order = [];
-  const handler = { name: 'b', events: ['turn.end'], handle: () => ({ block: 'fix it', ack: () => order.push('ack'), release: () => order.push('release') }) };
-  const p = await plugin({ handlers: [handler], synthetic: async () => { throw new Error('rejected'); } });
+  const handler = {
+    name: 'b',
+    events: ['turn.end'],
+    handle: () => ({ block: 'fix it', ack: () => order.push('ack'), release: () => order.push('release') }),
+  };
+  const p = await plugin({
+    handlers: [handler],
+    synthetic: async () => {
+      throw new Error('rejected');
+    },
+  });
   turn(p.emit, ROOT);
   await until(() => order.length === 1, 2000, 'release');
   assert.deepEqual(order, ['release']);
 });
 
 // Turn-end handler whose n-th call (1-based) sleeps slow[n] ms and answers make(n).
+/** @param {{ slow?: Record<number, number>, make?: (n: number) => any, budget?: number }} [opts] */
 function scripted({ slow = {}, make = () => null, budget } = {}) {
   const calls = [];
   const acks = [];
   const releases = [];
   const handler = {
-    name: 'gate', events: ['turn.end'], timeouts: budget ? { 'turn.end': budget } : undefined,
+    name: 'gate',
+    events: ['turn.end'],
+    timeouts: budget ? { 'turn.end': budget } : undefined,
     async handle(e, c) {
       const n = calls.length + 1;
       const rec = { n, start: Date.now(), room: c.deadline - Date.now(), background: e.background };
@@ -367,7 +474,7 @@ function scripted({ slow = {}, make = () => null, budget } = {}) {
   return { handler, calls, acks, releases };
 }
 
-test('turn ends B and C during A\'s run both run after A, in order', async () => {
+test("turn ends B and C during A's run both run after A, in order", async () => {
   const s = scripted({ slow: { 1: 300 } });
   const p = await plugin({ handlers: [s.handler] });
   turn(p.emit, ROOT);
@@ -375,8 +482,12 @@ test('turn ends B and C during A\'s run both run after A, in order', async () =>
   turn(p.emit, ROOT);
   turn(p.emit, ROOT);
   await until(() => s.calls.length === 3 && s.calls[2].end, 3000, 'three runs');
-  assert.deepEqual(s.calls.map((c) => c.n), [1, 2, 3]);
-  for (let i = 1; i < 3; i++) assert.ok(s.calls[i].start >= s.calls[i - 1].end, `run ${i + 1} started after run ${i} ended`);
+  assert.deepEqual(
+    s.calls.map((c) => c.n),
+    [1, 2, 3],
+  );
+  for (let i = 1; i < 3; i++)
+    assert.ok(s.calls[i].start >= s.calls[i - 1].end, `run ${i + 1} started after run ${i} ended`);
 });
 
 test('only the latest current result is delivered', async () => {
@@ -392,7 +503,7 @@ test('only the latest current result is delivered', async () => {
   assert.deepEqual(s.acks, [3]);
 });
 
-test('turn B fixes the tree while A\'s slow run fails: A\'s block is released, not delivered, and B passes', async () => {
+test("turn B fixes the tree while A's slow run fails: A's block is released, not delivered, and B passes", async () => {
   const s = scripted({ slow: { 1: 300 }, make: (n) => (n === 1 ? { block: 'A failed' } : null) });
   const p = await plugin({ handlers: [s.handler] });
   turn(p.emit, ROOT);
@@ -405,7 +516,7 @@ test('turn B fixes the tree while A\'s slow run fails: A\'s block is released, n
   assert.deepEqual(s.acks, []);
 });
 
-test('C starts but has not ended when B\'s run settles: nothing is delivered and B\'s release is called', async () => {
+test("C starts but has not ended when B's run settles: nothing is delivered and B's release is called", async () => {
   const s = scripted({ slow: { 1: 300 }, make: (n) => ({ block: `block ${n}` }) });
   const p = await plugin({ handlers: [s.handler] });
   turn(p.emit, ROOT);
@@ -440,8 +551,11 @@ test('a backlog of three turn ends behind a run that used almost all its budget:
 
 test('a worker handler that runs while(true){} during execute.before: the command still runs', async () => {
   const r = await repo();
-  await installHandler(r.dir, "export default { name: 'spin', events: ['tool.before'], timeouts: { 'tool.before': 300 },\n"
-    + '  handle() { while (true) {} } };\n');
+  await installHandler(
+    r.dir,
+    "export default { name: 'spin', events: ['tool.before'], timeouts: { 'tool.before': 300 },\n" +
+      '  handle() { while (true) {} } };\n',
+  );
   const p = await plugin({ dir: r.dir });
   const t0 = Date.now();
   await p.hooks['execute.before'](fx('execute.before-shell', r.dir));
@@ -455,9 +569,12 @@ test('a worker handler that runs while(true){} during execute.before: the comman
 
 test('two events for one handler run in separate workers, and a tool.before timeout does not end the turn-end run', async () => {
   const r = await repo();
-  await installHandler(r.dir, "export default { name: 'two', events: ['tool.before', 'turn.end'], timeouts: { 'tool.before': 200 },\n"
-    + "  async handle(e) { if (e.type === 'tool.before') { while (true) {} }\n"
-    + "    await new Promise((res) => setTimeout(res, 1000)); return { block: 'still here' }; } };\n");
+  await installHandler(
+    r.dir,
+    "export default { name: 'two', events: ['tool.before', 'turn.end'], timeouts: { 'tool.before': 200 },\n" +
+      "  async handle(e) { if (e.type === 'tool.before') { while (true) {} }\n" +
+      "    await new Promise((res) => setTimeout(res, 1000)); return { block: 'still here' }; } };\n",
+  );
   const p = await plugin({ dir: r.dir });
   await p.hooks['session.context'](contextInput(ROOT)); // session.start first
   turn(p.emit, ROOT);
@@ -476,17 +593,22 @@ function groupAlive(pgid) {
   }
 }
 
-test('dispose during an active run returns within 1 s, and the gate lock is released only after the run\'s process group is gone', async () => {
+test("dispose during an active run returns within 1 s, and the gate lock is released only after the run's process group is gone", async () => {
   const r = await repo();
   const gate = join(r.dir, '.git', 'test-gate');
-  await installHandler(r.dir, "export default { name: 'gated', events: ['turn.end'], timeouts: { 'turn.end': 30000 },\n"
-    + `  async handle(e, c) { const lock = await c.lock.acquire(${JSON.stringify(gate)});\n`
-    + "    await c.spawn(['sh', '-c', 'sleep 30; true']); await lock?.release(); return null; } };\n");
+  await installHandler(
+    r.dir,
+    "export default { name: 'gated', events: ['turn.end'], timeouts: { 'turn.end': 30000 },\n" +
+      `  async handle(e, c) { const lock = await c.lock.acquire(${JSON.stringify(gate)});\n` +
+      "    await c.spawn(['sh', '-c', 'sleep 30; true']); await lock?.release(); return null; } };\n",
+  );
   const p = await plugin({ dir: r.dir });
   turn(p.emit, ROOT);
   const lockBody = () => {
     if (!existsSync(gate)) return null;
-    const files = readdirSync(gate).filter((f) => /^gate\.lock\.\d+$/.test(f)).sort();
+    const files = readdirSync(gate)
+      .filter((f) => /^gate\.lock\.\d+$/.test(f))
+      .sort();
     return files.length ? JSON.parse(readFileSync(join(gate, files.at(-1)), 'utf8')) : null;
   };
   await until(() => lockBody()?.pgids?.length >= 1, 5000, 'the run holds the lock with a group');
@@ -509,7 +631,8 @@ test('dispose during an active run returns within 1 s, and the gate lock is rele
 
 test('dispose resolves within the bound', async () => {
   const factory = async () => ({
-    problems: [], dispatch: async () => ({ notices: [] }),
+    problems: [],
+    dispatch: async () => ({ notices: [] }),
     handlers: [{ name: 'stuck', events: [], close: () => new Promise(() => {}) }],
   });
   const p = await plugin({ factory });

@@ -21,7 +21,15 @@ const alive = (pid) => {
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'agent-harness-run-'));
 const far = () => Date.now() + 60_000;
-const base = (extra) => ({ spawn: directSpawn, cwd: tmpdir(), env: {}, timeoutMs: 30_000, deadline: far(), cleanupDeadline: far() + 6000, ...extra });
+const base = (extra) => ({
+  spawn: directSpawn,
+  cwd: tmpdir(),
+  env: {},
+  timeoutMs: 30_000,
+  deadline: far(),
+  cleanupDeadline: far() + 6000,
+  ...extra,
+});
 
 // A shell that starts `sleep 30` in the background, records its pid, then waits on it.
 const sleeper = (pidFile) => ['/bin/sh', '-c', `sleep 30 & echo $! > "${pidFile}"; wait`];
@@ -33,7 +41,14 @@ test('abort kills the group and resolves after exit', async () => {
     const ctl = new AbortController();
     const p = runCommand(base({ argv: sleeper(pidFile), signal: ctl.signal }));
     let pid;
-    await until(() => { try { pid = Number(readFileSync(pidFile, 'utf8')); return pid > 0; } catch { return false; } });
+    await until(() => {
+      try {
+        pid = Number(readFileSync(pidFile, 'utf8'));
+        return pid > 0;
+      } catch {
+        return false;
+      }
+    });
     ctl.abort();
     const r = await p;
     assert.equal(r.exitKind, 'aborted');
@@ -45,7 +60,9 @@ test('abort kills the group and resolves after exit', async () => {
 });
 
 test('passes env through and returns code 0', async () => {
-  const r = await runCommand(base({ argv: ['/bin/sh', '-c', 'echo "trigger=$VERIFY_TRIGGER"'], env: { VERIFY_TRIGGER: 'edit' } }));
+  const r = await runCommand(
+    base({ argv: ['/bin/sh', '-c', 'echo "trigger=$VERIFY_TRIGGER"'], env: { VERIFY_TRIGGER: 'edit' } }),
+  );
   assert.equal(r.code, 0);
   assert.equal(r.exitKind, 'exit');
   assert.equal(r.signal, null);
@@ -54,7 +71,9 @@ test('passes env through and returns code 0', async () => {
 });
 
 test('nonzero code and tail of the last 60 lines', async () => {
-  const r = await runCommand(base({ argv: ['/bin/sh', '-c', 'i=1; while [ $i -le 100 ]; do echo "line $i"; i=$((i+1)); done; exit 3'] }));
+  const r = await runCommand(
+    base({ argv: ['/bin/sh', '-c', 'i=1; while [ $i -le 100 ]; do echo "line $i"; i=$((i+1)); done; exit 3'] }),
+  );
   assert.equal(r.code, 3);
   assert.equal(r.exitKind, 'exit');
   const lines = r.tail.trimEnd().split('\n');
@@ -118,10 +137,12 @@ test('ENOENT gives spawnError naming the command', async () => {
 });
 
 test('output over maxBytes is truncated, not fatal', async () => {
-  const r = await runCommand(base({
-    argv: [process.execPath, '-e', 'for (let i = 1; i <= 50000; i++) console.log("row " + i + " " + "x".repeat(40))'],
-    maxBytes: 64 * 1024,
-  }));
+  const r = await runCommand(
+    base({
+      argv: [process.execPath, '-e', 'for (let i = 1; i <= 50000; i++) console.log("row " + i + " " + "x".repeat(40))'],
+      maxBytes: 64 * 1024,
+    }),
+  );
   assert.equal(r.code, 0);
   const lines = r.tail.trimEnd().split('\n');
   assert.equal(lines.length, 60);

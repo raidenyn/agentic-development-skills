@@ -1,3 +1,4 @@
+// Generated from src/verify-gate/lib/run.mts by scripts/build.mts. Do not edit.
 // Runs the verify command (design D5 "Every run", D3 "Cleanup"). The process is started through the
 // injected `spawn` (the supervisor's `context.spawn` in a worker), which puts it in its own process
 // group and sends the group SIGTERM when its `signal` aborts. runCommand owns the schedule after
@@ -38,7 +39,10 @@ async function settleGroup(pgid, killStart, cleanupDeadline) {
   }
   const room = Number.isFinite(cleanupDeadline) ? cleanupDeadline - killStart - CONFIRM_MS : KILL_AFTER_MS;
   const killAt = killStart + Math.max(0, Math.min(KILL_AFTER_MS, room));
-  const giveUpAt = Math.max(killAt + CONFIRM_MS, Number.isFinite(cleanupDeadline) ? cleanupDeadline : killAt + KILL_AFTER_MS);
+  const giveUpAt = Math.max(
+    killAt + CONFIRM_MS,
+    Number.isFinite(cleanupDeadline) ? cleanupDeadline : killAt + KILL_AFTER_MS,
+  );
   let killed = false;
   while (groupAlive(pgid) && Date.now() < giveUpAt) {
     if (!killed && Date.now() >= killAt) {
@@ -64,8 +68,16 @@ function tailOf(stdout, stderr, maxBytes, tailLines) {
 }
 
 export async function runCommand({
-  spawn, argv, cwd, env, timeoutMs, signal, deadline, cleanupDeadline,
-  maxBytes = 1048576, tailLines = 60,
+  spawn,
+  argv,
+  cwd,
+  env,
+  timeoutMs,
+  signal,
+  deadline,
+  cleanupDeadline,
+  maxBytes = 1048576,
+  tailLines = 60,
 }) {
   const ctl = new AbortController();
   let reason = null;
@@ -91,7 +103,10 @@ export async function runCommand({
   let spawnError = null;
   try {
     res = await spawn(argv, {
-      cwd, env, signal: ctl.signal, maxBytes,
+      cwd,
+      env,
+      signal: ctl.signal,
+      maxBytes,
       timeoutMs: Number.isFinite(limit) ? Math.max(1, Math.ceil(limit)) : undefined,
     });
   } catch (err) {

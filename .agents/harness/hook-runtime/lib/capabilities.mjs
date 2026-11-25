@@ -1,9 +1,22 @@
+// Generated from src/hook-runtime/lib/capabilities.mts by scripts/build.mts. Do not edit.
 // Capability report (design D3): the five capabilities per host adapter, the host version each was
 // live-verified on (spike.md), and which installed handler events need a capability a host lacks.
 
-export const CAPABILITIES = Object.freeze(['deny', 'contextAfterTool', 'blockTurnEnd', 'redeliverAfterCompact', 'perSubagentState']);
+export const CAPABILITIES = Object.freeze([
+  'deny',
+  'contextAfterTool',
+  'blockTurnEnd',
+  'redeliverAfterCompact',
+  'perSubagentState',
+]);
 
-const ALL = { deny: true, contextAfterTool: true, blockTurnEnd: true, redeliverAfterCompact: true, perSubagentState: true };
+const ALL = {
+  deny: true,
+  contextAfterTool: true,
+  blockTurnEnd: true,
+  redeliverAfterCompact: true,
+  perSubagentState: true,
+};
 
 export const HOST_CAPABILITIES = Object.freeze({
   'claude-code': Object.freeze({ ...ALL, verified: '2.1.332' }),
@@ -41,7 +54,8 @@ export function capabilityReport(handlers, table = HOST_CAPABILITIES) {
   const missing = [];
   for (const host of Object.keys(table)) {
     out.push(`${host} (verified on ${table[host].verified ?? 'unknown'})`);
-    for (const cap of CAPABILITIES) out.push(`  ${cap.padEnd(24)}${table[host][cap] === true ? 'supported' : 'missing'}`);
+    for (const cap of CAPABILITIES)
+      out.push(`  ${cap.padEnd(24)}${table[host][cap] === true ? 'supported' : 'missing'}`);
     for (const line of missingCapabilities(host, handlers, table)) missing.push(`  ${line}`);
   }
   if (missing.length) out.push('Handler events that need a missing capability:', ...missing);

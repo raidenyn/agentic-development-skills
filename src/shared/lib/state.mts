@@ -1,0 +1,173 @@
+import { execFileSync } from 'node:child_process';
+import {
+  linkSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
+
+export interface SessionKey {
+  repoRoot: string;
+  tool: string;
+  host: string;
+  sessionId?: unknown;
+  agentId?: unknown;
+}
+
+export interface GateLockHandle {
+  path: string;
+  release(): void;
+  update(fields: Record<string, unknown>): void;
+}
+
+const LOCK_RE = /^gate\.lock\.(\d+)$/;
+const PRUNE_AGE_MS = 3600 * 1000;
+let tmpCounter = 0;
+
+export function gitDir(repoRoot: string): string {
+  return execFileSync('git', ['rev-parse', '--absolute-git-dir'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
+}
+
+export function toolStateDir(repoRoot: string, tool: string): string {
+  return join(gitDir(repoRoot), 'agent-harness', tool);
+}
+
+const clean = (id: unknown): string => {
+  const s = String(id ?? '').replace(/[^A-Za-z0-9._-]/g, '_');
+  return s === '' || /^\.+$/.test(s) ? `_${s}` : s;
+};
+
+export function rootSessionStateDir({ repoRoot, tool, host, sessionId }: SessionKey): string {
+  const dir = join(toolStateDir(repoRoot, tool), 'sessions', `${clean(host)}-${clean(sessionId)}`);
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+export function sessionStateDir({ repoRoot, tool, host, sessionId, agentId }: SessionKey): string {
+  const dir = join(rootSessionStateDir({ repoRoot, tool, host, sessionId }), clean(agentId ?? 'main'));
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function tmpName(dir: string): string {
+  return join(dir, `.tmp-${process.pid}-${Date.now()}-${tmpCounter++}`);
+}
+
+export function writeJsonAtomic(path: string, value: unknown): void {
+  const tmp = tmpName(dirname(path));
+  writeFileSync(tmp, JSON.stringify(value));
+  try {
+    renameSync(tmp, path);
+  } catch (err) {
+    try {
+      unlinkSync(tmp);
+    } catch {}
+    throw err;
+  }
+}
+
+function listLocks(dir: string): number[] {
+  return (
+    readdirSync(dir)
+      .map((f) => LOCK_RE.exec(f))
+      .filter(Boolean) as RegExpExecArray[]
+  )
+    .map((m) => Number(m[1]))
+    .sort((a, b) => a - b);
+}
+
+function pidAlive(pid: unknown): boolean {
+  if (!Number.isInteger(pid) || (pid as number) <= 0) return false;
+  try {
+    process.kill(pid as number, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
+}
+
+function readLock(path: string): Record<string, unknown> | null {
+  try {
+    const v = JSON.parse(readFileSync(path, 'utf8'));
+    return v && typeof v === 'object' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function isFree(path: string): boolean {
+  let body: { released?: unknown; pid?: unknown } | null;
+  try {
+    body = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'ENOENT' || err instanceof SyntaxError;
+  }
+  if (!body || typeof body !== 'object') return true;
+  return body.released === true || !pidAlive(body.pid);
+}
+
+function prune(dir: string, own: number): void {
+  const now = Date.now();
+  const all = listLocks(dir);
+  const highest = all[all.length - 1];
+  for (const n of all) {
+    if (n >= own || n === highest) continue;
+    const file = join(dir, `gate.lock.${n}`);
+    try {
+      if (now - statSync(file).mtimeMs > PRUNE_AGE_MS) unlinkSync(file);
+    } catch {}
+  }
+}
+
+export function updateGateLock(handle: { path: string }, fields: Record<string, unknown>): void {
+  const current = readLock(handle.path) ?? {};
+  writeJsonAtomic(handle.path, { ...current, ...fields });
+}
+
+export function acquireGateLock(dir: string, { beforeLink }: { beforeLink?: () => void } = {}): GateLockHandle | null {
+  mkdirSync(dir, { recursive: true });
+  const all = listLocks(dir);
+  const h = all.length ? all[all.length - 1] : 0;
+  if (h > 0 && !isFree(join(dir, `gate.lock.${h}`))) return null;
+  if (beforeLink) beforeLink();
+
+  const mine = h + 1;
+  const path = join(dir, `gate.lock.${mine}`);
+  const tmp = tmpName(dir);
+  writeFileSync(tmp, JSON.stringify({ pid: process.pid, at: Date.now(), pgids: [] }));
+  try {
+    linkSync(tmp, path);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return null;
+    throw err;
+  } finally {
+    try {
+      unlinkSync(tmp);
+    } catch {}
+  }
+
+  const after = listLocks(dir);
+  if (after[after.length - 1] !== mine) {
+    updateGateLock({ path }, { released: true });
+    return null;
+  }
+  prune(dir, mine);
+  return {
+    path,
+    release() {
+      updateGateLock({ path }, { released: true });
+    },
+    update(fields: Record<string, unknown>) {
+      updateGateLock({ path }, fields);
+    },
+  };
+}

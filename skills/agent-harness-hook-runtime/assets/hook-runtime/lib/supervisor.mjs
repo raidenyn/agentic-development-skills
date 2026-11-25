@@ -1,3 +1,4 @@
+// Generated from src/hook-runtime/lib/supervisor.mts by scripts/build.mts. Do not edit.
 // The supervisor (design D3): each handler runs in worker_threads Workers (a pool of up to 4 per
 // handler). The supervisor owns everything that outlives JavaScript: it spawns processes in their own
 // groups and holds gate locks on a worker's behalf, and when a worker generation ends it kills that
@@ -64,8 +65,14 @@ function untilAborted(promise, signal, message) {
     const onAbort = () => reject(new Error(message));
     signal.addEventListener('abort', onAbort, { once: true });
     promise.then(
-      (v) => { signal.removeEventListener('abort', onAbort); resolve(v); },
-      (e) => { signal.removeEventListener('abort', onAbort); reject(e); },
+      (v) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(v);
+      },
+      (e) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(e);
+      },
     );
   });
 }
@@ -93,14 +100,21 @@ class WorkerRecord {
       stderr: true,
     });
     // Handler output must never reach the host's stdout (Claude Code reads hook JSON there).
-    const toStderr = (d) => { try { process.stderr.write(d); } catch {} };
+    const toStderr = (d) => {
+      try {
+        process.stderr.write(d);
+      } catch {}
+    };
     this.worker.stdout.on('data', toStderr);
     this.worker.stderr.on('data', toStderr);
     this.ready = new Promise((resolve, reject) => {
-      const t = setTimeout(() => {
-        reject(new Error(`still loading after ${budgetMs} ms`));
-        this.retire('load timeout');
-      }, Math.max(0, budgetMs));
+      const t = setTimeout(
+        () => {
+          reject(new Error(`still loading after ${budgetMs} ms`));
+          this.retire('load timeout');
+        },
+        Math.max(0, budgetMs),
+      );
       this.onLoad = (err, meta) => {
         clearTimeout(t);
         this.onLoad = null;
@@ -157,8 +171,8 @@ class WorkerRecord {
     const key = `${kind}:${requestId}`;
     const p = this.pending.get(key);
     this.pending.delete(key);
-    const owns = [...this.locks.values()].some((l) => l.requestId === requestId)
-      || [...this.groups.values()].includes(requestId);
+    const owns =
+      [...this.locks.values()].some((l) => l.requestId === requestId) || [...this.groups.values()].includes(requestId);
     if (!this.isActive(requestId) && owns) {
       this.cleanup({ requestId }).catch(() => {});
     }
@@ -169,8 +183,10 @@ class WorkerRecord {
     if (!msg || msg.workerGen !== this.gen || this.dead) return; // foreign or late
     const { type, requestId, callId } = msg;
     switch (type) {
-      case 'loaded': return this.onLoad?.(null, msg.meta);
-      case 'load-error': return this.onLoad?.(new Error(msg.error));
+      case 'loaded':
+        return this.onLoad?.(null, msg.meta);
+      case 'load-error':
+        return this.onLoad?.(new Error(msg.error));
       case 'result': {
         if (this.busy !== requestId) return;
         const p = this.finish('event', requestId);
@@ -200,15 +216,19 @@ class WorkerRecord {
         if (p && this.busy === requestId) p.ctx.trace?.(msg.outcome);
         return;
       }
-      case 'proof.request': return this.onProofRequest(msg);
-      case 'spawn': return this.onSpawn(msg);
+      case 'proof.request':
+        return this.onProofRequest(msg);
+      case 'spawn':
+        return this.onSpawn(msg);
       case 'spawn.kill': {
         const pgid = this.children.get(callId);
         if (pgid) killGroups([pgid]).catch(() => {});
         return;
       }
-      case 'lock.acquire': return this.onLockAcquire(msg);
-      case 'lock.release': return this.onLockRelease(msg);
+      case 'lock.acquire':
+        return this.onLockAcquire(msg);
+      case 'lock.release':
+        return this.onLockRelease(msg);
       default:
     }
   }
@@ -219,7 +239,10 @@ class WorkerRecord {
     if (!p) return reply(`proof ${name} was requested after its event ended`);
     Promise.resolve()
       .then(() => p.ctx.proof(name))
-      .then((v) => reply(v ?? null), (err) => reply(`proof ${name} failed: ${errText(err)}`));
+      .then(
+        (v) => reply(v ?? null),
+        (err) => reply(`proof ${name} failed: ${errText(err)}`),
+      );
   }
 
   onSpawn({ requestId, callId, argv, cwd, env, timeoutMs }) {
@@ -228,7 +251,10 @@ class WorkerRecord {
     let child;
     try {
       child = spawnChild(argv[0], argv.slice(1), {
-        cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+        cwd,
+        env: { ...process.env, ...env },
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
     } catch (err) {
       return reply({ error: errText(err) });
@@ -261,8 +287,12 @@ class WorkerRecord {
         }, timeoutMs);
       }
     }
-    child.stdout.on('data', (chunk) => this.post({ type: 'spawn.data', requestId, callId, stream: 'stdout', chunk: new Uint8Array(chunk) }));
-    child.stderr.on('data', (chunk) => this.post({ type: 'spawn.data', requestId, callId, stream: 'stderr', chunk: new Uint8Array(chunk) }));
+    child.stdout.on('data', (chunk) =>
+      this.post({ type: 'spawn.data', requestId, callId, stream: 'stdout', chunk: new Uint8Array(chunk) }),
+    );
+    child.stderr.on('data', (chunk) =>
+      this.post({ type: 'spawn.data', requestId, callId, stream: 'stderr', chunk: new Uint8Array(chunk) }),
+    );
     child.on('error', (err) => end({ error: errText(err), pgid }));
     child.on('close', (code, signal) => end({ code, signal, pgid, timedOut }));
   }
@@ -296,7 +326,10 @@ class WorkerRecord {
 
   blockCallback(kind, requestId) {
     if (this.dead) return Promise.resolve(false);
-    return this.request(kind, requestId, null, { type: kind }).then(() => true, () => false);
+    return this.request(kind, requestId, null, { type: kind }).then(
+      () => true,
+      () => false,
+    );
   }
 
   // Kill the groups this generation started (optionally one request's), then release its locks.
@@ -376,18 +409,24 @@ class HandlerPool {
   replenish() {
     if (this.closed || this.workers.length) return;
     const rec = this.spawnWorker();
-    rec.ready.then(() => rec.refresh(), () => {});
+    rec.ready.then(
+      () => rec.refresh(),
+      () => {},
+    );
   }
 
   async acquire(ctx) {
     for (;;) {
       if (this.closed) throw new Error('the handler was closed');
       if (ctx.signal?.aborted) throw new Error('no worker was free before the deadline');
-      const free = this.workers.find((w) => !w.dead && w.busy === null && w.loaded)
-        ?? this.workers.find((w) => !w.dead && w.busy === null);
-      const rec = free ?? (this.workers.length < POOL_SIZE
-        ? this.spawnWorker(Math.min(this.loadBudgetMs, (ctx.deadline ?? Infinity) - Date.now()))
-        : null);
+      const free =
+        this.workers.find((w) => !w.dead && w.busy === null && w.loaded) ??
+        this.workers.find((w) => !w.dead && w.busy === null);
+      const rec =
+        free ??
+        (this.workers.length < POOL_SIZE
+          ? this.spawnWorker(Math.min(this.loadBudgetMs, (ctx.deadline ?? Infinity) - Date.now()))
+          : null);
       if (rec) {
         rec.busy = 'reserved';
         rec.refresh();
@@ -400,7 +439,11 @@ class HandlerPool {
         }
         return rec;
       }
-      await untilAborted(new Promise((resolve) => this.waiters.push(resolve)), ctx.signal, 'no worker was free before the deadline');
+      await untilAborted(
+        new Promise((resolve) => this.waiters.push(resolve)),
+        ctx.signal,
+        'no worker was free before the deadline',
+      );
     }
   }
 
@@ -430,8 +473,8 @@ class HandlerPool {
   }
 
   async runProof(name, ctx) {
-    let rec = this.workers.find((w) => !w.dead && w.loaded && w.busy === null)
-      ?? this.workers.find((w) => !w.dead && w.loaded);
+    let rec =
+      this.workers.find((w) => !w.dead && w.loaded && w.busy === null) ?? this.workers.find((w) => !w.dead && w.loaded);
     if (!rec) {
       rec = this.workers.length < POOL_SIZE ? this.spawnWorker() : this.workers[0];
       await untilAborted(rec.ready, ctx.signal, 'timed out');

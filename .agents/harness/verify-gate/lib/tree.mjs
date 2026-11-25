@@ -1,3 +1,4 @@
+// Generated from src/verify-gate/lib/tree.mts by scripts/build.mts. Do not edit.
 // Working-tree content key and changed-file list (design D4, D5 "Every run"). Every git command
 // goes through the injected `spawn` (the supervisor's `context.spawn` in a worker). Call these only
 // while holding the gate lock: git refuses a second writer of the private index, and a leftover
@@ -13,7 +14,8 @@ import { join, resolve } from 'node:path';
 const CHUNK = 500;
 // Keep git's own refresh strict whatever the repo sets, so the tree id cannot miss a same-size edit.
 const STRICT = ['-c', 'core.trustctime=true', '-c', 'core.checkStat=default'];
-const CORRUPT = /index file corrupt|bad index file|bad signature|index file smaller than expected|unknown index entry format|index uses .* extension/i;
+const CORRUPT =
+  /index file corrupt|bad index file|bad signature|index file smaller than expected|unknown index entry format|index uses .* extension/i;
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const splitZ = (s) => s.split('\0').filter(Boolean);

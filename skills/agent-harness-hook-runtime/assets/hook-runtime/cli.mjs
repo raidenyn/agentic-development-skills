@@ -1,3 +1,4 @@
+// Generated from src/hook-runtime/cli.mts by scripts/build.mts. Do not edit.
 // hook-runtime CLI (design D6 install/update/check, D3 capability report).
 //   node <skill>/assets/hook-runtime/cli.mjs install [--repo DIR]
 //   node <skill>/assets/hook-runtime/cli.mjs update [--repo DIR]
@@ -11,7 +12,12 @@ import { capabilityReport } from './lib/capabilities.mjs';
 import { CLAUDE_EVENTS } from './lib/claude-adapter.mjs';
 import { loadSection } from './lib/config.mjs';
 import {
-  checkTool, DEFAULT_CLAUDE_COMMAND, DEFAULT_OPENCODE_PLUGIN, ensureSection, installHookRuntime, requireNode22,
+  checkTool,
+  DEFAULT_CLAUDE_COMMAND,
+  DEFAULT_OPENCODE_PLUGIN,
+  ensureSection,
+  installHookRuntime,
+  requireNode22,
 } from './lib/install.mjs';
 import { EVENTS, loadHandlers } from './lib/runtime.mjs';
 
@@ -35,7 +41,8 @@ function git(args, cwd) {
 // otherwise the git checkout around the working directory.
 function defaultRepo() {
   const harness = resolve(HERE, '..');
-  if (basename(harness) === 'harness' && basename(resolve(harness, '..')) === '.agents') return resolve(harness, '..', '..');
+  if (basename(harness) === 'harness' && basename(resolve(harness, '..')) === '.agents')
+    return resolve(harness, '..', '..');
   return git(['rev-parse', '--show-toplevel'], process.cwd()) || process.cwd();
 }
 
@@ -49,8 +56,10 @@ export function sectionErrors(repoRoot) {
       errors.push(`"${TOOL}.deadlines" must be an object of event: milliseconds`);
     } else {
       for (const [event, ms] of Object.entries(d)) {
-        if (!EVENTS.includes(event)) errors.push(`unknown event "${event}" in "${TOOL}.deadlines" (allowed: ${EVENTS.join(', ')})`);
-        else if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) errors.push(`"${TOOL}.deadlines.${event}" must be a positive number of milliseconds`);
+        if (!EVENTS.includes(event))
+          errors.push(`unknown event "${event}" in "${TOOL}.deadlines" (allowed: ${EVENTS.join(', ')})`);
+        else if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0)
+          errors.push(`"${TOOL}.deadlines.${event}" must be a positive number of milliseconds`);
       }
     }
   }
@@ -60,7 +69,8 @@ export function sectionErrors(repoRoot) {
 function install(repoRoot, mode, io) {
   const node = requireNode22();
   if (node) return io.fail([node]);
-  if (git(['rev-parse', '--is-inside-work-tree'], repoRoot) !== 'true') return io.fail([`${repoRoot} is not a git work tree`]);
+  if (git(['rev-parse', '--is-inside-work-tree'], repoRoot) !== 'true')
+    return io.fail([`${repoRoot} is not a git work tree`]);
   let errors;
   try {
     errors = sectionErrors(repoRoot);
@@ -70,8 +80,12 @@ function install(repoRoot, mode, io) {
   if (errors.length) return io.fail(errors.map((e) => `.agents/harness.json: ${e}`));
   // Every refusal is decided before anything is written; the copies and the lock come last.
   const res = installHookRuntime({
-    sourceDir: HERE, repoRoot, mode, events: CLAUDE_EVENTS,
-    command: DEFAULT_CLAUDE_COMMAND, pluginPath: DEFAULT_OPENCODE_PLUGIN,
+    sourceDir: HERE,
+    repoRoot,
+    mode,
+    events: CLAUDE_EVENTS,
+    command: DEFAULT_CLAUDE_COMMAND,
+    pluginPath: DEFAULT_OPENCODE_PLUGIN,
   });
   if (res.code !== 0) return io.fail(res.messages);
   const messages = [...res.messages];
@@ -110,8 +124,14 @@ async function capabilities(repoRoot, io) {
 export async function main(argv, { out = (s) => process.stdout.write(s), err = (s) => process.stderr.write(s) } = {}) {
   const io = {
     out,
-    ok: (lines) => { for (const l of lines) out(`${l}\n`); return 0; },
-    fail: (lines) => { for (const l of lines) err(`${l}\n`); return 1; },
+    ok: (lines) => {
+      for (const l of lines) out(`${l}\n`);
+      return 0;
+    },
+    fail: (lines) => {
+      for (const l of lines) err(`${l}\n`);
+      return 1;
+    },
   };
   const [command, ...rest] = argv;
   let repo;
@@ -144,7 +164,12 @@ const isScript = (() => {
 
 if (isScript) {
   main(process.argv.slice(2)).then(
-    (code) => { process.exitCode = code; },
-    (e) => { process.stderr.write(`${TOOL}: ${errText(e)}\n`); process.exitCode = 1; },
+    (code) => {
+      process.exitCode = code;
+    },
+    (e) => {
+      process.stderr.write(`${TOOL}: ${errText(e)}\n`);
+      process.exitCode = 1;
+    },
   );
 }

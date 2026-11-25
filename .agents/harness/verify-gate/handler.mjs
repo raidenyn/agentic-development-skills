@@ -1,3 +1,4 @@
+// Generated from src/verify-gate/handler.mts by scripts/build.mts. Do not edit.
 // The verify gate handler (design D5): one configured command on an edit, on a ticked task and at
 // every turn end, with the no-change shortcut, bounded blocks and the verify-pass proof. It runs in a
 // hook-runtime worker; `context.spawn` and `context.lock` go through the supervisor. In process
@@ -7,8 +8,23 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readHarnessConfig } from './lib/config.mjs';
 import {
-  chargeBlock, confirmCharge, CONFIG_KEYS, CONTENDED, DEFAULTS, failureKey, localLock, localSpawn, MANUAL,
-  normalizeConfig, readJson, refundCharge, REQUIRED_KEYS, resolveConfig, runGate, verifyPass, waitLock,
+  chargeBlock,
+  confirmCharge,
+  CONFIG_KEYS,
+  CONTENDED,
+  DEFAULTS,
+  failureKey,
+  localLock,
+  localSpawn,
+  MANUAL,
+  normalizeConfig,
+  readJson,
+  refundCharge,
+  REQUIRED_KEYS,
+  resolveConfig,
+  runGate,
+  verifyPass,
+  waitLock,
 } from './lib/gate.mjs';
 import { writeJsonAtomic } from './lib/state.mjs';
 import { detectTicks, itemCounts, matchesGlob, suppressSeen } from './lib/triggers.mjs';
@@ -27,12 +43,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // The state layout (hook-runtime lib/state.mjs): <tool>/sessions/<host>-<session>/<agent>.
 const toolDirOf = (ctx) => resolve(ctx.stateDir, '..', '..', '..');
 const sessionDirOf = (ctx) => dirname(ctx.stateDir);
-const callFile = (ctx, callId) => join(ctx.stateDir, 'calls', `${String(callId).replace(/[^A-Za-z0-9._-]/g, '_')}.json`);
+const callFile = (ctx, callId) =>
+  join(ctx.stateDir, 'calls', `${String(callId).replace(/[^A-Za-z0-9._-]/g, '_')}.json`);
 const services = (ctx) => ({ spawn: ctx.spawn ?? localSpawn, lock: ctx.lock ?? localLock });
 
 // timeoutSeconds from the installed copy's repo (<repo>/.agents/harness/verify-gate), else 900.
 function installedTimeoutSeconds() {
-  if (basename(dirname(HERE)) !== 'harness' || basename(resolve(HERE, '..', '..')) !== '.agents') return DEFAULTS.timeoutSeconds;
+  if (basename(dirname(HERE)) !== 'harness' || basename(resolve(HERE, '..', '..')) !== '.agents')
+    return DEFAULTS.timeoutSeconds;
   try {
     return normalizeConfig(readHarnessConfig(resolve(HERE, '..', '..', '..'))['verify-gate']).timeoutSeconds;
   } catch {
@@ -44,23 +62,36 @@ function installedTimeoutSeconds() {
 
 function listTaskFiles(repoRoot, patterns) {
   const out = new Set();
-  const entries = (dir) => { try { return readdirSync(dir, { withFileTypes: true }); } catch { return []; } };
+  const entries = (dir) => {
+    try {
+      return readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+  };
   for (const pattern of patterns) {
-    const segs = String(pattern).replace(/\\/g, '/').split('/').filter((s) => s && s !== '.');
+    const segs = String(pattern)
+      .replace(/\\/g, '/')
+      .split('/')
+      .filter((s) => s && s !== '.');
     const walk = (dir, i, rel) => {
       if (i === segs.length) {
-        try { if (statSync(dir).isFile()) out.add(rel); } catch {}
+        try {
+          if (statSync(dir).isFile()) out.add(rel);
+        } catch {}
         return;
       }
       const seg = segs[i];
       const sub = (name) => (rel ? `${rel}/${name}` : name);
       if (seg === '**') {
         walk(dir, i + 1, rel);
-        for (const e of entries(dir)) if (e.isDirectory() && !SKIP_DIRS.has(e.name)) walk(join(dir, e.name), i, sub(e.name));
+        for (const e of entries(dir))
+          if (e.isDirectory() && !SKIP_DIRS.has(e.name)) walk(join(dir, e.name), i, sub(e.name));
       } else if (!/[*?]/.test(seg)) {
         walk(join(dir, seg), i + 1, sub(seg));
       } else {
-        for (const e of entries(dir)) if (!SKIP_DIRS.has(e.name) && matchesGlob(seg, e.name)) walk(join(dir, e.name), i + 1, sub(e.name));
+        for (const e of entries(dir))
+          if (!SKIP_DIRS.has(e.name) && matchesGlob(seg, e.name)) walk(join(dir, e.name), i + 1, sub(e.name));
       }
     };
     walk(repoRoot, 0, '');
@@ -77,17 +108,38 @@ function countsOf(repoRoot, rel) {
 }
 
 function pruneCalls(dir, now = Date.now()) {
-  for (const name of (() => { try { return readdirSync(dir); } catch { return []; } })()) {
+  for (const name of (() => {
+    try {
+      return readdirSync(dir);
+    } catch {
+      return [];
+    }
+  })()) {
     const f = join(dir, name);
-    try { if (now - statSync(f).mtimeMs > CALL_MAX_AGE_MS) rmSync(f, { force: true }); } catch {}
+    try {
+      if (now - statSync(f).mtimeMs > CALL_MAX_AGE_MS) rmSync(f, { force: true });
+    } catch {}
   }
 }
 
 // Every agent's calls folder in every session of this worktree.
 function pruneAllCalls(toolDir) {
   const sessions = join(toolDir, 'sessions');
-  for (const s of (() => { try { return readdirSync(sessions); } catch { return []; } })()) {
-    for (const a of (() => { try { return readdirSync(join(sessions, s)); } catch { return []; } })()) pruneCalls(join(sessions, s, a, 'calls'));
+  for (const s of (() => {
+    try {
+      return readdirSync(sessions);
+    } catch {
+      return [];
+    }
+  })()) {
+    for (const a of (() => {
+      try {
+        return readdirSync(join(sessions, s));
+      } catch {
+        return [];
+      }
+    })())
+      pruneCalls(join(sessions, s, a, 'calls'));
   }
 }
 
@@ -121,7 +173,9 @@ async function ensureSnapshot(ctx) {
     if (existsSync(file)) return;
     const snap = emptySnapshot();
     for (const rel of listTaskFiles(ctx.repoRoot, normalizeConfig(ctx.config).taskFiles)) {
-      snap.files[rel] = Object.fromEntries(Object.entries(countsOf(ctx.repoRoot, rel)).map(([k, c]) => [k, { ...c, ticks: [] }]));
+      snap.files[rel] = Object.fromEntries(
+        Object.entries(countsOf(ctx.repoRoot, rel)).map(([k, c]) => [k, { ...c, ticks: [] }]),
+      );
     }
     writeJsonAtomic(file, snap);
   } finally {
@@ -162,7 +216,11 @@ async function detect(event, ctx, until) {
       }
       for (const [key, rec] of Object.entries(entry)) {
         const c = afterCounts[rel][key] ?? { ticked: 0, unticked: 0 };
-        entry[key] = { ticked: c.ticked, unticked: c.unticked, ticks: (rec.ticks ?? []).filter((at) => now - at < TICK_KEEP_MS) };
+        entry[key] = {
+          ticked: c.ticked,
+          unticked: c.unticked,
+          ticks: (rec.ticks ?? []).filter((at) => now - at < TICK_KEEP_MS),
+        };
       }
       snap.files[rel] = entry;
     }
@@ -179,8 +237,15 @@ async function detect(event, ctx, until) {
 function gateOptions(ctx, deps) {
   const { spawn, lock } = services(ctx);
   return {
-    repoRoot: ctx.repoRoot, config: ctx.config, stateDir: toolDirOf(ctx), signal: ctx.signal,
-    deadline: ctx.deadline - RUN_MARGIN_MS, cleanupDeadline: ctx.deadline + CLEANUP_MS, spawn, lock, ...deps,
+    repoRoot: ctx.repoRoot,
+    config: ctx.config,
+    stateDir: toolDirOf(ctx),
+    signal: ctx.signal,
+    deadline: ctx.deadline - RUN_MARGIN_MS,
+    cleanupDeadline: ctx.deadline + CLEANUP_MS,
+    spawn,
+    lock,
+    ...deps,
   };
 }
 
@@ -202,7 +267,9 @@ async function afterTool(event, ctx, deps, trace) {
     if (r.status === 'contended') return { context: CONTENDED };
     if (r.status !== 'failed') return null;
     const items = found.ticks.map((t) => `"${t.key}" in ${t.path}`).join(', ');
-    return { context: `verify: a task was ticked while verification fails. Ticked: ${items}. ${cmd} failed: ${body(r)}` };
+    return {
+      context: `verify: a task was ticked while verification fails. Ticked: ${items}. ${cmd} failed: ${body(r)}`,
+    };
   }
   if (kind !== 'edit') return null;
   const texts = [];
@@ -231,21 +298,29 @@ async function turnEnd(event, ctx, deps, trace) {
   // A root turn end with running subagents is a notice and is never charged.
   const charging = !(root && background > 0);
   const onFailure = charging
-    ? async (failure) => ({ charge: await chargeBlock({ lock, sessionDir, key: failureKey(failure, ctx.repoRoot), max }) })
+    ? async (failure) => ({
+        charge: await chargeBlock({ lock, sessionDir, key: failureKey(failure, ctx.repoRoot), max }),
+      })
     : undefined;
   const r = await runGate({ ...gateOptions(ctx, deps), trigger: 'turn-end', onFailure });
   trace(r.status === 'skipped' ? 'no-change' : r.status === 'contended' ? 'contended' : 'ran');
   if (r.status === 'contended') return { context: CONTENDED };
   if (r.status !== 'failed' || r.aborted) return null;
   if (!charging) {
-    return { context: `verify: ${cmd} fails while ${background} subagent(s) still run; verification runs again at the next turn end. ${body(r)}` };
+    return {
+      context: `verify: ${cmd} fails while ${background} subagent(s) still run; verification runs again at the next turn end. ${body(r)}`,
+    };
   }
   const c = r.charge;
   if (c?.busy) {
-    return { context: `verify: ${cmd} failed, and the block counter was busy, so this turn end is not blocked. ${MANUAL}\n\n${cmd} failed: ${body(r)}` };
+    return {
+      context: `verify: ${cmd} failed, and the block counter was busy, so this turn end is not blocked. ${MANUAL}\n\n${cmd} failed: ${body(r)}`,
+    };
   }
   if (!c?.charged) {
-    return { context: `verify: still failing after ${c?.limit ?? max} blocks; continuing. ${MANUAL}\n\n${cmd} failed: ${body(r)}` };
+    return {
+      context: `verify: still failing after ${c?.limit ?? max} blocks; continuing. ${MANUAL}\n\n${cmd} failed: ${body(r)}`,
+    };
   }
   return {
     block: `verify: ${cmd} failed (attempt ${c.n} of ${max}). Fix the failure before ending the turn: ${body(r)}`,
@@ -263,10 +338,16 @@ export function createVerifyHandler({ runCommand, contentKey, changedFiles, time
     timeouts: { 'tool.after': budget, 'turn.end': budget },
     manual: MANUAL,
     proofs: {
-      'verify-pass': (ctx) => verifyPass({
-        repoRoot: ctx.repoRoot, config: ctx.config, stateDir: toolDirOf(ctx), signal: ctx.signal, deadline: ctx.deadline,
-        ...services(ctx), ...(deps.contentKey ? { contentKey: deps.contentKey } : {}),
-      }),
+      'verify-pass': (ctx) =>
+        verifyPass({
+          repoRoot: ctx.repoRoot,
+          config: ctx.config,
+          stateDir: toolDirOf(ctx),
+          signal: ctx.signal,
+          deadline: ctx.deadline,
+          ...services(ctx),
+          ...(deps.contentKey ? { contentKey: deps.contentKey } : {}),
+        }),
     },
     async handle(event, ctx) {
       const trace = (o) => ctx.trace?.(o);
@@ -276,7 +357,8 @@ export function createVerifyHandler({ runCommand, contentKey, changedFiles, time
           await ensureSnapshot(ctx);
           return null;
         case 'tool.before':
-          if ((event.tool?.kind === 'shell' || event.tool?.kind === 'edit') && event.tool.callId != null) writeBeforeImage(event, ctx);
+          if ((event.tool?.kind === 'shell' || event.tool?.kind === 'edit') && event.tool.callId != null)
+            writeBeforeImage(event, ctx);
           return null;
         case 'tool.after':
           return afterTool(event, ctx, deps, trace);
