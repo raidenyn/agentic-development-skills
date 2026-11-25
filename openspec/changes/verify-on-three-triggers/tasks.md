@@ -49,10 +49,10 @@
 
 ## 5. Skill text, catalog and CI
 
-- [ ] 5.1 `skills/agent-harness-hook-runtime/SKILL.md`: when to use it, the interface for handler authors (with the additive fields), the capability table, the synchronous-handler limit, Onboard, Update, the rollback and the untrusted-checkout warning; README row and marketplace entry
-- [ ] 5.2 `skills/agent-harness-verify-gate/SKILL.md`: the one command and its `VERIFY_*` handover, the triggers (every turn end, the background notice), making the command fast (related-test support first), config keys, limits (A→B→A during a run, a conservative stat digest, ignore build output), Onboard, Update and the untrusted-checkout warning; README row and marketplace entry
-- [ ] 5.3 Python test in `scripts/test_skills.py`: build Pages from the real repo and assert both skills and every file under their `assets/` are in `opencode/index.json` and in the output
-- [ ] 5.4 `.github/workflows/validate.yml`: a Node 22.0.0 job running `node --test "tests/agent-harness/*.test.mjs"`. (version-bump enforcement and its base fetch are deferred to a follow-up task)
+- [x] 5.1 `skills/agent-harness-hook-runtime/SKILL.md`: when to use it, the interface for handler authors (with the additive fields), the capability table, the synchronous-handler limit, Onboard, Update, the rollback and the untrusted-checkout warning; README row and marketplace entry
+- [x] 5.2 `skills/agent-harness-verify-gate/SKILL.md`: the one command and its `VERIFY_*` handover, the triggers (every turn end, the background notice), making the command fast (related-test support first), config keys, limits (A→B→A during a run, a conservative stat digest, ignore build output), Onboard, Update and the untrusted-checkout warning; README row and marketplace entry
+- [x] 5.3 Python test in `scripts/test_skills.py`: build Pages from the real repo and assert both skills and every file under their `assets/` are in `opencode/index.json` and in the output
+- [x] 5.4 `.github/workflows/validate.yml`: a Node 22.0.0 job running `node --test "tests/agent-harness/*.test.mjs"`. (version-bump enforcement and its base fetch are deferred to a follow-up task)
 
 ## 6. Onboard this repository
 
