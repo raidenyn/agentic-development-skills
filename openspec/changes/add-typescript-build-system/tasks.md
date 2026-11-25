@@ -22,13 +22,13 @@
 
 ## 4. Convert the shipped harness code
 
-- [ ] 4.1 `git mv` every `.mjs` under `skills/agent-harness-hook-runtime/assets/hook-runtime/` and `skills/agent-harness-verify-gate/assets/verify-gate/` to `.mts` under `src/<tool>/`, move `tool.json` with them, and move `lib/config`, `lib/state`, `lib/install` once into `src/shared/lib/`, deleting the second copy. Update import specifiers to `.mts`, then, in the same step, bump both tools' patch version and run `pnpm run harness:update`, so the live verify gate passes; confirm every harness test passes before any type is added
-- [ ] 4.2 Add the contract types: `src/shared/lib/handler.types.mts` (handler, event, result, context, proofs, as in the RFC's Hook handler interface), and types for the lock file and the harness config in `src/shared/lib/`
-- [ ] 4.3 Annotate `src/shared/` and `src/hook-runtime/` until `tsc -p tsconfig.json` reports no error for them. No behavior change; `any` only for raw host payloads, narrowed before use
-- [ ] 4.4 Annotate `src/verify-gate/` the same way
-- [ ] 4.5 Run the build. Review the diff of `skills/*/assets/`: only the header, formatting and type-free equivalents may differ. Delete `tests/agent-harness/shared-lib.test.mjs`
-- [ ] 4.6 Run `pnpm run harness:update` after the last source change, so `.agents/harness/` and `lock.json` match the final build
-- [ ] 4.7 Run the harness tests on the Node from `.nvmrc` and on Node 22.0.0; both must pass with no test edited except for lint findings
+- [x] 4.1 `git mv` every `.mjs` under `skills/agent-harness-hook-runtime/assets/hook-runtime/` and `skills/agent-harness-verify-gate/assets/verify-gate/` to `.mts` under `src/<tool>/`, move `tool.json` with them, and move `lib/config`, `lib/state`, `lib/install` once into `src/shared/lib/`, deleting the second copy. Update import specifiers to `.mts`, then, in the same step, bump both tools' patch version and run `pnpm run harness:update`, so the live verify gate passes; confirm every harness test passes before any type is added
+- [x] 4.2 Add the contract types: `src/shared/lib/handler.types.mts` (handler, event, result, context, proofs, as in the RFC's Hook handler interface), and types for the lock file and the harness config in `src/shared/lib/`
+- [x] 4.3 Annotate `src/shared/` and `src/hook-runtime/` until `tsc -p tsconfig.json` reports no error for them. No behavior change; `any` only for raw host payloads, narrowed before use
+- [x] 4.4 Annotate `src/verify-gate/` the same way
+- [x] 4.5 Run the build. Review the diff of `skills/*/assets/`: only the header, formatting and type-free equivalents may differ. Delete `tests/agent-harness/shared-lib.test.mjs`
+- [x] 4.6 Run `pnpm run harness:update` after the last source change, so `.agents/harness/` and `lock.json` match the final build
+- [x] 4.7 Run the harness tests on the Node from `.nvmrc` and on Node 22.0.0; both must pass with no test edited except for lint findings
 
 ## 5. Convert the repo scripts
 

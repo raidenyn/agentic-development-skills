@@ -11,13 +11,20 @@ import { readHarnessConfig } from './lib/config.mts';
 import { configErrors, normalizeConfig, runGate } from './lib/gate.mts';
 import { checkTool, ensureSection, installTool, readLock, requireNode22 } from './lib/install.mts';
 import { toolStateDir } from './lib/state.mts';
+import type { InstallMode } from './lib/install.mts';
+
+interface Io {
+  out: (s: string) => unknown;
+  ok: (lines: string[]) => number;
+  fail: (lines: string[]) => number;
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TOOL = 'verify-gate';
 const USAGE = 'usage: node cli.mjs install|update|check|run [--repo DIR]\n';
-const errText = (err) => (err instanceof Error ? err.message : String(err));
+const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-function git(args, cwd) {
+function git(args: string[], cwd: string): string | null {
   try {
     return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
@@ -25,20 +32,20 @@ function git(args, cwd) {
   }
 }
 
-function defaultRepo() {
+function defaultRepo(): string {
   const harness = resolve(HERE, '..');
   if (basename(harness) === 'harness' && basename(resolve(harness, '..')) === '.agents') return resolve(harness, '..', '..');
   return git(['rev-parse', '--show-toplevel'], process.cwd()) || process.cwd();
 }
 
-const hasRuntime = (repoRoot) => Boolean(readLock(repoRoot).tools['hook-runtime']);
+const hasRuntime = (repoRoot: string) => Boolean(readLock(repoRoot).tools['hook-runtime']);
 const NO_RUNTIME = 'hook-runtime is not installed in this repo (no entry in .agents/harness/lock.json); install agent-harness-hook-runtime first.';
 
-function install(repoRoot, mode, io) {
+function install(repoRoot: string, mode: InstallMode, io: Io): number {
   const node = requireNode22();
   if (node) return io.fail([node]);
   if (git(['rev-parse', '--is-inside-work-tree'], repoRoot) !== 'true') return io.fail([`${repoRoot} is not a git work tree`]);
-  let config;
+  let config: Record<string, unknown>;
   try {
     if (!hasRuntime(repoRoot)) return io.fail([NO_RUNTIME]);
     config = readHarnessConfig(repoRoot);
@@ -59,8 +66,8 @@ function install(repoRoot, mode, io) {
   return io.ok(messages);
 }
 
-function check(repoRoot, io) {
-  const issues = [];
+function check(repoRoot: string, io: Io): number {
+  const issues: string[] = [];
   try {
     issues.push(...checkTool({ toolDir: HERE, repoRoot }));
     if (!hasRuntime(repoRoot)) issues.push(NO_RUNTIME);
@@ -76,8 +83,8 @@ function check(repoRoot, io) {
   return io.ok([`${TOOL}: ok`]);
 }
 
-async function run(repoRoot, io) {
-  let section;
+async function run(repoRoot: string, io: Io): Promise<number> {
+  let section: unknown;
   try {
     section = readHarnessConfig(repoRoot)[TOOL];
   } catch (err) {
@@ -111,16 +118,22 @@ async function run(repoRoot, io) {
 }
 
 // main(argv, {out, err}) -> exit code
-export async function main(argv, { out = (s) => process.stdout.write(s), err = (s) => process.stderr.write(s) } = {}) {
-  const io = {
+export async function main(
+  argv: string[],
+  {
+    out = (s: string) => process.stdout.write(s),
+    err = (s: string) => process.stderr.write(s),
+  }: { out?: (s: string) => unknown; err?: (s: string) => unknown } = {},
+): Promise<number> {
+  const io: Io = {
     out,
     ok: (lines) => { for (const l of lines) out(`${l}\n`); return 0; },
     fail: (lines) => { for (const l of lines) err(`${l}\n`); return 1; },
   };
   const [command, ...rest] = argv;
-  let repo;
+  let repo: string | undefined;
   for (let i = 0; i < rest.length; i++) {
-    if (rest[i] === '--repo' && rest[i + 1] !== undefined) repo = resolve(rest[++i]);
+    if (rest[i] === '--repo' && rest[i + 1] !== undefined) repo = resolve(rest[++i] as string);
     else return io.fail([`unknown argument ${rest[i]}`, USAGE.trim()]);
   }
   const repoRoot = repo ?? defaultRepo();
