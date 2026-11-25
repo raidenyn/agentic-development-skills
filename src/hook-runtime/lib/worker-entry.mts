@@ -3,35 +3,46 @@
 // message calls to the supervisor; this thread never starts a process or touches a lock itself.
 import { pathToFileURL } from 'node:url';
 import { parentPort, workerData } from 'node:worker_threads';
+import type { Handler, SpawnOptions, SpawnResult, WorkerContext } from './handler.types.mts';
+
+type Msg = Record<string, any>;
+interface Call {
+  resolve: (msg: Msg) => void;
+  onData?: (stream: 'stdout' | 'stderr', chunk: Uint8Array) => void;
+}
 
 const { handlerPath, workerGen } = workerData;
-const post = (msg) => parentPort.postMessage({ workerGen, ...msg });
-const errText = (err) => (err instanceof Error ? err.message : String(err));
-let handler;
+const post = (msg: Msg) => parentPort!.postMessage({ workerGen, ...msg });
+const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+let handler: Handler;
 let callCounter = 0;
-const calls = new Map(); // callId -> {resolve, onData?}
-const blocks = new Map(); // event requestId -> {ack, release}
+const calls = new Map<number, Call>(); // callId -> {resolve, onData?}
+const blocks = new Map<unknown, { ack?: () => unknown; release?: () => unknown }>(); // event requestId -> {ack, release}
 
-function call(requestId, type, payload, extra = {}) {
+function call(requestId: unknown, type: string, payload: Msg, extra: Partial<Call> = {}): Promise<Msg> {
   const callId = ++callCounter;
-  return new Promise((resolve) => {
+  return new Promise<Msg>((resolve) => {
     calls.set(callId, { resolve, ...extra });
     post({ type, requestId, callId, ...payload });
   });
 }
 
-function spawnVia(requestId, argv, { cwd, env, timeoutMs, signal, maxBytes = Infinity } = {}) {
+function spawnVia(
+  requestId: unknown,
+  argv: readonly unknown[],
+  { cwd, env, timeoutMs, signal, maxBytes = Infinity }: SpawnOptions = {},
+): Promise<SpawnResult> {
   if (!Array.isArray(argv) || argv.length === 0) return Promise.reject(new TypeError('spawn needs a non-empty argv'));
-  const out = { stdout: [], stderr: [] };
+  const out: Record<'stdout' | 'stderr', Buffer[]> = { stdout: [], stderr: [] };
   const size = { stdout: 0, stderr: 0 };
   let truncated = false;
-  const onData = (stream, chunk) => {
+  const onData = (stream: 'stdout' | 'stderr', chunk: Uint8Array) => {
     const buf = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
     out[stream].push(buf);
     size[stream] += buf.length;
     while (size[stream] > maxBytes) {
       truncated = true;
-      const first = out[stream][0];
+      const first = out[stream][0] as Buffer;
       const excess = size[stream] - maxBytes;
       if (first.length <= excess) {
         out[stream].shift();
@@ -42,7 +53,7 @@ function spawnVia(requestId, argv, { cwd, env, timeoutMs, signal, maxBytes = Inf
       }
     }
   };
-  let callId;
+  let callId: number;
   const onAbort = () => post({ type: 'spawn.kill', requestId, callId });
   const p = call(requestId, 'spawn', {
     argv: argv.map(String), cwd, env, timeoutMs,
@@ -63,18 +74,18 @@ function spawnVia(requestId, argv, { cwd, env, timeoutMs, signal, maxBytes = Inf
   return p;
 }
 
-function buildContext(requestId, data) {
+function buildContext(requestId: unknown, data: Msg): { ctx: WorkerContext; done: () => void } {
   const controller = new AbortController();
   const ms = data.deadline - Date.now();
   const timer = Number.isFinite(ms) ? setTimeout(() => controller.abort(new Error('deadline')), Math.max(0, ms)) : null;
-  const ctx = {
-    ...data,
+  const ctx: WorkerContext = {
+    ...(data as WorkerContext),
     signal: controller.signal,
-    proof: (name) => call(requestId, 'proof.request', { name }).then((m) => m.value ?? null),
-    trace: (outcome) => post({ type: 'trace', requestId, outcome: String(outcome) }),
-    spawn: (argv, opts) => spawnVia(requestId, argv, opts),
+    proof: (name: string) => call(requestId, 'proof.request', { name }).then((m) => m.value ?? null),
+    trace: (outcome: unknown) => post({ type: 'trace', requestId, outcome: String(outcome) }),
+    spawn: (argv: readonly unknown[], opts?: SpawnOptions) => spawnVia(requestId, argv, opts),
     lock: {
-      async acquire(dir) {
+      async acquire(dir: string) {
         const m = await call(requestId, 'lock.acquire', { dir: String(dir) });
         if (m.error) throw new Error(m.error);
         if (m.lockId === null || m.lockId === undefined) return null;
@@ -90,10 +101,10 @@ function buildContext(requestId, data) {
       },
     },
   };
-  return { ctx, done: () => clearTimeout(timer) };
+  return { ctx, done: () => clearTimeout(timer as NodeJS.Timeout) };
 }
 
-function sendResult(type, requestId, fields) {
+function sendResult(type: string, requestId: unknown, fields: Msg): void {
   try {
     post({ type, requestId, ok: true, ...fields });
   } catch (err) {
@@ -101,14 +112,14 @@ function sendResult(type, requestId, fields) {
   }
 }
 
-async function runEvent({ requestId, event, context }) {
+async function runEvent({ requestId, event, context }: Msg): Promise<void> {
   const { ctx, done } = buildContext(requestId, context);
   try {
-    let result = await handler.handle(event, ctx);
+    let result: unknown = await handler.handle(event, ctx);
     let hasAck = false;
     let hasRelease = false;
     if (result && typeof result === 'object' && !Array.isArray(result)) {
-      const { ack, release, ...rest } = result;
+      const { ack, release, ...rest } = result as Record<string, any>;
       hasAck = typeof ack === 'function';
       hasRelease = typeof release === 'function';
       if (hasAck || hasRelease) blocks.set(requestId, { ack, release });
@@ -122,7 +133,7 @@ async function runEvent({ requestId, event, context }) {
   }
 }
 
-async function runProof({ requestId, name, context }) {
+async function runProof({ requestId, name, context }: Msg): Promise<void> {
   const { ctx, done } = buildContext(requestId, context);
   ctx.trace = () => {};
   try {
@@ -136,12 +147,12 @@ async function runProof({ requestId, name, context }) {
   }
 }
 
-async function runBlockCallback({ type, requestId }) {
+async function runBlockCallback({ type, requestId }: Msg): Promise<void> {
   const reply = type === 'ack' ? 'acked' : 'released';
   const entry = blocks.get(requestId);
   blocks.delete(requestId);
   try {
-    const fn = entry?.[type];
+    const fn = entry?.[type as 'ack' | 'release'];
     if (typeof fn === 'function') await fn();
     post({ type: reply, requestId, ok: true });
   } catch (err) {
@@ -149,7 +160,7 @@ async function runBlockCallback({ type, requestId }) {
   }
 }
 
-parentPort.on('message', (msg) => {
+parentPort!.on('message', (msg: Msg) => {
   if (!msg || msg.workerGen !== workerGen) return;
   switch (msg.type) {
     case 'event': return void runEvent(msg);
@@ -166,12 +177,12 @@ parentPort.on('message', (msg) => {
   }
 });
 
-function meta(h) {
+function meta(h: any): Record<string, unknown> {
   if (!h || typeof h !== 'object') throw new Error('handler.mjs has no default export object');
   if (typeof h.name !== 'string' || !h.name) throw new Error('the handler has no name');
-  if (!Array.isArray(h.events) || h.events.some((e) => typeof e !== 'string')) throw new Error('the handler events are not a list of names');
+  if (!Array.isArray(h.events) || h.events.some((e: unknown) => typeof e !== 'string')) throw new Error('the handler events are not a list of names');
   if (typeof h.handle !== 'function') throw new Error('the handler has no handle function');
-  const timeouts = {};
+  const timeouts: Record<string, number> = {};
   for (const [k, v] of Object.entries(h.timeouts ?? {})) if (typeof v === 'number') timeouts[k] = v;
   return {
     name: h.name,

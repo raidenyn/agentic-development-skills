@@ -60,7 +60,7 @@ export interface Handler {
   handle(
     event: EventPayload,
     context: HandlerContext,
-    extra: { cleanupDeadline: number },
+    extra?: { cleanupDeadline?: number },
   ): HandlerResult | null | undefined | Promise<HandlerResult | null | undefined>;
   proofs?: Record<string, ProofCheck>;
   // Per-event budget in milliseconds.
@@ -78,4 +78,34 @@ export interface DispatchResult {
   context?: string;
   ack?: () => Promise<void>;
   release?: () => Promise<void>;
+}
+
+export interface SpawnOptions {
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  // Keep at most this many bytes of each stream; the oldest bytes are dropped.
+  maxBytes?: number;
+}
+
+export interface SpawnResult {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  pgid?: number;
+  timedOut: boolean;
+  truncated: boolean;
+  stdout: string;
+  stderr: string;
+}
+
+export interface LockHandle {
+  release(): Promise<void>;
+}
+
+// The context a handler receives inside a worker: processes and the gate lock go through the
+// supervisor, which owns them (harness design D3).
+export interface WorkerContext extends HandlerContext {
+  spawn(argv: readonly unknown[], opts?: SpawnOptions): Promise<SpawnResult>;
+  lock: { acquire(dir: string): Promise<LockHandle | null> };
 }

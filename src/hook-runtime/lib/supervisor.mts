@@ -7,6 +7,35 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { acquireGateLock, updateGateLock } from './state.mts';
+import type { GateLockHandle } from './state.mts';
+import type { EventPayload, Handler, HandlerContext } from './handler.types.mts';
+
+type Msg = Record<string, any>;
+type Ctx = Partial<HandlerContext> & Record<string, any>;
+interface Pending {
+  requestId: number | string;
+  kind: string;
+  ctx: Ctx | null;
+  resolve: (value: unknown) => void;
+  reject: (err: Error) => void;
+}
+interface HeldLock {
+  handle: GateLockHandle;
+  requestId: number | string;
+  pgids: number[];
+}
+interface WorkerMeta {
+  name: string;
+  events: Handler['events'];
+  timeouts?: Handler['timeouts'];
+  manual?: string;
+  proofs: string[];
+}
+export interface WorkerHandler extends Handler {
+  tool: string;
+  close(): Promise<void>;
+  workerGens(): number[];
+}
 
 const ENTRY = fileURLToPath(new URL('./worker-entry.mjs', import.meta.url));
 export const POOL_SIZE = 4;
@@ -16,21 +45,21 @@ const CONFIRM_MS = 5000;
 
 let genCounter = 0;
 let idCounter = 0;
-const generations = new Map();
+const generations = new Map<number, WorkerRecord>();
 
-const errText = (err) => (err instanceof Error ? err.message : String(err));
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export function groupAlive(pgid) {
+export function groupAlive(pgid: number): boolean {
   try {
     process.kill(-pgid, 0);
     return true;
   } catch (err) {
-    return err.code === 'EPERM';
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 
-function signalGroup(pgid, sig) {
+function signalGroup(pgid: number, sig: NodeJS.Signals): void {
   try {
     process.kill(-pgid, sig);
   } catch {}
@@ -38,11 +67,11 @@ function signalGroup(pgid, sig) {
 
 // SIGTERM, then SIGKILL after min(5 s, cleanupDeadline - now - 1 s); resolves once every group is
 // empty, independent of the leaders' exits.
-export async function killGroups(pgids, { cleanupDeadline } = {}) {
+export async function killGroups(pgids: number[], { cleanupDeadline }: { cleanupDeadline?: number } = {}): Promise<void> {
   let live = pgids.filter(groupAlive);
   if (!live.length) return;
   for (const p of live) signalGroup(p, 'SIGTERM');
-  const room = Number.isFinite(cleanupDeadline) ? cleanupDeadline - Date.now() - 1000 : KILL_AFTER_MS;
+  const room = Number.isFinite(cleanupDeadline) ? cleanupDeadline! - Date.now() - 1000 : KILL_AFTER_MS;
   const killAt = Date.now() + Math.max(0, Math.min(KILL_AFTER_MS, room));
   let killed = false;
   while (live.length && Date.now() < killAt + CONFIRM_MS) {
@@ -57,7 +86,7 @@ export async function killGroups(pgids, { cleanupDeadline } = {}) {
 
 // Resolves with the promise, or rejects once `signal` aborts. Checks `aborted` before listening,
 // because a listener added to an already aborted signal never fires.
-function untilAborted(promise, signal, message) {
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined, message: string): Promise<T> {
   if (!signal) return promise;
   if (signal.aborted) return Promise.reject(new Error(message));
   return new Promise((resolve, reject) => {
@@ -70,13 +99,27 @@ function untilAborted(promise, signal, message) {
   });
 }
 
-function contextData(ctx) {
+function contextData(ctx: Ctx): Record<string, unknown> {
   const { repoRoot, host, sessionId, agentId, deadline, stateDir, config } = ctx;
   return { repoRoot, host, sessionId, agentId, deadline, stateDir, config };
 }
 
 class WorkerRecord {
-  constructor(pool, budgetMs) {
+  declare pool: HandlerPool;
+  declare gen: number;
+  declare loaded: boolean;
+  declare dead: boolean;
+  declare busy: number | 'reserved' | null;
+  declare pending: Map<string, Pending>;
+  declare groups: Map<number, number | string>;
+  declare locks: Map<number, HeldLock>;
+  declare children: Map<unknown, number>;
+  declare worker: Worker;
+  declare ready: Promise<WorkerMeta>;
+  declare onLoad: ((err: Error | null, meta?: WorkerMeta) => void) | null;
+  declare retiring: Promise<void> | undefined;
+
+  constructor(pool: HandlerPool, budgetMs: number) {
     this.pool = pool;
     this.gen = ++genCounter;
     this.loaded = false;
@@ -93,10 +136,10 @@ class WorkerRecord {
       stderr: true,
     });
     // Handler output must never reach the host's stdout (Claude Code reads hook JSON there).
-    const toStderr = (d) => { try { process.stderr.write(d); } catch {} };
+    const toStderr = (d: Buffer) => { try { process.stderr.write(d); } catch {} };
     this.worker.stdout.on('data', toStderr);
     this.worker.stderr.on('data', toStderr);
-    this.ready = new Promise((resolve, reject) => {
+    this.ready = new Promise<WorkerMeta>((resolve, reject) => {
       const t = setTimeout(() => {
         reject(new Error(`still loading after ${budgetMs} ms`));
         this.retire('load timeout');
@@ -109,36 +152,36 @@ class WorkerRecord {
           this.retire('load failed');
         } else {
           this.loaded = true;
-          resolve(meta);
+          resolve(meta as WorkerMeta);
         }
       };
     });
     this.ready.catch(() => {});
-    this.worker.on('message', (msg) => this.onMessage(msg));
-    this.worker.on('error', (err) => this.crash(err));
-    this.worker.on('exit', (code) => this.crash(new Error(`worker exited (code ${code})`)));
+    this.worker.on('message', (msg: Msg) => this.onMessage(msg));
+    this.worker.on('error', (err: Error) => this.crash(err));
+    this.worker.on('exit', (code: number) => this.crash(new Error(`worker exited (code ${code})`)));
   }
 
-  post(msg) {
+  post(msg: Msg): void {
     if (this.dead) return;
     try {
       this.worker.postMessage({ workerGen: this.gen, ...msg });
     } catch {}
   }
 
-  refresh() {
+  refresh(): void {
     if (this.dead) return;
     if (this.pending.size || this.busy !== null || !this.loaded) this.worker.ref();
     else this.worker.unref();
   }
 
-  isActive(requestId) {
+  isActive(requestId: unknown): boolean {
     if (this.dead) return false;
     for (const p of this.pending.values()) if (p.requestId === requestId) return true;
     return false;
   }
 
-  request(kind, requestId, ctx, msg) {
+  request(kind: string, requestId: number | string, ctx: Ctx | null, msg: Msg): Promise<unknown> {
     return new Promise((resolve, reject) => {
       this.pending.set(`${kind}:${requestId}`, { requestId, kind, ctx, resolve, reject });
       this.refresh();
@@ -153,19 +196,19 @@ class WorkerRecord {
     });
   }
 
-  finish(kind, requestId) {
+  finish(kind: string, requestId: unknown): Pending | undefined {
     const key = `${kind}:${requestId}`;
     const p = this.pending.get(key);
     this.pending.delete(key);
     const owns = [...this.locks.values()].some((l) => l.requestId === requestId)
-      || [...this.groups.values()].includes(requestId);
+      || [...this.groups.values()].includes(requestId as number | string);
     if (!this.isActive(requestId) && owns) {
       this.cleanup({ requestId }).catch(() => {});
     }
     return p;
   }
 
-  onMessage(msg) {
+  onMessage(msg: Msg): unknown {
     if (!msg || msg.workerGen !== this.gen || this.dead) return; // foreign or late
     const { type, requestId, callId } = msg;
     switch (type) {
@@ -197,7 +240,7 @@ class WorkerRecord {
       }
       case 'trace': {
         const p = this.pending.get(`event:${requestId}`);
-        if (p && this.busy === requestId) p.ctx.trace?.(msg.outcome);
+        if (p && this.busy === requestId) p.ctx!.trace?.(msg.outcome);
         return;
       }
       case 'proof.request': return this.onProofRequest(msg);
@@ -213,19 +256,19 @@ class WorkerRecord {
     }
   }
 
-  onProofRequest({ requestId, callId, name }) {
-    const reply = (value) => this.post({ type: 'proof.response', requestId, callId, value });
+  onProofRequest({ requestId, callId, name }: Msg): void {
+    const reply = (value: unknown) => this.post({ type: 'proof.response', requestId, callId, value });
     const p = [...this.pending.values()].find((x) => x.requestId === requestId && x.ctx?.proof);
     if (!p) return reply(`proof ${name} was requested after its event ended`);
     Promise.resolve()
-      .then(() => p.ctx.proof(name))
+      .then(() => p.ctx!.proof!(name))
       .then((v) => reply(v ?? null), (err) => reply(`proof ${name} failed: ${errText(err)}`));
   }
 
-  onSpawn({ requestId, callId, argv, cwd, env, timeoutMs }) {
-    const reply = (m) => this.post({ type: 'spawn.exit', requestId, callId, ...m });
+  onSpawn({ requestId, callId, argv, cwd, env, timeoutMs }: Msg): void {
+    const reply = (m: Msg) => this.post({ type: 'spawn.exit', requestId, callId, ...m });
     if (!this.isActive(requestId)) return reply({ error: 'the event has ended' });
-    let child;
+    let child: ReturnType<typeof spawnChild>;
     try {
       child = spawnChild(argv[0], argv.slice(1), {
         cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
@@ -234,7 +277,7 @@ class WorkerRecord {
       return reply({ error: errText(err) });
     }
     let done = false;
-    const end = (m) => {
+    const end = (m: Msg) => {
       if (done) return;
       done = true;
       clearTimeout(timeout);
@@ -244,7 +287,7 @@ class WorkerRecord {
     };
     const pgid = child.pid;
     let timedOut = false;
-    let timeout;
+    let timeout: NodeJS.Timeout | undefined;
     if (pgid) {
       this.groups.set(pgid, requestId);
       this.children.set(callId, pgid);
@@ -261,16 +304,16 @@ class WorkerRecord {
         }, timeoutMs);
       }
     }
-    child.stdout.on('data', (chunk) => this.post({ type: 'spawn.data', requestId, callId, stream: 'stdout', chunk: new Uint8Array(chunk) }));
-    child.stderr.on('data', (chunk) => this.post({ type: 'spawn.data', requestId, callId, stream: 'stderr', chunk: new Uint8Array(chunk) }));
+    child.stdout!.on('data', (chunk: Buffer) => this.post({ type: 'spawn.data', requestId, callId, stream: 'stdout', chunk: new Uint8Array(chunk) }));
+    child.stderr!.on('data', (chunk: Buffer) => this.post({ type: 'spawn.data', requestId, callId, stream: 'stderr', chunk: new Uint8Array(chunk) }));
     child.on('error', (err) => end({ error: errText(err), pgid }));
     child.on('close', (code, signal) => end({ code, signal, pgid, timedOut }));
   }
 
-  onLockAcquire({ requestId, callId, dir }) {
-    const reply = (m) => this.post({ type: 'lock.response', requestId, callId, ...m });
+  onLockAcquire({ requestId, callId, dir }: Msg): void {
+    const reply = (m: Msg) => this.post({ type: 'lock.response', requestId, callId, ...m });
     if (!this.isActive(requestId)) return reply({ error: 'the event has ended' });
-    let handle;
+    let handle: GateLockHandle | null;
     try {
       handle = acquireGateLock(dir);
     } catch (err) {
@@ -282,10 +325,10 @@ class WorkerRecord {
     return reply({ lockId });
   }
 
-  onLockRelease({ requestId, callId, lockId }) {
+  onLockRelease({ requestId, callId, lockId }: Msg): void {
     const lock = this.locks.get(lockId);
     this.locks.delete(lockId);
-    let error;
+    let error: string | undefined;
     try {
       lock?.handle.release();
     } catch (err) {
@@ -294,14 +337,14 @@ class WorkerRecord {
     this.post({ type: 'lock.released', requestId, callId, error });
   }
 
-  blockCallback(kind, requestId) {
+  blockCallback(kind: string, requestId: number | string): Promise<boolean> {
     if (this.dead) return Promise.resolve(false);
     return this.request(kind, requestId, null, { type: kind }).then(() => true, () => false);
   }
 
   // Kill the groups this generation started (optionally one request's), then release its locks.
-  async cleanup({ requestId, cleanupDeadline } = {}) {
-    const mine = (r) => requestId === undefined || r === requestId;
+  async cleanup({ requestId, cleanupDeadline }: { requestId?: unknown; cleanupDeadline?: number } = {}): Promise<void> {
+    const mine = (r: unknown) => requestId === undefined || r === requestId;
     const pgids = [...this.groups].filter(([, r]) => mine(r)).map(([p]) => p);
     await killGroups(pgids, { cleanupDeadline });
     const survivors = new Set(pgids.filter(groupAlive));
@@ -319,7 +362,7 @@ class WorkerRecord {
   }
 
   // End this generation: terminate, kill its groups, release its locks, fail what is pending.
-  retire(reason, { cleanupDeadline } = {}) {
+  retire(reason: string, { cleanupDeadline }: { cleanupDeadline?: number } = {}): Promise<void> {
     if (this.retiring) return this.retiring;
     this.dead = true;
     this.pool.remove(this);
@@ -337,18 +380,25 @@ class WorkerRecord {
     return this.retiring;
   }
 
-  crash(err) {
+  crash(err: unknown): void {
     if (!this.dead) this.retire(errText(err)).then(() => this.pool.replenish());
   }
 }
 
-export function terminateWorker(gen, opts) {
+export function terminateWorker(gen: number, opts?: { cleanupDeadline?: number }): Promise<void> {
   const rec = generations.get(gen);
   return rec ? rec.retire('terminated', opts) : Promise.resolve();
 }
 
 class HandlerPool {
-  constructor(toolDir, tool, loadBudgetMs) {
+  declare toolDir: string;
+  declare tool: string;
+  declare loadBudgetMs: number;
+  declare workers: WorkerRecord[];
+  declare waiters: (() => void)[];
+  declare closed: boolean;
+
+  constructor(toolDir: string, tool: string, loadBudgetMs: number) {
     this.toolDir = toolDir;
     this.tool = tool;
     this.loadBudgetMs = loadBudgetMs;
@@ -357,29 +407,29 @@ class HandlerPool {
     this.closed = false;
   }
 
-  spawnWorker(budgetMs = this.loadBudgetMs) {
+  spawnWorker(budgetMs: number = this.loadBudgetMs): WorkerRecord {
     const rec = new WorkerRecord(this, budgetMs);
     this.workers.push(rec);
     return rec;
   }
 
-  remove(rec) {
+  remove(rec: WorkerRecord): void {
     this.workers = this.workers.filter((w) => w !== rec);
   }
 
-  wake() {
+  wake(): void {
     const waiters = this.waiters;
     this.waiters = [];
     for (const w of waiters) w();
   }
 
-  replenish() {
+  replenish(): void {
     if (this.closed || this.workers.length) return;
     const rec = this.spawnWorker();
     rec.ready.then(() => rec.refresh(), () => {});
   }
 
-  async acquire(ctx) {
+  async acquire(ctx: Ctx): Promise<WorkerRecord> {
     for (;;) {
       if (this.closed) throw new Error('the handler was closed');
       if (ctx.signal?.aborted) throw new Error('no worker was free before the deadline');
@@ -400,18 +450,18 @@ class HandlerPool {
         }
         return rec;
       }
-      await untilAborted(new Promise((resolve) => this.waiters.push(resolve)), ctx.signal, 'no worker was free before the deadline');
+      await untilAborted(new Promise<void>((resolve) => this.waiters.push(resolve)), ctx.signal, 'no worker was free before the deadline');
     }
   }
 
-  unreserve(rec) {
+  unreserve(rec: WorkerRecord): void {
     if (rec.busy !== 'reserved') return;
     rec.busy = null;
     rec.refresh();
     this.wake();
   }
 
-  async handle(event, ctx, { cleanupDeadline } = {}) {
+  async handle(event: EventPayload, ctx: Ctx, { cleanupDeadline }: { cleanupDeadline?: number } = {}): Promise<any> {
     const rec = await this.acquire(ctx);
     if (ctx.signal?.aborted) {
       this.unreserve(rec);
@@ -429,21 +479,21 @@ class HandlerPool {
     }
   }
 
-  async runProof(name, ctx) {
+  async runProof(name: string, ctx: Ctx): Promise<any> {
     let rec = this.workers.find((w) => !w.dead && w.loaded && w.busy === null)
       ?? this.workers.find((w) => !w.dead && w.loaded);
     if (!rec) {
-      rec = this.workers.length < POOL_SIZE ? this.spawnWorker() : this.workers[0];
+      rec = this.workers.length < POOL_SIZE ? this.spawnWorker() : (this.workers[0] as WorkerRecord);
       await untilAborted(rec.ready, ctx.signal, 'timed out');
     }
     if (ctx.signal?.aborted) throw new Error('timed out');
     const requestId = ++idCounter;
     const onAbort = () => {
-      const p = rec.finish('proof', requestId);
+      const p = rec!.finish('proof', requestId);
       if (!p) return;
       p.reject(new Error('timed out'));
-      if (rec.busy === null && !rec.pending.size) rec.retire('proof deadline').then(() => this.replenish());
-      else rec.cleanup({ requestId }).catch(() => {});
+      if (rec!.busy === null && !rec!.pending.size) rec!.retire('proof deadline').then(() => this.replenish());
+      else rec!.cleanup({ requestId }).catch(() => {});
     };
     ctx.signal?.addEventListener('abort', onAbort, { once: true });
     try {
@@ -453,7 +503,7 @@ class HandlerPool {
     }
   }
 
-  async close() {
+  async close(): Promise<void> {
     this.closed = true;
     await Promise.all(this.workers.map((w) => w.retire('closed')));
   }
@@ -461,11 +511,14 @@ class HandlerPool {
 
 // Start the first worker of a handler pool and return its proxy Handler once the worker reports
 // `loaded`. Rejects when the handler is still loading after loadBudgetMs, or fails to load.
-export async function startWorker(toolDir, { loadBudgetMs = 2000, tool = basename(toolDir) } = {}) {
+export async function startWorker(
+  toolDir: string,
+  { loadBudgetMs = 2000, tool = basename(toolDir) }: { loadBudgetMs?: number; tool?: string } = {},
+): Promise<WorkerHandler> {
   const pool = new HandlerPool(toolDir, tool, loadBudgetMs);
   const rec = pool.spawnWorker();
   rec.busy = 'reserved';
-  let meta;
+  let meta: WorkerMeta;
   try {
     meta = await rec.ready;
   } catch (err) {
@@ -474,8 +527,8 @@ export async function startWorker(toolDir, { loadBudgetMs = 2000, tool = basenam
   }
   rec.busy = null;
   rec.refresh();
-  const proofs = {};
-  for (const name of meta.proofs) proofs[name] = (ctx) => pool.runProof(name, ctx);
+  const proofs: Record<string, (ctx: HandlerContext) => Promise<any>> = {};
+  for (const name of meta.proofs) proofs[name] = (ctx: HandlerContext) => pool.runProof(name, ctx);
   return {
     name: meta.name,
     tool,
@@ -483,7 +536,7 @@ export async function startWorker(toolDir, { loadBudgetMs = 2000, tool = basenam
     timeouts: meta.timeouts,
     manual: meta.manual,
     proofs,
-    handle: (event, ctx, internal) => pool.handle(event, ctx, internal),
+    handle: (event: EventPayload, ctx: HandlerContext, internal?: { cleanupDeadline?: number }) => pool.handle(event, ctx, internal),
     close: () => pool.close(),
     workerGens: () => pool.workers.map((w) => w.gen),
   };

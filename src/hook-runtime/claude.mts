@@ -9,22 +9,41 @@ import { CLAUDE_EVENTS, HOST, toEvent, toOutput } from './lib/claude-adapter.mts
 import {
   createRuntime, failureNotice, loadHandlers, OUTPUT_MS, writeTrace,
 } from './lib/runtime.mts';
+import type { DispatchResult } from './lib/handler.types.mts';
+
+interface SpawnRun {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+  pgid?: number;
+}
+type Spawn = (argv: string[], opts?: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number }) => Promise<SpawnRun>;
+export interface MainResult {
+  text: string;
+  ack: (() => Promise<void>) | null;
+  release: (() => Promise<void>) | null;
+  cleanupDeadline: number;
+}
 
 const HOST_MARGIN_MS = 7000; // work deadline = host deadline - 7 s (cleanup 6 s + output 1 s)
 const GIT_TIMEOUT_MS = 2000;
-const errText = (err) => (err instanceof Error ? err.message : String(err));
+const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 // spawn(argv, {cwd, env, timeoutMs}) -> Promise<{code, signal, stdout, stderr, pgid}>
-export function defaultSpawn(argv, { cwd, env, timeoutMs } = {}) {
+export function defaultSpawn(
+  argv: string[],
+  { cwd, env, timeoutMs }: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number } = {},
+): Promise<SpawnRun> {
   return new Promise((resolve, reject) => {
-    const child = spawnChild(argv[0], argv.slice(1), {
+    const child = spawnChild(argv[0] as string, argv.slice(1), {
       cwd, env: env ? { ...process.env, ...env } : process.env, stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
     let stderr = '';
     const t = timeoutMs ? setTimeout(() => child.kill('SIGKILL'), timeoutMs) : null;
-    child.stdout.on('data', (d) => { stdout += d; });
-    child.stderr.on('data', (d) => { stderr += d; });
+    child.stdout.on('data', (d: Buffer) => { stdout += d; });
+    child.stderr.on('data', (d: Buffer) => { stderr += d; });
     child.on('error', (err) => { if (t) clearTimeout(t); reject(err); });
     child.on('close', (code, signal) => {
       if (t) clearTimeout(t);
@@ -34,7 +53,10 @@ export function defaultSpawn(argv, { cwd, env, timeoutMs } = {}) {
 }
 
 // CLAUDE_PROJECT_DIR, else the top level of the git checkout around payload.cwd, else that folder.
-async function findRepoRoot(payload, { cwd, env, spawn }) {
+async function findRepoRoot(
+  payload: any,
+  { cwd, env, spawn }: { cwd: string; env: NodeJS.ProcessEnv; spawn: Spawn },
+): Promise<string> {
   if (env.CLAUDE_PROJECT_DIR) return env.CLAUDE_PROJECT_DIR;
   const start = typeof payload?.cwd === 'string' && payload.cwd ? payload.cwd : cwd;
   try {
@@ -46,14 +68,14 @@ async function findRepoRoot(payload, { cwd, env, spawn }) {
 }
 
 // Resolves once fn() settles or the deadline passes, whichever is first; never rejects.
-function bounded(fn, until) {
-  return () => new Promise((resolve) => {
+function bounded(fn: () => unknown, until: number): () => Promise<void> {
+  return () => new Promise<void>((resolve) => {
     const t = setTimeout(resolve, Math.max(0, until - Date.now()));
     Promise.resolve().then(fn).catch(() => {}).finally(() => { clearTimeout(t); resolve(); });
   });
 }
 
-const parse = (text) => {
+const parse = (text: string): any => {
   try {
     return JSON.parse(text);
   } catch {
@@ -66,16 +88,23 @@ const parse = (text) => {
 // cleanupDeadline.
 export async function main({
   stdin, cwd = process.cwd(), env = process.env, spawn = defaultSpawn, now = Date.now, capabilities = HOST_CAPABILITIES,
-} = {}) {
+}: {
+  stdin?: unknown;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  spawn?: Spawn;
+  now?: () => number;
+  capabilities?: typeof HOST_CAPABILITIES;
+} = {}): Promise<MainResult> {
   const start = now();
-  const empty = { text: '', ack: null, release: null, cleanupDeadline: start };
+  const empty: MainResult = { text: '', ack: null, release: null, cleanupDeadline: start };
   const payload = parse(String(stdin ?? ''));
   const name = payload?.hook_event_name;
   if (!Object.hasOwn(CLAUDE_EVENTS, name ?? '')) return empty;
-  const hostDeadline = start + CLAUDE_EVENTS[name] * 1000;
+  const hostDeadline = start + (CLAUDE_EVENTS[name] as number) * 1000;
   const cleanupDeadline = hostDeadline - OUTPUT_MS;
-  let merged;
-  let type = 'event';
+  let merged: DispatchResult | undefined;
+  let type: string = 'event';
   try {
     const repoRoot = await findRepoRoot(payload, { cwd, env, spawn });
     const mapped = toEvent(payload, repoRoot);
@@ -112,18 +141,18 @@ export async function main({
   }
 }
 
-async function readStdin() {
-  const chunks = [];
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
   for await (const c of process.stdin) chunks.push(c);
   return Buffer.concat(chunks).toString('utf8');
 }
 
-async function runAsScript() {
-  let result = { text: '', ack: null, release: null };
+async function runAsScript(): Promise<void> {
+  let result: Pick<MainResult, 'text' | 'ack' | 'release'> = { text: '', ack: null, release: null };
   try {
     result = await main({ stdin: await readStdin() });
   } catch {}
-  const finish = async (err) => {
+  const finish = async (err?: unknown) => {
     try {
       if (err) await result.release?.();
       else await result.ack?.();
