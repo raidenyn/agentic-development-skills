@@ -1,11 +1,11 @@
 ---
 name: rfc-breakdown
-description: Use when an accepted feature RFC must be turned into a backlog for all of its milestones at once, for example "break down the RFC into tasks", "create the tasks for this RFC" or "plan the whole RFC". Also use when a later milestone of an RFC that was broken down this way becomes next and its outline tasks must be replaced by real ones. Covers which milestones can be split now, running the milestone breakdowns in parallel, outline tasks for the milestones that cannot be split yet, and the consistency check across milestones. Not for splitting a single milestone and not for writing the RFC.
+description: Use when an accepted feature RFC must be turned into a backlog that covers all of its milestones, for example "break down the RFC into tasks", "create the tasks for this RFC" or "plan the whole RFC". Also use when a later milestone of an RFC that was broken down this way becomes next and its outline tasks must be replaced by real ones. Covers which milestones can be split now, usually only the first, full tasks for those, outline tasks and a planning item for every milestone that cannot be split yet, and the consistency check across milestones. Not for splitting a single milestone and not for writing the RFC.
 ---
 
 # RFC breakdown
 
-Turn an accepted feature RFC into a backlog that covers every milestone: full tasks for the milestones that can be built now, outline tasks for the rest, and blockers between them that hold across milestones.
+Turn an accepted feature RFC into a backlog that covers every milestone: full tasks for the milestones that can be built now, outline tasks for the rest, and blockers between them that hold across milestones. On a first run that is usually full tasks for one milestone and outlines for all the others.
 
 This skill decides what is broken down and when, and checks the result as a whole. It does not slice. Slicing one milestone is the `milestone-breakdown` skill, used here as it is. Putting the tasks in a tracker is the `task-publishing` skill. If either is not installed, say so before starting.
 
@@ -18,6 +18,7 @@ The skill has two modes:
 
 - **Two depths.** A milestone is broken down into real tasks only when it can start now. Tasks written earlier would describe code that does not exist yet. Every other milestone gets outlines: placeholders that say what the RFC requires and what must land first.
 - **A milestone is broken down only when the ones it depends on are closed.** Each later milestone gets one planning item that says so on the board. It is blocked by the closing of those milestones, and its outlines are blocked by it.
+- **The request does not change the depth.** "Break down the whole RFC" or "create all the tasks" asks for this backlog. It does not ask for full tasks in a milestone that cannot start, and neither does anything else in the request.
 - **An outline claims nothing the RFC does not say.** No size, no slicing, no invented acceptance criteria.
 - **One vocabulary for the whole RFC.** Area names, milestone names and task keys are fixed before any breakdown starts, so parallel breakdowns do not name the same thing twice.
 - **A subagent never asks the person and never guesses.** It returns its questions. You ask them together.
@@ -80,6 +81,15 @@ Give every milestone one state, with the reason.
 
 Check the code for the consumed contracts. A closing entry alone is not enough. The RFC itself does not say which milestones are done: it is frozen at acceptance.
 
+Later is the default. A milestone is Ready only when you can name the evidence for every part of the test: the closing entry of each milestone under its "Depends on", and the file that holds each contract it consumes. On a first breakdown no milestone has a closing entry, so every milestone with an entry under "Depends on" is Later, and usually one milestone is Ready. None of the following makes a milestone Ready:
+
+- The RFC defines the contract it consumes. A contract in the RFC is not a contract in the code.
+- The person asked for all the tasks or for the whole RFC.
+- Full tasks would be more useful than outlines, or subagents are available to write them.
+- The milestone it depends on is small, almost merged, or being broken down in this same run.
+
+If the person asks in plain words for full tasks of a Later milestone, name the condition that is not met and write outlines.
+
 Stop and ask the person, with what you found, when the RFC and the repository disagree or work has already begun:
 
 - a milestone marked done whose contract is not in the code;
@@ -88,7 +98,7 @@ Stop and ask the person, with what you found, when the RFC and the repository di
 - a milestone that depends on a dropped one;
 - no milestone is ready and none is done.
 
-Show the sorting to the person before any breakdown starts. It is cheap to correct here and expensive later.
+Show the sorting to the person before any breakdown starts, as a table: the milestone, its "Depends on", the evidence for each part of the test, and the state. It is cheap to correct here and expensive later.
 
 ### 4. Fix the shared vocabulary
 
@@ -103,11 +113,14 @@ Write down, once, and give the same text to every breakdown:
 
 ### 5. Break down the ready milestones
 
-Run `milestone-breakdown` once per ready milestone. When your tool can run subagents, give each milestone its own subagent and run them in parallel. Otherwise do the milestones yourself, one after another. The brief for a subagent is in [references/breakdown-brief.md](references/breakdown-brief.md). The same rules hold when you do the work yourself:
+Only the milestones that step 3 sorted as Ready get this step. Often that is one milestone, and then nothing runs in parallel. A Later milestone is never given to `milestone-breakdown` or to a subagent.
+
+Run `milestone-breakdown` once per ready milestone. When several are ready and your tool can run subagents, give each milestone its own subagent and run them in parallel. Otherwise do the milestones yourself, one after another. The brief for a subagent is in [references/breakdown-brief.md](references/breakdown-brief.md). The same rules hold when you do the work yourself:
 
 - Run the break-down mode through its checks (step 7). Stop before the review with the person (step 8).
 - Write `00-plan.md` and one file per task, each with its key, Area and Phase.
 - Leave unwritten every task that waits on a blocking question, as `milestone-breakdown` requires. In the coverage table, such an entry says what it waits on. The one exception is a question the person has deferred, with the reading to use (step 8).
+- Check the start conditions again before writing. When one is not met, write nothing for that milestone and report it. The milestone is then sorted as Later and gets outlines in step 6.
 - Return a short report: the number of tasks against the RFC's estimate, the open questions, the assumptions, the hotspot files, whether the list reached the independent review setting, and any finding that needs a follow-up RFC.
 
 **Independent review of one milestone.** A subagent usually cannot start a reviewer. When a milestone's report says its list reached the independent review setting, start that review yourself, as `milestone-breakdown` step 7 describes. If no separate session is possible, the plan says "self-check only". If the last allowed round still reports findings, the fixes for them are unreviewed: ask the person whether to run one more round or accept your own check, and write the answer into the plan.
@@ -130,6 +143,7 @@ The planning item is closed when its milestone has been broken down and the pers
 
 Each milestone's own checks ran in step 5. This check covers what none of them could see. When your tool can run a separate read-only session, give the check to one that has seen none of the breakdowns, with the RFC and the tasks folder. Otherwise do it yourself and report it as a self-check.
 
+- **Depth.** Every milestone that has full tasks was sorted as Ready in step 3, with its evidence, or was broken down by an earlier run. Every other milestone that is not done or dropped has only outlines and one planning item. Full tasks in a Later milestone are a finding: replace them with outlines. That they are already written is no reason to keep them.
 - **Contracts.** Every part of an RFC contract that a task or outline consumes has exactly one producer: a task, an outline, or a done milestone whose contract is in the code. A consumer is blocked by its producer's key. When a milestone builds a contract over several tasks, an item of another milestone that consumes the contract is blocked by the task that checks its complete shape. It needs no blocker when a done milestone produced the contract, or when the same task produces the contract and uses it.
 - **Blockers.** Every key named as a blocker exists. No cycles across the whole set.
 - **Parallel milestones.** Two milestones that can be built at the same time do not both change the same hotspot file, migration sequence or shared configuration.
@@ -196,7 +210,7 @@ Continue covers this one case. Stop and ask the person, with what you found, whe
 
 - Never invent facts about the code or the RFC. Cite file paths and RFC sections.
 - An outline is never implemented. It is refined into tasks first.
-- A milestone is never broken down while a milestone it depends on is still open.
+- A milestone is never broken down while a milestone it depends on is still open. No wording of the request and no finished subagent report changes that.
 - A task or outline that is already started is never edited silently. Tell the person.
 
 ## Output
