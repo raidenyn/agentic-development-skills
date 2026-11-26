@@ -132,6 +132,15 @@ test('a failing edit check prints its output on stderr', async () => {
   assert.match(out.stderr, /verify: failed \(exit 1\): node_modules\/\.bin\/biome check scripts\/x\.mts/);
 });
 
+test('a failing edit check keeps stdout and stderr apart', async () => {
+  const out = await editRun("printf 'stdout-fragment'; printf 'stderr-diagnostic\\n' >&2; exit 1");
+  assert.equal(out.code, 1);
+  assert.equal(
+    out.stderr,
+    'stdout-fragment\nstderr-diagnostic\nverify: failed (exit 1): node_modules/.bin/biome check scripts/x.mts\n',
+  );
+});
+
 test('an edit check that cannot start reports it', async () => {
   const out = await editRun(null);
   assert.equal(out.code, 1);

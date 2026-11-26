@@ -69,8 +69,14 @@ function run(argv: string[], quiet = false): boolean {
     : spawnSync(argv[0] as string, argv.slice(1), { stdio: 'inherit' });
   if (result.status === 0) return true;
   if (quiet) {
-    if (typeof result.stdout === 'string' && result.stdout) process.stderr.write(result.stdout);
-    if (typeof result.stderr === 'string' && result.stderr) process.stderr.write(result.stderr);
+    const stdout = typeof result.stdout === 'string' ? result.stdout : '';
+    const stderr = typeof result.stderr === 'string' ? result.stderr : '';
+    if (stdout) process.stderr.write(stdout);
+    if (stderr) {
+      // Keep the two streams apart as the gate's tailOf does when stdout has no trailing newline.
+      if (stdout && !stdout.endsWith('\n')) process.stderr.write('\n');
+      process.stderr.write(stderr);
+    }
   }
   const why = result.error ? result.error.message : result.signal ? `signal ${result.signal}` : `exit ${result.status}`;
   console.error(`verify: failed (${why}): ${argv.join(' ')}`);
