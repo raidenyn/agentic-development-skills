@@ -173,8 +173,8 @@ Survey: list this thread's triggers with `list_scheduled_tasks` by `projectId` o
 Write:
 
 1. The timer, then the webhook trigger, each read back. A created webhook trigger's `webhookUrl` is printed in the report.
-2. **When the webhook trigger was created in this run,** run [Register the webhook](#register-the-webhook) for each repository of the board with the new URL. A repository without `admin`, or a refused write, gets the owner steps block.
-3. **When it was reused,** register no hook. Carry the `Webhook owner steps:` list from the newest report in this thread that holds one, and add every repository of the board that none of those reports names.
+2. **When the webhook trigger was created in this run,** run [Register the webhook](#register-the-webhook) for each repository of the board with the new URL. A repository without `admin`, or a refused write, gets the owner steps block. When the webhook trigger could not be created, every repository of the board is on the `Webhook owner steps:` list.
+3. **When it was reused, updated or re-enabled,** its URL is unchanged: register no hook. Carry the `Webhook owner steps:` list from the newest report in this thread that holds one, and add every repository of the board that none of those reports names.
 
 ### 8. Skills
 
@@ -235,7 +235,7 @@ Webhook owner steps: <repo>, <repo>
 One wake runs four steps once. All commands are in [references/run-github.md](references/run-github.md). (Spec: Wake procedure exists; Wake order.) The order:
 
 1. [Before the steps](#before-the-steps): preflight and the identity check. An identity failure ends the wake here, with the report.
-2. [Repair](#1-repair), then [Settle](#2-settle). Both run also when the settings block has a gap.
+2. [Repair](#1-repair), then [Settle](#2-settle). Both run also when the settings block or a board field has a gap. A failed board read skips both: they need the board read whole.
 3. [Read again](#after-settle) when Repair or Settle wrote anything.
 4. The [end-of-board check](references/triggers-github.md#end-of-the-board).
 5. [Advance](#3-advance), then [Start](#4-start). Neither runs when the settings block has a gap, and Start is skipped at the end of the board.
@@ -264,7 +264,7 @@ Reference: [Preflight](references/run-github.md#preflight), [Models](references/
 6. **Ready filter.** Run the [Ready filter](references/run-github.md#ready-filter) on the board read once. Advance and Start both use the board read and the filter's lines.
 7. **Models.** Resolve only the role a step uses: plan for Start, implement for Advance, never review. A missing line, a bare name, no match or an unsupported effort stops that step only, and is reported with the line as written in the block.
 
-Run every read, so one report lists every gap. A wake-wide gap (`gh` login or scope, a board field or option, a failed board read, or a settings block gap) means Advance and Start write nothing in this wake, while Repair and Settle still run; the report names it with the owner's step. A finding of step 5 is per repository, never wake-wide: it stops only the starts of that repository's items, which are reported, and other repositories go on. A failed T3 project list stops Start only, since no task can be launched without a project; Advance goes on. Preflight writes nothing. The label `blocked` is created in a repository only when a stop there first needs it, as [The label `blocked`](references/run-github.md#the-label-blocked) says; when it cannot be created, the stops in that repository are reported for the owner, never written. (Spec: Stop label exists.)
+Run every read, so one report lists every gap. A wake-wide gap (`gh` login or scope, a board field or option, a failed board read, or a settings block gap) means Advance and Start write nothing in this wake; Repair and Settle still run on a settings block or board field gap, but a failed board read skips them, since they need the board read whole. The report names it with the owner's step. A finding of step 5 is per repository, never wake-wide: it stops only the starts of that repository's items, which are reported, and other repositories go on. A failed T3 project list stops Start only, since no task can be launched without a project; Advance goes on. Preflight writes nothing. The label `blocked` is created in a repository only when a stop there first needs it, as [The label `blocked`](references/run-github.md#the-label-blocked) says; when it cannot be created, the stops in that repository are reported for the owner, never written. (Spec: Stop label exists.)
 
 ### Wake rules
 

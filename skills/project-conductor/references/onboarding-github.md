@@ -480,7 +480,7 @@ How to read them:
 
 The secret, the two triggers and each repository's GitHub webhook. The trigger objects, the compare, Register the webhook and the owner steps are in [triggers-github.md](triggers-github.md); this section says what onboarding runs of them. Everything here needs the conductor thread: the triggers bind to the thread that creates them. (Spec: Webhook secret from the owner; Two triggers bound to the conductor; Register the webhook for one repository.) Anchor: `#webhook`.
 
-`<reconcile>` is `reconcileMinutes` of the **planned** block: run the parser on `readme.new` into `<work>/settings.json` before the compare, so `reconcileMinutes: 2` gives the timer `everyMs` 120000.
+`<reconcile>` is `reconcileMinutes` of the **planned** block: run the parser on `readme.new` into `<work>/settings.json` before the compare, so `reconcileMinutes: 2` gives the timer `everyMs` 120000. When the block has a gap that the [Settings block](#settings-block) plan cannot rewrite, no planned block is checked: take `reconcileMinutes` from the parse of the current block, the `<work>/settings.json` of [The block's `conductor`](#the-blocks-conductor). When it is `null`, both triggers are cannot do, with the owner step of the block's gap, and nothing of this section is written.
 
 ### Survey the triggers
 
@@ -505,7 +505,7 @@ Only when the webhook trigger is created in this run, and only after the plan wa
 1. Call `request_secret` with `label` "GitHub webhook secret", `reason` "A new secret for the project-conductor webhook trigger. Keep it: every repository's GitHub webhook needs it." and `delivery` `"secretRef"`. Create the webhook trigger with `schedule_task` and that `secretRef` in `schedule.signature.secretRef`. Keep its `webhookUrl` as `<url>`, and print it in the report: only this call returns it.
 2. When at least one repository of `<work>/repos.json` has `admin` true, call `request_secret` again with the same label, `reason` "The same secret again, to add it to the repositories' GitHub webhooks." and `delivery` `"file"`. That path is the `<secret file>` of Register the webhook. Without an admin repository, ask nothing more.
 
-The secret is never generated, printed or stored. A refused or cancelled `request_secret` leaves the webhook trigger uncreated: cannot do, owner step "run: check the triggers" in this thread, which creates it on the owner's command.
+The secret is never generated, printed or stored. A refused or cancelled `request_secret` leaves the webhook trigger uncreated: cannot do, owner step "run: check the triggers" in this thread, which creates it on the owner's command. Every repository of the board is then a webhook owner step (see [The report line](#the-report-line)).
 
 Read each trigger back with `list_scheduled_tasks` and the compare: no difference and `enabled` true.
 
@@ -544,6 +544,8 @@ jq -s 'add | unique_by(.position)' <work>/scan-*.json | jq -r --rawfile repos <w
 
 The owner can then run "register the webhook for `<repo>`" with the URL pasted from T3's Settings.
 
+A webhook trigger that the survey planned as change, updated or re-enabled in place, follows this rule too: its URL is unchanged, so no hook is registered again and the list is carried.
+
 ### The report line
 
 Every onboarding report ends its Triggers section with the full list, as [Webhook owner steps](triggers-github.md#webhook-owner-steps) defines it:
@@ -552,4 +554,4 @@ Every onboarding report ends its Triggers section with the full list, as [Webhoo
 Webhook owner steps: <repo>, <repo>
 ```
 
-When the webhook trigger was created in this run, the list is every repository whose result is `owner step`, compared without case and sorted. When it was reused, it is the carried list above. `none` when empty. In a dry run, it is the list the run would leave: the repositories without `admin`, or the carried list.
+When the webhook trigger was created in this run, or no webhook trigger exists after the run (the secret was refused, or the create failed), the list starts from every repository of the board, minus those registered or reused in this run, compared without case and sorted, as step 1 of [Webhook owner steps](triggers-github.md#webhook-owner-steps) says. When it was reused, updated or re-enabled, it is the carried list above. `none` when empty. In a dry run, it is the list the run would leave: the repositories without `admin`, or the carried list.

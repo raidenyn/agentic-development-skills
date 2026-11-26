@@ -155,9 +155,9 @@ def known: ["conductor", "model.plan", "model.review", "model.implement"] + (def
             ($e[] | select(.key | IN(known[]) | not) | "unknown-key:\(.key)"),
             ($e | group_by(.key)[] | select(length > 1 and (.[0].key | IN(known[]))) | "repeated-key:\(.[0].key)"),
             ($e[] | select(.key | IN(defaults | keys_unsorted[])) | (.value // "") as $v
-              | if .key == "reconcileMinutes" and ($v | test("^[0-9]+$")) then
-                  select(($v | tonumber) < 1 or ($v | tonumber) > 1440) | "out-of-range:reconcileMinutes=\($v) (1 to 1440)"
-                else select($v | test("^[1-9][0-9]*$") | not) | "not-a-positive-integer:\(.key)=\($v)" end),
+              | if ($v | test("^[1-9][0-9]*$") | not) then "not-a-positive-integer:\(.key)=\($v)"
+                elif .key == "reconcileMinutes" and ($v | tonumber) > 1440 then "out-of-range:reconcileMinutes=\($v) (1 to 1440)"
+                else empty end),
             (select($close != null and one("conductor") == null and (values("conductor") | length) < 2) | "missing-conductor") ] }
 EOF
 jq -f <work>/settings.jq <work>/readme.json > <work>/settings-parsed.json
@@ -469,7 +469,7 @@ The fixtures in `openspec/changes/conductor-owns-the-board/evidence/fixtures/` p
 
 ## Repair
 
-Repair finds claims that a wake left half-made, and finishes or undoes them. It runs first, in every wake that passes the identity check of [Preflight](#preflight), also when the [settings block](#settings-block) has a gap: it needs no setting. It needs the board read whole. Anchor: `#repair`.
+Repair finds claims that a wake left half-made, and finishes or undoes them. It runs first, in every wake that passes the identity check of [Preflight](#preflight), also when the [settings block](#settings-block) or a board field has a gap: it needs no setting. It needs the board read whole, so a failed board read skips it. Anchor: `#repair`.
 
 Every line of Repair goes to `<work>/repair.tsv`, one per item, as `<repo>#<issue>\t<action>\t<detail>`. Every write that succeeds also runs `touch <work>/wrote`. Save the re-read query and `reread` of [Look before claiming](#look-before-claiming) first: Repair uses them too.
 
@@ -616,7 +616,7 @@ When the board has a gap of [The board](#the-board), such as a missing Status op
 
 ## Settle
 
-Settle finds a task whose pull request has merged, and settles its thread. It runs after Repair, under the same identity check, also when the settings block has a gap. Anchor: `#settle`.
+Settle finds a task whose pull request has merged, and settles its thread. It runs after Repair, under the same identity check, also when the settings block or a board field has a gap. A failed board read skips it, as it skips Repair. Anchor: `#settle`.
 
 Every line of Settle goes to `<work>/settle.tsv`, one per item, as `<repo>#<issue>\t<action>\t<detail>`. Every write that succeeds also runs `touch <work>/wrote`.
 
@@ -732,7 +732,7 @@ jq -r --arg agent <agent> --slurpfile repos <work>/repos.json -f <work>/filter.j
 
 The comparison covers Status, the run fields, assignees, blockers, linked branches, closing pull requests, the body with its task key, and the edit history. A failed read, any difference, or a line other than `start` skips the item: "changed during the wake", with the difference. Keep the edit ids of `claim-<owner>-<name>-<issue>.json`: they name the body that was claimed.
 
-Then search for the item's thread. The launch key is `<repo>#<issue> attempt 1`, such as `raidenyn-shadow/task-run-scratch#15 attempt 1`. Call the T3 tool `t3_thread_search` with `query` set to the launch key and `projectId` set to `<project of repo>`, the T3 project of the item's own repository. The search matches titles by word prefix, so `#1 attempt 1` also finds `#15 attempt 1`, and a longer title holding the key is found too: compare every `matches[].title` with the launch key exactly. A match whose title equals the launch key makes the item taken: skip it as `taken:thread`, with the thread id. The search skips archived threads.
+Then search for the item's thread. The launch key is `<repo>#<issue> attempt 1`, such as `raidenyn-shadow/task-run-scratch#15 attempt 1`. Call the T3 tool `t3_thread_search` with `query` set to the launch key and `projectId` set to `<project of repo>`, the T3 project of the item's own repository. The search matches titles by word prefix, so `#1 attempt 1` also finds `#15 attempt 1`, and a longer title holding the key is found too: compare every `matches[].title` with the launch key exactly. A match whose title equals the launch key makes the item taken: skip it as `taken:thread`, with the thread id. Pass `limit` 50: an answer with 50 `matches` and no exact match is unknown, because more may exist, so skip the item as `unknown:thread-search` for this wake, as Repair treats a full page. A failed search skips it the same way, with the error. The search skips archived threads.
 
 ### Writes
 

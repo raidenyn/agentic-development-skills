@@ -4,6 +4,8 @@ The commands of the rule "Work that does not fit becomes a follow-up task" of `S
 
 `<repo>` is the issue's `owner/name`. `<current>` is the current task's issue number and `<current url>` its URL, both from `Issue`. `<board owner>` and `<board n>` come from the `Board` line: `https://github.com/orgs/<board owner>/projects/<board n>` or `https://github.com/users/<board owner>/projects/<board n>`.
 
+Write every file of these steps outside the task's worktree, so that `git add -A` never commits one into the task's pull request. Run `mktemp -d` once, before step 1: the directory it prints is `<tmp>`, used by every later command, since a shell variable does not outlive its command. `<tmp>/keys.tsv` holds the keys, and `<body file>` is `<tmp>/body.md`.
+
 ## 1. Read the keys
 
 The current task's key is the first line of its body, `<!-- task: <rfc-slug>/<milestone-slug>/<number> -->`. Its prefix is `<rfc-slug>/<milestone-slug>`. Read the first line of every issue of the repository, open and closed, every page, pull requests skipped:
@@ -11,10 +13,10 @@ The current task's key is the first line of its body, `<!-- task: <rfc-slug>/<mi
 ```bash
 gh api --paginate "repos/<repo>/issues?state=all&per_page=100" \
   --jq '.[] | select(.pull_request | not)
-        | "\(.number)\t\((.body // "") | (split("\n")[0] // "") | rtrimstr("\r"))"' > keys.tsv
+        | "\(.number)\t\((.body // "") | (split("\n")[0] // "") | rtrimstr("\r"))"' > <tmp>/keys.tsv
 
 # the highest number under the prefix: the follow-up is one above it
-grep -oE '<!-- task: <prefix>/[0-9]+ -->' keys.tsv | grep -oE '[0-9]+ -->' | grep -oE '[0-9]+' | sort -n | tail -1
+grep -oE '<!-- task: <prefix>/[0-9]+ -->' <tmp>/keys.tsv | grep -oE '[0-9]+ -->' | grep -oE '[0-9]+' | sort -n | tail -1
 ```
 
 `<next>` is that number plus one. Read the current task's milestone, its plan issue and the issues it blocks:
@@ -24,11 +26,11 @@ gh issue view <current> --repo <repo> --json milestone --jq '.milestone.title'
 gh api --paginate "repos/<repo>/issues/<current>/dependencies/blocking?per_page=100" --jq '.[] | "\(.number)\t\(.html_url)"'
 ```
 
-The milestone's plan issue (first line `<!-- plan: <rfc-slug>/<milestone-slug> -->`) is among the blocked issues. If it is not, add it: find it in `keys.tsv` by that first line.
+The milestone's plan issue (first line `<!-- plan: <rfc-slug>/<milestone-slug> -->`) is among the blocked issues. If it is not, add it: find it in `<tmp>/keys.tsv` by that first line.
 
 ## 2. Create the issue
 
-Write the body to a file: first line `<!-- task: <prefix>/<next> -->`, then the task format, written from the remaining work, with the current design constraints.
+Write the body to `<body file>`, `<tmp>/body.md`: first line `<!-- task: <prefix>/<next> -->`, then the task format, written from the remaining work, with the current design constraints.
 
 ```bash
 gh issue create --repo <repo> --title "<title>" --milestone "<milestone title>" --body-file <body file>

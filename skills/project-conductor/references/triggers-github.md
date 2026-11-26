@@ -9,7 +9,7 @@ The placeholders are those of [run-github.md](run-github.md#preflight): `<work>`
 | `<conductor project>` | The conductor thread's T3 project: `thread.projectId` of the `t3_thread_read` answer in [Identity](run-github.md#identity). |
 | `<reconcile>` | `reconcileMinutes` of `<work>/settings.json`: a whole number from 1 to 1440. |
 
-Every procedure here runs in the conductor thread itself, after the identity check of [Preflight](run-github.md#preflight). An identity failure stops it before any trigger call. A `null` `reconcileMinutes` (a settings gap) stops every trigger write: the report names the gap.
+Every procedure here runs in the conductor thread itself, after the identity check of [Preflight](run-github.md#preflight). An identity failure stops it before any trigger call. Inside onboarding, which runs before the thread has its title and the block its `conductor`, onboarding's own [Preflight](onboarding-github.md#preflight) and [Conductor thread](onboarding-github.md#conductor-thread) step replace the identity check. A `null` `reconcileMinutes` (a settings gap) stops every trigger write except the `enabled: false` writes of [End of the board](#end-of-the-board), which need no setting: the report names the gap.
 
 Nothing here keeps state. Which repositories have a hook, and which are an owner step, is read again each time from GitHub and from this thread's own reports.
 
@@ -144,7 +144,7 @@ Webhook owner steps: <repo>, <repo>
 
 `Webhook owner steps: none` when the list is empty. The [automatic check](#automatic-check) reads the newest such line, so the line always repeats the whole list, never only this run's changes:
 
-1. Take the list of the newest message of this thread that holds a line starting with `Webhook owner steps:`. Find it with the [backward scan](#the-backward-scan); none found is the empty list.
+1. **When this run created the webhook trigger, or no webhook trigger exists after the run,** start from every repository of the board, `<work>/repos.json`: a new URL leaves every hook registered before pointing at a dead URL, and without a trigger no hook delivers. Otherwise take the list of the newest message of this thread that holds a line starting with `Webhook owner steps:`. Find it with the [backward scan](#the-backward-scan); none found is the empty list.
 2. Remove every repository this run registered or reused, and add every repository whose result in this run is `owner step`.
 
 **A standalone run** ("register the webhook for `<repo>`") ends with this report:
@@ -201,7 +201,7 @@ First run [Identity](run-github.md#identity), [Board](run-github.md#board), the 
    - **A missing timer** is created with the timer object of [Triggers](#triggers). This needs no secret.
    - **A missing webhook trigger** is created only on the owner's command, because it needs a new secret from the owner. In the owner's check, report it and ask: "The trigger `project-conductor webhook` is missing. Create a new one? Every repository's webhook must then be registered again with the new URL." Only on a yes:
      1. call `request_secret` with `label` "GitHub webhook secret", `reason` "A new secret for the project-conductor webhook trigger. Keep it: every repository's GitHub webhook needs it." and `delivery` `"secretRef"`, and create the webhook trigger with it. Print the `webhookUrl` it returns;
-     2. call `request_secret` again with the same label, `reason` "The same secret again, to add it to the repositories' GitHub webhooks." and `delivery` `"file"`. This is the `<secret file>` of Register the webhook;
+     2. ask for no file secret here. Step 5 registers only the repositories the owner names, and step 2 of [Register the webhook](#steps-to-register) asks for the `<secret file>` once, only when a repository with `admin` is registered;
      3. say in the report that every repository's hook must be registered again with the new URL, and list the repositories of the board.
 5. **Register the webhook** for each repository the owner names in the command, such as "check the triggers and register the webhook for `a/x`", with `<url>` from step 4 or pasted by the owner. Without a URL in this run, ask the owner to paste it from T3's Settings.
 
@@ -295,7 +295,7 @@ When the condition holds, run [Check the triggers](#check-the-triggers), steps 1
 - It only updates, re-enables or creates the timer, and updates or re-enables the webhook trigger. It never calls `request_secret`, never creates the webhook trigger and never runs Register the webhook.
 - **A missing webhook trigger** becomes the owner step "run: check the triggers".
 - **When both triggers were fine** (every compare had no difference and both were enabled), add one owner step per repository of the counted events: "deliveries missing for `<repo>`: check its GitHub webhook".
-- The report is the `## Trigger check` report, with `Run: automatic, unattended`, the counted events listed under Owner steps with their times, and the `Webhook owner steps:` line repeated from the newest one, unchanged.
+- The report is the `## Trigger check` report, with `Run: automatic, unattended`, the counted events listed under Owner steps with their times, and the `Webhook owner steps:` line repeated from the newest one, unchanged. When the webhook trigger is missing, the line is every repository of the board instead, as [Webhook owner steps](#webhook-owner-steps) step 1 says.
 
 Because the bounds include the last check, one missed event runs the check once, not on every timer wake.
 
