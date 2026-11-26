@@ -31,5 +31,5 @@ Tick a group's boxes in one edit, only after the matching plan Task's last step 
 
 ## 4. Checks and evidence
 
-- [ ] 4.1 `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'` and `pnpm run check` pass.
-- [ ] 4.2 Live run on OpenCode first, then Claude Code: in a scratch repo with the gate installed from this branch and a command that prints a note and exits 0 on `edit`, an edit puts the note in the tool result. Record the raw tool result or hook context from each host's transcript for the pull request.
+- [x] 4.1 `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'` and `pnpm run check` pass.
+- [x] 4.2 Live run on OpenCode first, then Claude Code: in a scratch repo with the gate installed from this branch and a command that prints a note and exits 0 on `edit`, an edit puts the note in the tool result. Record the raw tool result or hook context from each host's transcript for the pull request.
