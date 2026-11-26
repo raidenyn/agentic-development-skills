@@ -134,6 +134,25 @@ function prune(dir, own) {
   }
 }
 
+// The process groups the newest lock's dead holder recorded, when that lock is recent enough to
+// trust. Read-only and synchronous: the supervisor calls it before it takes the lock.
+export function staleGroups(dir, { maxAgeMs }) {
+  try {
+    const all = listLocks(dir);
+    const newest = all[all.length - 1];
+    if (newest === undefined) return [];
+    const lock = readLock(join(dir, `gate.lock.${newest}`));
+    if (!lock || lock.released === true || pidAlive(lock.pid)) return [];
+    const at = lock.at;
+    if (typeof at !== 'number' || !Number.isFinite(at) || !(Date.now() - at < maxAgeMs)) return [];
+    const pgids = lock.pgids;
+    if (!Array.isArray(pgids)) return [];
+    return pgids.filter((pgid) => Number.isInteger(pgid) && pgid > 0);
+  } catch {
+    return [];
+  }
+}
+
 export function updateGateLock(handle, fields) {
   const current = readLock(handle.path) ?? {};
   writeJsonAtomic(handle.path, { ...current, ...fields });
