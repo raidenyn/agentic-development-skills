@@ -14,13 +14,13 @@ The verify gate passes only a failure's output to the model. line-mcp's own lint
 - From: `scripts/verify.mts` lets each edit check (Biome, the build, `skills.py validate`) print to the inherited stdout and stderr, even on a pass.
 - To: on `VERIFY_TRIGGER=edit` it captures each check's output and prints it only when that check fails, so a passing edit prints nothing.
 - Reason: without this, every edit in this repo would hand the model Biome's "Checked 1 file … No fixes applied." summary.
-- Impact: non-breaking. A failing check prints the same output, now all on stderr, and full runs still stream theirs. One difference: when the gate kills an edit run at its timeout, the captured output dies with the script, so the model gets "timed out" without a tail. Edit checks here take well under a second.
+- Impact: non-breaking. A failing check prints the same output, now all on stderr, and full runs still stream theirs. The gate's failing-edit text stays byte-for-byte identical for identical command output; the wrapper's suppression of an earlier check that passed is intentional. One difference: when the gate kills an edit run at its timeout, the captured output dies with the script, so the model gets "timed out" without a tail. Edit checks here take well under a second.
 
-**Side effect on failed edit calls:** both hosts run the edit check after a failed edit call too. On Claude Code (`PostToolUseFailure`) a passing run that prints now adds its note to `additionalContext`. On OpenCode, which reports edit and write calls with `input.filePath` even when they failed, the adapter adds its existing notice `hook-runtime: the context from tool.after of the failed edit call was not delivered.`, where today there is silence. No code change; reported in the pull request.
+**Side effect on failed edit calls:** both hosts run the edit check after a failed edit call too. On Claude Code (`PostToolUseFailure`) a passing run that prints now adds its note to `additionalContext`. On OpenCode the notice is conditional on the handler returning context: the installed hook runtime maps `patch` from `result.metadata.files`, and maps `edit`/`write` only from `input.filePath`, but OpenCode 2.4.1 sends `input.path` for those native tools, so they do not trigger the gate today. This change's live proof uses `patch`; mapping native `edit`/`write` is a follow-up. No code change; reported in the pull request.
 
 **Unchanged:** task and turn-end runs, failing edit runs, the pass record, the config keys, the hook handler interface.
 
-**Docs:** the skill's "The one command", "Triggers" and "Making it fast" sections explain the note on a passing edit. "Onboard" and "Update" say to check that the command prints nothing on a passing edit unless it means to hand the model a note. `verify-gate` goes from 0.1.2 to 0.1.3 and is released to the Pages catalog.
+**Docs:** the skill's "The one command", "Triggers" and "Making it fast" sections explain the note on a passing edit. "Onboard" and "Update" say to check that the command prints nothing on a passing edit unless it means to hand the model a note. `verify-gate` goes from 0.1.2 to **0.2.2** (main reached 0.2.1 before the rebase) and is released to the Pages catalog.
 
 ## Capabilities
 
@@ -35,7 +35,7 @@ None.
 
 ## Impact
 
-- `src/verify-gate/lib/gate.mts` (`runGate` keeps the tail on a pass), `src/verify-gate/handler.mts` (the edit branch of `afterTool`), `src/verify-gate/tool.json` (0.1.3), and the regenerated `skills/agent-harness-verify-gate/assets/verify-gate/` and `.agents/harness/` copies.
+- `src/verify-gate/lib/gate.mts` (`runGate` keeps the tail on a pass), `src/verify-gate/handler.mts` (the edit branch of `afterTool`), `src/verify-gate/tool.json` (0.2.2), and the regenerated `skills/agent-harness-verify-gate/assets/verify-gate/` and `.agents/harness/` copies.
 - `tests/agent-harness/verify-handler.test.mjs`, plus a test through each host adapter.
 - `scripts/verify.mts` and its test `scripts/test-verify.mts`.
 - `skills/agent-harness-verify-gate/SKILL.md`.

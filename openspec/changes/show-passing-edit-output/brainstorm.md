@@ -5,11 +5,11 @@ Issue #58 (`agent-harness/m1-verify-triggers/4`). When the verify command passes
 - **What the model sees.** `verify: <command> passed after the edit of <file>:` followed by a blank line and the output tail. The tail uses the same 60-line and 1 MiB cap as a failure. The word "passed" keeps it from reading as a failure.
 - **Silence stays silent.** A passing edit run whose output is empty or only whitespace returns nothing, as it does today.
 - **Full runs are unchanged.** A passing task run or turn-end run adds nothing, whatever it prints.
-- **Failures are unchanged.** A failing edit run reports byte for byte as before.
+- **Failures are unchanged.** A failing edit run reports byte for byte as before for identical command output; the repo wrapper intentionally suppresses an earlier check that passed.
 - **Several files.** When one edit touches several files, each file's note or failure is joined in file order, the way failures are joined today.
 - **This repo's own command is quieted.** `scripts/verify.mts` stops letting its edit checks print on a pass. Each edit check's output is captured and printed only when that check fails, so a pass here prints nothing and adds nothing. Full runs keep streaming their output, because a pass there never reaches the model and a person running by hand wants to see progress.
 - **Docs.** The skill's "The one command", "Triggers" and "Making it fast" sections say how a command hands a note to the model on a passing edit: print it and exit 0. Print nothing to stay silent.
-- **Release.** `verify-gate` goes from 0.1.2 to 0.1.3. `pnpm run harness:update` refreshes the installed copy, and the version reaches the Pages catalog through the release.
+- **Release.** `verify-gate` ships as **0.2.2** (it was 0.1.2 when this change was written, and main reached 0.2.1 before the rebase). `pnpm run harness:update` refreshes the installed copy, and the version reaches the Pages catalog through the release.
 
 ## Alternatives Considered
 

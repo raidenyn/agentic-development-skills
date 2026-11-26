@@ -14,10 +14,10 @@
 
 - The note's wording is exactly `verify: ${cmd} passed after the edit of ${file}:\n\n${tail}`, where `cmd = cfg.command.join(' ')`.
 - Blank means the captured tail is whitespace only (`tail.trim() === ''`). A blank pass returns nothing (`null`), as today.
-- Task and turn-end passes add nothing. A failing edit run's text is unchanged byte for byte. No existing test is edited or deleted.
+- Task and turn-end passes add nothing. A failing edit run's text is unchanged byte for byte for identical command output; the repo wrapper intentionally suppresses an earlier check's output when it passed. No existing test is edited or deleted.
 - The hook handler interface, the config keys (`CONFIG_KEYS`) and the pass record stay unchanged. Add no setting.
 - Edit `src/` only, never `skills/*/assets/` or `.agents/harness/`.
-  - Bump `src/verify-gate/tool.json` once, to `0.1.3`, and run `pnpm run harness:update` in the same task as the source change, so `vendored.test.mjs` never sees the installed copy behind the assets.
+  - Bump `src/verify-gate/tool.json` once, to `0.2.2`, and run `pnpm run harness:update` in the same task as the source change, so `vendored.test.mjs` never sees the installed copy behind the assets.
   - If `main` already carries `verify-gate` 0.1.3 when you rebase, take the next version in `tool.json` and in the SKILL sentence, then run `pnpm run harness:update` again.
 - `tests/agent-harness/*.mjs` must not import `.mts`: CI runs them on Node 22.0.0.
 - In test strings that hold shell, write `$VERIFY_FILE` without braces. Biome's `noTemplateCurlyInString` warns on `${…}` in a plain string.
@@ -69,7 +69,7 @@
 - Test: `tests/agent-harness/verify-hosts.test.mjs`
 - Modify: `src/verify-gate/lib/gate.mts`. In `runGate`, change the `return { status: 'passed', text: '' }` after a zero exit, and the `// -> {status…}` comment above it.
 - Modify: `src/verify-gate/handler.mts`. In `afterTool`, change the `for (const file of event.files ?? [])` loop.
-- Modify: `src/verify-gate/tool.json` to `"version": "0.1.3"`.
+- Modify: `src/verify-gate/tool.json` to `"version": "0.2.2"`.
 - Regenerated: `skills/agent-harness-verify-gate/assets/verify-gate/**`, `.agents/harness/**` and the lock.
 
 **Interfaces:**
@@ -108,8 +108,8 @@
   - In `gate.mts`, return `{ status: 'passed', text: '', tail: run.tail }`, and say in the comment that `tail` is set on a pass too.
   - In the per-file loop of `handler.mts`, push `` `verify: ${cmd} passed after the edit of ${file}:\n\n${r.tail}` `` when `r.status === 'passed' && String(r.tail ?? '').trim()`. Put it next to the existing `failed` push, so the order is per file.
 - [ ] **Step 6: Bump the version and refresh**
-  - Set `tool.json` to `0.1.3`, then run `pnpm run harness:update`.
-  - Expected: it exits 0, and the assets, `.agents/harness/verify-gate/` and the lock all show `0.1.3`.
+  - Set `tool.json` to `0.2.2`, then run `pnpm run harness:update`.
+  - Expected: it exits 0, and the assets, `.agents/harness/verify-gate/` and the lock all show `0.2.2`.
 - [ ] **Step 7: Run the whole check**
   - Run: `pnpm run check`
   - Expected: PASS, with no test edited, `vendored.test.mjs` included.
@@ -136,7 +136,7 @@
       ;;
     ```
     Then add one line: whatever an edit pass prints reaches the model, so keep passing checks quiet there.
-  - **Onboard** step 3 and **Update**: one sentence each. Check that the command prints nothing on a passing edit, unless it means to hand the model a note. A command that printed a progress line before 0.1.3 now sends it to the model.
+  - **Onboard** step 3 and **Update**: one sentence each. Check that the command prints nothing on a passing edit, unless it means to hand the model a note. A command that printed a progress line before 0.2.2 now sends it to the model.
 - [ ] **Step 2: Validate**
   - Run: `python3 scripts/skills.py validate && claude plugin validate .`
   - Expected: both pass.
@@ -155,9 +155,9 @@
 - [ ] **Step 3: Verify, sync and archive** the change in the same pull request, before merge: run `openspec-verify-change`, then sync the delta specs and archive.
 - [ ] **Step 4: Pull request.** Reference the issue with `Refs #58`, not `Closes`, because the release criterion is proved only after merge. The report covers:
   - Each acceptance criterion with its evidence. Mark criterion 5 (the release) "not done in this PR: the release is dispatched by hand after merge".
-  - The changed areas: `verify-gate` 0.1.3 and `scripts/verify.mts`. No contract changed.
+  - The changed areas: `verify-gate` 0.2.2 and `scripts/verify.mts`. No contract changed.
   - How the work differs from the task: the `scripts/verify.mts` change, and 9 hand-written files and the actual line count against the estimate of 6 files and 150 lines. That is at the issue's 1.5× limit, not past it.
   - Side effects after a failed edit call: the pass note on Claude Code `PostToolUseFailure`, and the OpenCode notice.
   - Effects on waiting tasks: veles's `scripts/verify_gate.py` must print nothing on a passing edit (#63, which #15 also waits on), and line-mcp keeps its lint note.
   - Work found along the way, as proposed tasks: the two flaky tests named under Global Constraints.
-- [ ] **Step 5: Release criterion.** The owner dispatches the release (`release.yml`, `workflow_dispatch` on main). After it runs, post the link to the release that carries `verify-gate` 0.1.3 on issue #58, and close the issue.
+- [ ] **Step 5: Release criterion.** The owner dispatches the release (`release.yml`, `workflow_dispatch` on main). After it runs, post the link to the release that carries `verify-gate` 0.2.2 on issue #58, and close the issue.
