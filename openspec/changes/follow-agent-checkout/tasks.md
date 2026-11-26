@@ -1,6 +1,6 @@
 ## 1. Test fixtures
 
-- [ ] 1.1 Add a `linkedWorktree(r, { branch = 'wt' })` helper to `tests/agent-harness/helpers.mjs` (`git worktree add`, cleanup with `git worktree remove --force`), tolerant of the main repo being removed first; reuse `installBoth` from `verify-helpers.mjs` and commit `.agents/` so a worktree inherits the copies
+- [x] 1.1 Add a `linkedWorktree(r, { branch = 'wt' })` helper to `tests/agent-harness/helpers.mjs` (`git worktree add`, cleanup with `git worktree remove --force`), tolerant of the main repo being removed first; reuse `installBoth` from `verify-helpers.mjs` and commit `.agents/` so a worktree inherits the copies
 
 ## 2. Checkout resolution in the Claude Code entry (D1, D2)
 
