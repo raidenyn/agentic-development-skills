@@ -53,14 +53,38 @@ function pyYamlProblem(argv: string[]): string | null {
   return probe.status === 0 ? null : 'PyYAML is missing: pip install -r requirements-dev.txt';
 }
 
-function run(argv: string[]): boolean {
+// With `quiet` the check's output is held back and shown only when it fails, so a passing edit prints nothing.
+function run(argv: string[], quiet = false): boolean {
   const missing = pyYamlProblem(argv);
   if (missing) {
     console.error(`verify: ${missing}`);
     return false;
   }
-  const result = spawnSync(argv[0] as string, argv.slice(1), { stdio: 'inherit' });
+  const result = quiet
+    ? spawnSync(argv[0] as string, argv.slice(1), {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        encoding: 'utf8',
+        maxBuffer: Infinity,
+      })
+    : spawnSync(argv[0] as string, argv.slice(1), { stdio: 'inherit' });
   if (result.status === 0) return true;
+  // The last captured chunk: the failure line must start on a new line after an unterminated one.
+  let last = '';
+  if (quiet) {
+    const stdout = typeof result.stdout === 'string' ? result.stdout : '';
+    const stderr = typeof result.stderr === 'string' ? result.stderr : '';
+    if (stdout) {
+      process.stderr.write(stdout);
+      last = stdout;
+    }
+    if (stderr) {
+      // Keep the two streams apart as the gate's tailOf does when stdout has no trailing newline.
+      if (last && !last.endsWith('\n')) process.stderr.write('\n');
+      process.stderr.write(stderr);
+      last = stderr;
+    }
+  }
+  if (last && !last.endsWith('\n')) process.stderr.write('\n');
   const why = result.error ? result.error.message : result.signal ? `signal ${result.signal}` : `exit ${result.status}`;
   console.error(`verify: failed (${why}): ${argv.join(' ')}`);
   return false;
@@ -78,7 +102,7 @@ function main(): number {
     }
     checks = file && existsSync(file) ? editChecks(file) : [];
   }
-  for (const argv of checks) if (!run(argv)) return 1;
+  for (const argv of checks) if (!run(argv, trigger === 'edit')) return 1;
   return 0;
 }
 

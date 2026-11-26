@@ -157,6 +157,15 @@ test('run exits 0 on a pass and 1 on a failure', async () => {
   assert.match(bad.stdout + bad.stderr, /E7 broken/);
 });
 
+test('run prints no output of a passing run', async () => {
+  const r = await verifyRepo({ files: { 'src/a.js': 'a\n' } });
+  cleanups.push(r.cleanup);
+  r.setOut('progress\n');
+  const ok = await vg(r, 'run');
+  assert.equal(ok.code, 0, ok.stderr + ok.stdout);
+  assert.match(ok.stdout, /^verify: passed in \d+ ms\.\n?$/);
+});
+
 test('two real processes at once: the second waits for the lock, then takes the shortcut or runs', async () => {
   const r = await verifyRepo({ files: { 'src/a.js': 'a\n' } });
   cleanups.push(r.cleanup);

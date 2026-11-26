@@ -20,18 +20,18 @@
       }
     },
     "verify-gate": {
-      "version": "0.2.1",
+      "version": "0.2.2",
       "files": {
         "cli.mjs": "966d1c5a2a02a50a3162193459104e2befd7888672acf49d6cd564c5b29a08d2",
-        "handler.mjs": "4f3cffe7547fa209fcf99abe2832b3a3e7d0b4b416f873ecebfb9c2eaa0ee366",
+        "handler.mjs": "85079292afbf645bcd944289fd5efb030c381fc4ef891242bce10841ac637054",
         "lib/config.mjs": "afcabd0f71591de520665f08798e5456e5abdb6ed95bb4ff6a79f24739270d40",
-        "lib/gate.mjs": "8f70bd85289db88b616fa17cf8f5cf7fe1c84c316cbae3255215e03b1f1cd29a",
+        "lib/gate.mjs": "a3614425a537d4ce6841dc39f1ec267d6b58b2e5830dbfa8564d7648c2d9aa13",
         "lib/install.mjs": "d1abb61c1b9bd95317c4efb0b8205ed0bd24e16a29a0de4304b0a29634b0dffa",
         "lib/run.mjs": "c59f1033816d5c82bce2a7337c5f6c8d4fb5f508dd1322b5ab0ad387ab6e0e5c",
         "lib/state.mjs": "250eceda1407574c725d19721977ab0eb1d11a99787600bdef8e93df2d4f77c0",
         "lib/tree.mjs": "563ad861cd89398f2423edccacae18d0706945d00ddd3de769abdf23d9b96cd7",
         "lib/triggers.mjs": "f513429acf9d6df30cf291bbe42b781e8f1450a395dcfc8e26cf7eae2ee4fd42",
-        "tool.json": "7629bfe6ef840e053a2599be031f2b11f91b0f78c3e317a1babfcca2c9cd3d8d"
+        "tool.json": "923f6c65dcadfa9c5a35897106fa85103730d9870a1a8aae3b903d0f6904e0bc"
       }
     }
   }

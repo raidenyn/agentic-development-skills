@@ -406,6 +406,7 @@ export const refundCharge = ({ lock, sessionDir, id }: { lock: Lock; sessionDir:
 const keysEqual = (a: any, b: any) => a && b && a.tree === b.tree && a.stat === b.stat;
 
 // -> {status: 'skipped'|'passed'|'failed'|'contended', text, detail?, tail?, failure?, ...onFailure()}
+// `tail` is set on a pass too: the captured output of the run, which may be ''.
 // `stateDir` is the tool's state folder (lock, private index, records). `onFailure(failure)` runs
 // under the gate lock, so its decision is serialized with every other run.
 export async function runGate({
@@ -491,7 +492,7 @@ export async function runGate({
           writeJsonAtomic(passFile, { version: 1, tree: key.tree, stat: key.stat, config: hash, trigger });
         }
       }
-      return { status: 'passed', text: '' };
+      return { status: 'passed', text: '', tail: run.tail };
     }
     if (full) rmSync(passFile, { force: true });
     const tail = run.tail || run.spawnError || '';
