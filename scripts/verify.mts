@@ -53,14 +53,25 @@ function pyYamlProblem(argv: string[]): string | null {
   return probe.status === 0 ? null : 'PyYAML is missing: pip install -r requirements-dev.txt';
 }
 
-function run(argv: string[]): boolean {
+// With `quiet` the check's output is held back and shown only when it fails, so a passing edit prints nothing.
+function run(argv: string[], quiet = false): boolean {
   const missing = pyYamlProblem(argv);
   if (missing) {
     console.error(`verify: ${missing}`);
     return false;
   }
-  const result = spawnSync(argv[0] as string, argv.slice(1), { stdio: 'inherit' });
+  const result = quiet
+    ? spawnSync(argv[0] as string, argv.slice(1), {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        encoding: 'utf8',
+        maxBuffer: Infinity,
+      })
+    : spawnSync(argv[0] as string, argv.slice(1), { stdio: 'inherit' });
   if (result.status === 0) return true;
+  if (quiet) {
+    if (typeof result.stdout === 'string' && result.stdout) process.stderr.write(result.stdout);
+    if (typeof result.stderr === 'string' && result.stderr) process.stderr.write(result.stderr);
+  }
   const why = result.error ? result.error.message : result.signal ? `signal ${result.signal}` : `exit ${result.status}`;
   console.error(`verify: failed (${why}): ${argv.join(' ')}`);
   return false;
@@ -78,7 +89,7 @@ function main(): number {
     }
     checks = file && existsSync(file) ? editChecks(file) : [];
   }
-  for (const argv of checks) if (!run(argv)) return 1;
+  for (const argv of checks) if (!run(argv, trigger === 'edit')) return 1;
   return 0;
 }
 

@@ -93,3 +93,47 @@ test('a missing PyYAML fails with the install hint', async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+async function editRun(stub: string | null) {
+  const dir = await mkdtemp(join(tmpdir(), 'repo-verify-'));
+  try {
+    await mkdir(join(dir, 'scripts'));
+    await writeFile(join(dir, 'scripts', 'x.mts'), 'export {};\n');
+    if (stub !== null) {
+      await mkdir(join(dir, 'node_modules', '.bin'), { recursive: true });
+      await writeFile(join(dir, 'node_modules', '.bin', 'biome'), `#!/bin/sh\n${stub}\n`);
+      await chmod(join(dir, 'node_modules', '.bin', 'biome'), 0o755);
+    }
+    return await runNode(script, [], { cwd: dir, env: { VERIFY_TRIGGER: 'edit', VERIFY_FILE: 'scripts/x.mts' } });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+test('a passing edit check prints nothing', async () => {
+  const out = await editRun("echo 'Checked 1 file in 3ms. No fixes applied.' >&2; echo ok; exit 0");
+  assert.equal(out.code, 0);
+  assert.equal(out.stdout, '');
+  assert.equal(out.stderr, '');
+});
+
+test('a passing edit check with large output prints nothing', async () => {
+  const out = await editRun("head -c 2000000 /dev/zero | tr '\\0' a; exit 0");
+  assert.equal(out.code, 0);
+  assert.equal(out.stdout, '');
+  assert.equal(out.stderr, '');
+});
+
+test('a failing edit check prints its output on stderr', async () => {
+  const out = await editRun("echo 'x.mts:1 lint/bad'; exit 1");
+  assert.equal(out.code, 1);
+  assert.equal(out.stdout, '');
+  assert.match(out.stderr, /x\.mts:1 lint\/bad/);
+  assert.match(out.stderr, /verify: failed \(exit 1\): node_modules\/\.bin\/biome check scripts\/x\.mts/);
+});
+
+test('an edit check that cannot start reports it', async () => {
+  const out = await editRun(null);
+  assert.equal(out.code, 1);
+  assert.match(out.stderr, /verify: failed \(spawnSync node_modules\/\.bin\/biome ENOENT\)/);
+});
