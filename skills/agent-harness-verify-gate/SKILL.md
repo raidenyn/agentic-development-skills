@@ -56,6 +56,7 @@ Every trigger that reaches the gate first compares the working-tree content key 
   - **The backstop.** No session gets more than 10 turn-end blocks in total.
   - **After a limit.** Each later turn end passes with `verify: still failing after <n> blocks; continuing. Run node .agents/harness/verify-gate/cli.mjs run by hand.` and the tail. `<n>` is the limit that was reached: `maxBlocks` for one failure, or 10 at the backstop.
   - **Where notices go.** On Claude Code, a notice at the root `Stop` is a `systemMessage`, which the user sees and the model does not. On OpenCode it is a message that does not resume the agent.
+  - **The stale notice.** On OpenCode, a superseded failing turn-end result is shown with the fixed `stale` text (`verify: the check at the end of the previous turn failed and was not counted; the next turn end checks again. ...`) as a message that does not resume the agent, and it is not counted. It is shown only when no later turn end is queued; that turn end reports instead.
 - **Full-run pass.** A pass of a task or turn-end run records `pass.json`, but only if the content key is the same before and after the run. A failed full run deletes it.
 - **Contention.** A run that finds another run holding the gate lock waits for it until its own deadline, and then usually finds nothing changed. Only if the deadline passes does it report `verify: verification already running; nothing was checked.`.
 - **Gate failures.** If the gate itself fails, for example with no command set or at a hook deadline, the host call goes ahead and the model is told `hook verify-gate failed on <event>: <reason>. Run node .agents/harness/verify-gate/cli.mjs run by hand.`.
@@ -69,6 +70,9 @@ Every trigger that reaches the gate first compares the working-tree content key 
 - **Subagents on OpenCode.** A blocked subagent's pre-fix result can reach the parent before the fix, because OpenCode hands the parent every round of a subagent's work. The parent may act once on the failing result. It is then handed the fixed result, and its own turn end verifies the final tree. On Claude Code, the parent gets the result after the fix.
 - **Identical labels.** Swapping which of two items with the same text is ticked leaves the counts unchanged, and is not detected as a tick.
 - **Loose objects.** The private index writes loose git objects for untracked files. `git gc` prunes them.
+- **Failure identity.** A changed tail is a new failure. The count is per session and is not reset by a pass, and the 10-block backstop bounds it. This differs from veles's "node and step, 3 in a row"; a follow-up proposes parallel commands keyed on the failing command.
+- **Manual runs.** A killed `verify-gate run` is not reaped, and a manual run that takes over a dead hook's lock does not reap it.
+- **Pid reuse.** A dead hook's recorded group could, within 24 h, belong to an unrelated process of the same user.
 
 ## Making it fast
 
