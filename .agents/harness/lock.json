@@ -13,7 +13,7 @@
         "lib/opencode-adapter.mjs": "3b06b062125bf636cea72b228b3023882ed022f4b75fc0ab5782846697f2d78f",
         "lib/runtime.mjs": "20f2a9cfd2a36289511cb02beddbc44230d34f3bcd5f2b40b5e49a72b9f88ec4",
         "lib/state.mjs": "0eb56ddc5457799a3348cbd701cd4f714727d2da3ea3ee3d6c07ef33c6c75ccc",
-        "lib/supervisor.mjs": "7c5a7778e5869438ff01bff31e1b3c56ce8efd1c2224845c8e103be746eef710",
+        "lib/supervisor.mjs": "829c4128821bfd3058f0ca537f55753fc488021fb77926835aa6ba04854565bd",
         "lib/worker-entry.mjs": "c9564de05717b3bfd00ab60aa8a884f773334d6d96650e688671e2874704cce3",
         "opencode/index.mjs": "ea7c4c9b355fede5f2544f28e0e380a8b77b2ccea938858e984382a302faab16",
         "tool.json": "5d3876c84854d5c48f6a84ea2631e7408600ef03201b66f0ee65757e838a56d7"

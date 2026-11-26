@@ -3,15 +3,15 @@
 // through installTool + loadHandlers.
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { ASSETS, tempRepo } from './helpers.mjs';
+import { ASSETS, tempRepo, until } from './helpers.mjs';
 
 const lib = (f) => import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', f)).href);
 const { createRuntime, loadHandlers } = await lib('runtime.mjs');
-const { startWorker } = await lib('supervisor.mjs');
+const { killGroups, startWorker } = await lib('supervisor.mjs');
 const { installTool } = await lib('install.mjs');
 
 const repo = await tempRepo();
@@ -345,4 +345,167 @@ test('a deadline that passes while the event waits for a worker to load: no post
     { ...ids, workDeadline: Date.now() + 300, hostDeadline: Date.now() + 5000 },
   );
   assert.match(o3.notices[0], /timed out/);
+});
+
+// A dead hook's groups, recorded in its lock, are reaped before the next acquire takes the gate
+// lock (design D3). A group that traps TERM only dies by the SIGKILL that confirmUntil forces.
+function spawnGroup(script) {
+  const child = spawn('sh', ['-c', script], { detached: true, stdio: 'ignore' });
+  child.unref();
+  return child.pid;
+}
+
+// A group that ignores SIGTERM, and has installed the trap before `ready` exists.
+function spawnTrappingGroup(dir) {
+  const ready = join(dir, 'ready');
+  const child = spawn('sh', ['-c', 'trap "" TERM; : > "$1"; sleep 30; :', 'sh', ready], {
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.unref();
+  return { pgid: child.pid, ready };
+}
+
+function killGroup(pgid) {
+  try {
+    process.kill(-pgid, 'SIGKILL');
+  } catch {}
+}
+
+function deadPid() {
+  return spawnSync(process.execPath, ['-e', '0']).pid;
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code !== 'ESRCH';
+  }
+}
+
+// gate.lock.1 as a hook that died with its groups still recorded.
+function seedLock(gate, pgids) {
+  mkdirSync(gate, { recursive: true });
+  writeFileSync(join(gate, 'gate.lock.1'), JSON.stringify({ pid: deadPid(), at: Date.now(), pgids }));
+}
+
+test('killGroups with confirmUntil sends SIGKILL before it returns', async () => {
+  const { pgid, ready } = spawnTrappingGroup(scratch('killer'));
+  try {
+    await until(() => existsSync(ready), 2000, 'the group to trap TERM');
+    assert.equal(groupAlive(pgid), true, 'the group is running');
+    const start = Date.now();
+    await killGroups([pgid], { cleanupDeadline: Date.now() + 10_000, confirmUntil: Date.now() + 300 });
+    const elapsed = Date.now() - start;
+    assert.ok(elapsed < 1000, `killGroups resolved after ${elapsed} ms`);
+    assert.ok(elapsed >= 250, `SIGTERM did not end the group before confirmUntil (${elapsed} ms)`);
+    await until(() => !groupAlive(pgid), 500, `group ${pgid} to die`);
+  } finally {
+    killGroup(pgid);
+  }
+});
+
+test("the next acquire reaps a dead holder's groups", async () => {
+  const dir = scratch('reap');
+  const gate = join(dir, 'gate');
+  const pgid = spawnGroup('sleep 30');
+  const p = await proxy(
+    'reaper',
+    `
+    export default {
+      name: 'reaper', events: ['prompt'],
+      async handle(ev, c) {
+        await c.lock.acquire(ev.gate);
+        return { context: 'ok' };
+      },
+    };
+  `,
+  );
+  try {
+    seedLock(gate, [pgid]);
+    const out = await rt([p]).dispatch({ type: 'prompt', gate }, ids);
+    assert.equal(out.context, 'ok');
+    assert.equal(groupAlive(pgid), false, "the dead holder's group was reaped");
+    await until(
+      () => {
+        try {
+          return JSON.parse(readFileSync(join(gate, 'gate.lock.2'), 'utf8')).released === true;
+        } catch {
+          return false;
+        }
+      },
+      4000,
+      'gate.lock.2 to be released',
+    );
+  } finally {
+    killGroup(pgid);
+  }
+});
+
+test('an event that ended during the reap gets an error and leaves no held lock', async () => {
+  const dir = scratch('endafter');
+  const gate = join(dir, 'gate');
+  const file = join(dir, 'acquire');
+  const { pgid, ready } = spawnTrappingGroup(dir);
+  const p = await proxy(
+    'endafter',
+    `
+    import { writeFileSync } from 'node:fs';
+    export default {
+      name: 'endafter', events: ['prompt'],
+      handle(ev, c) {
+        c.lock.acquire(ev.gate).then(
+          () => writeFileSync(ev.file, 'ok'),
+          (e) => writeFileSync(ev.file, String(e.message)),
+        );
+        return { context: 'ok' };
+      },
+    };
+  `,
+  );
+  try {
+    await until(() => existsSync(ready), 2000, 'the group to trap TERM');
+    seedLock(gate, [pgid]);
+    const start = Date.now();
+    const out = await rt([p]).dispatch(
+      { type: 'prompt', gate, file },
+      { ...ids, workDeadline: start + 300, hostDeadline: start + 5000 },
+    );
+    assert.equal(out.context, 'ok');
+    await until(() => existsSync(file), 4000, 'the acquire to settle');
+    assert.match(readFileSync(file, 'utf8'), /ended/, 'the acquire failed with the event-ended error');
+    await until(() => !groupAlive(pgid), 1000, `group ${pgid} to die`);
+    const held = readdirSync(gate)
+      .filter((f) => /^gate\.lock\.\d+$/.test(f))
+      .map((f) => JSON.parse(readFileSync(join(gate, f), 'utf8')))
+      .filter((body) => body.released !== true && pidAlive(body.pid));
+    assert.deepEqual(held, [], 'no gate lock is held by a live pid');
+  } finally {
+    killGroup(pgid);
+  }
+});
+
+test('a vanished group is skipped without delay', async () => {
+  const dir = scratch('vanished');
+  const gate = join(dir, 'gate');
+  const p = await proxy(
+    'vanished',
+    `
+    export default {
+      name: 'vanished', events: ['prompt'],
+      async handle(ev, c) {
+        const lock = await c.lock.acquire(ev.gate);
+        return { context: lock ? 'held' : 'contended' };
+      },
+    };
+  `,
+  );
+  seedLock(gate, [deadPid()]);
+  const start = Date.now();
+  const out = await rt([p]).dispatch({ type: 'prompt', gate }, ids);
+  const elapsed = Date.now() - start;
+  assert.equal(out.context, 'held');
+  assert.ok(elapsed < 200, `returned after ${elapsed} ms`);
 });
