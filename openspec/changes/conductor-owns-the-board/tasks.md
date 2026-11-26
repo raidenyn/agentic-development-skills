@@ -102,23 +102,23 @@
 
 ## 8. Live proofs on the scratch board (evidence in `evidence/`)
 
-- [ ] 8.1 Clear the scratch ground:
+- [x] 8.1 Clear the scratch ground:
   - release #15, #16 and #17 by hand (assignee, run fields, `blocked`, Status Backlog, their branches deleted), and set #18 to Backlog;
   - close draft PRs #23–#25;
   - archive their threads;
   - close the old onboarding PR if one exists.
-- [ ] 8.2 Write `reconcileMinutes: 2` into the scratch readme block, then onboard project 5 from a new thread in "No project". A second `/project-conductor` from another project must stop and name the first conductor. A repeat run in the conductor thread must report "Nothing changed." and ask for no secret. Record whether the agent can write the readme of a board it owns, and the first onboarding report.
-- [ ] 8.3 Repair proofs. Pause the timer while the cases are prepared, and launch threads before writing their fields. Afterwards, release #4 and #5 by hand and re-enable the timer, so that both slots are free for 8.4:
+- [x] 8.2 Write `reconcileMinutes: 2` into the scratch readme block, then onboard project 5 from a new thread in "No project". A second `/project-conductor` from another project must stop and name the first conductor. A repeat run in the conductor thread must report "Nothing changed." and ask for no secret. Record whether the agent can write the readme of a board it owns, and the first onboarding report.
+- [x] 8.3 Repair proofs. Pause the timer while the cases are prepared, and launch threads before writing their fields. Afterwards, release #4 and #5 by hand and re-enable the timer, so that both slots are free for 8.4:
   - an issue assigned by hand with no thread is released;
   - a thread launched with the launch key and an empty "Run thread" is recorded;
   - a live thread with "Run thread" set and nothing pushed is left alone;
   - evidence: board and thread list before and after one wake.
-- [ ] 8.3a Identity and project proofs: a renamed title, a block naming another thread, and a repository with no T3 project (`task-run-scratch-2`); then a repeat onboarding run adds `task-run-scratch-2` to `Webhook owner steps:`.
-- [ ] 8.4 Webhook and timer proofs, on two prepared pairs: B1 blocking T1, and B2 blocking T2, where T2 does not fit and is reused in 8.8, and T2 blocking D2. Wait more than 120 s after the webhook run before the lost delivery:
+- [x] 8.3a Identity and project proofs: a renamed title, a block naming another thread, and a repository with no T3 project (`task-run-scratch-2`); then a repeat onboarding run adds `task-run-scratch-2` to `Webhook owner steps:`.
+- [x] 8.4 Webhook and timer proofs, on two prepared pairs: B1 blocking T1, and B2 blocking T2, where T2 does not fit and is reused in 8.8, and T2 blocking D2. Wait more than 120 s after the webhook run before the lost delivery:
   - closing a blocker starts the unblocked task through the webhook;
   - a delivery lost on purpose (hook `active: false`) is made good by the timer wake, and the automatic check runs once; a close in `task-run-scratch-2`, whose hook is an owner step, runs no check;
   - evidence: run list with `Trigger:` lines.
-- [ ] 8.5 Signature and dedupe proofs:
+- [x] 8.5 Signature and dedupe proofs:
   - a GitHub-signed delivery runs;
   - a wrong signature does not;
   - a redelivery of the same delivery id does not run again;
@@ -131,7 +131,7 @@
   - with both closed and nothing in flight, both triggers are disabled and the conductor is settled, not archived; reopening "M1 scratch" and "check the triggers" re-enables them;
   - evidence: thread states and `list_scheduled_tasks`.
 - [ ] 8.7 Run "register the webhook for `raidenyn/line-mcp`" with the scratch URL. Expect a refusal, the owner's steps, and nothing written.
-- [ ] 8.8 Follow-up rule proof (run before 8.6): T2 from 8.4, which does not fit, creates a keyed follow-up in Backlog with the blocked-by and blocking links, and its PR closes the original issue.
+- [x] 8.8 Follow-up rule proof (run before 8.6): T2 from 8.4, which does not fit, creates a keyed follow-up in Backlog with the blocked-by and blocking links, and its PR closes the original issue.
 - [ ] 8.9 Re-enable or delete the scratch triggers as the owner prefers, and record the leftovers.
 
 ## 9. Pull request
