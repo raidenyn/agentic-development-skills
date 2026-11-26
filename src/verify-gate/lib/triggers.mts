@@ -5,6 +5,8 @@
 
 export type Counts = { ticked: number; unticked: number };
 
+const escapeRe = (s: string): string => s.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+
 // `*` matches within one path segment, `**` across segments, `?` one character other than `/`.
 export function matchesGlob(pattern: unknown, relPath: unknown): boolean {
   const path = String(relPath).replace(/\\/g, '/');
@@ -25,10 +27,45 @@ export function matchesGlob(pattern: unknown, relPath: unknown): boolean {
     } else if (c === '?') {
       re += '[^/]';
     } else {
-      re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+      re += escapeRe(c);
     }
   }
   return new RegExp(`^${re}$`).test(path);
+}
+
+const segmentRe = (seg: string): RegExp => {
+  let re = '';
+  for (const c of seg) {
+    if (c === '*') re += '[^/]*';
+    else if (c === '?') re += '[^/]';
+    else re += escapeRe(c);
+  }
+  return new RegExp(`^${re}$`, 'u');
+};
+
+// Segment by segment: a whole `**` segment matches zero or more path segments, any other segment
+// exactly one. In the pattern `\` counts as `/`; the path is split on `/` only. `.` and empty
+// segments are dropped on both sides. Memoized, so repeated `**` cost patterns x path segments.
+export function matchesPathGlob(pattern: unknown, relPath: unknown): boolean {
+  const keep = (s: string) => s !== '' && s !== '.';
+  const pat = String(pattern).replace(/\\/g, '/').split('/').filter(keep);
+  const path = String(relPath).split('/').filter(keep);
+  const res = pat.map((s) => (s === '**' ? null : segmentRe(s)));
+  const memo = new Map<number, boolean>();
+  const go = (i: number, j: number): boolean => {
+    if (i === pat.length) return j === path.length;
+    const key = i * (path.length + 1) + j;
+    const hit = memo.get(key);
+    if (hit !== undefined) return hit;
+    const re = res[i];
+    const ok =
+      re === null
+        ? go(i + 1, j) || (j < path.length && go(i, j + 1))
+        : j < path.length && re.test(path[j]) && go(i + 1, j + 1);
+    memo.set(key, ok);
+    return ok;
+  };
+  return go(0, 0);
 }
 
 const ITEM = /^\s*[-*+]\s+\[([ xX])\]\s+(.*?)\s*$/;

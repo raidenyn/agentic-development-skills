@@ -50,6 +50,29 @@ test('verify-pass fails after a config change', async () => {
   assert.equal(await proof(r), 'verify-pass: the verify-gate config changed since the last pass');
 });
 
+test('adding editFiles alone invalidates the pass for the next run that reaches the gate', async () => {
+  const r = await repo();
+  const hk = createVerifyHandler({ contentKey: async () => ({ tree: 'T', stat: 'S', statMap: new Map() }) });
+  await fire(hk, r, turnEnd());
+  await r.setConfig({ editFiles: ['**/*.ts'] });
+  assert.equal(
+    await hk.proofs['verify-pass'](proofCtx(r)),
+    'verify-pass: the verify-gate config changed since the last pass',
+  );
+  await r.write('docs/x.md', 'x\n');
+  const before = r.log().length;
+  let o = await fire(hk, r, edit(['docs/x.md']));
+  assert.deepEqual(o.traced, ['edit-skipped']);
+  assert.equal(r.log().length, before);
+  o = await fire(hk, r, turnEnd());
+  assert.deepEqual(o.traced, ['ran']);
+  assert.equal(r.log().length, before + 1);
+  assert.equal(await hk.proofs['verify-pass'](proofCtx(r)), null);
+  o = await fire(hk, r, turnEnd());
+  assert.deepEqual(o.traced, ['no-change']);
+  assert.equal(r.log().length, before + 1);
+});
+
 test('verify-pass never holds after only edit runs', async () => {
   const r = await repo();
   await r.write('src/a.js', 'b\n');

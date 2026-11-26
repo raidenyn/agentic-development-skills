@@ -80,6 +80,27 @@ test('two simultaneous failures at count two (two spawned claude.mjs): exactly o
   assert.equal(r.blocks('claude-code', SID).charges.length, 3);
 });
 
+test('an Edit outside editFiles prints nothing and traces edit-skipped', async () => {
+  const r = await installed();
+  await r.setConfig({ editFiles: ['**/*.ts'] });
+  await r.write('README.md', 'hello world\n');
+  const raw = readFileSync(new URL('./fixtures/claude/PostToolUse-Edit.json', import.meta.url), 'utf8');
+  const input = raw.replaceAll('/REPO', r.dir);
+  const res = await runNode(CLAUDE_MJS, [], {
+    cwd: r.dir,
+    input,
+    env: { CLAUDE_PROJECT_DIR: r.dir, AGENT_HARNESS_TRACE: '1' },
+  });
+  assert.equal(res.code, 0, res.stderr);
+  assert.equal(res.stdout, '');
+  assert.equal(r.log().length, 0);
+  const lines = readFileSync(join(r.gitDir, 'agent-harness', 'hook-runtime', 'trace.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  assert.equal(lines.at(-1).outcomes['verify-gate'], 'edit-skipped');
+});
+
 test('a no-change Stop prints nothing and its trace line says no-change', async () => {
   const r = await installed();
   assert.equal(out(await stop(r)), null);
