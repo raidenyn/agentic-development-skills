@@ -39,13 +39,13 @@
 
 ## 7. Documentation (C1, C2, C3, design D1 and D6)
 
-- [ ] 7.1 In `skills/agent-harness-hook-runtime/SKILL.md`: document `stale` as an addition to the Handler interface and update the line on how results are joined; replace the "superseded result is not delivered" line; add the reap and the signal handling, with the older-copy caveat
-- [ ] 7.2 In `skills/agent-harness-verify-gate/SKILL.md`, add the stale notice to the "Turn end" bullets of the Triggers section, and add "Limits" entries: the C1 failure identity (a changed tail is a new failure, the count is per session, the 10-block backstop), manual runs in both directions, and pid reuse within 24 h
+- [x] 7.1 In `skills/agent-harness-hook-runtime/SKILL.md`: document `stale` as an addition to the Handler interface and update the line on how results are joined; replace the "superseded result is not delivered" line; add the reap and the signal handling, with the older-copy caveat
+- [x] 7.2 In `skills/agent-harness-verify-gate/SKILL.md`, add the stale notice to the "Turn end" bullets of the Triggers section, and add "Limits" entries: the C1 failure identity (a changed tail is a new failure, the count is per session, the 10-block backstop), manual runs in both directions, and pid reuse within 24 h
 
 ## 8. Versions, build and checks
 
-- [ ] 8.1 Bump `src/hook-runtime/tool.json` to 0.1.4 and `src/verify-gate/tool.json` to 0.2.2, then run `pnpm run harness:update`
-- [ ] 8.2 Run `pnpm run check`, `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'` and `openspec validate settle-turn-end-differences --strict`; all pass
+- [x] 8.1 Bump `src/hook-runtime/tool.json` to 0.1.4 and `src/verify-gate/tool.json` to 0.2.2, then run `pnpm run harness:update`
+- [x] 8.2 Run `pnpm run check`, `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'` and `openspec validate settle-turn-end-differences --strict`; all pass
 - [ ] 8.3 Sync the delta specs into `openspec/specs/` and archive the change in this PR (`openspec archive settle-turn-end-differences`), then re-run `openspec validate --strict`
-- [ ] 8.4 Draft the PR report: each acceptance criterion with its evidence, the C1/C2/C3 findings and decisions, the changed contracts and versions, the reversed test, CI testing Ubuntu only, and the proposed follow-up tasks (parallel verify commands; reaping for manual CLI runs)
+- [x] 8.4 Draft the PR report: each acceptance criterion with its evidence, the C1/C2/C3 findings and decisions, the changed contracts and versions, the reversed test, CI testing Ubuntu only, and the proposed follow-up tasks (parallel verify commands; reaping for manual CLI runs)
 - [ ] 8.5 After the merge, confirm that the Pages catalog lists `hook-runtime` 0.1.4 and `verify-gate` 0.2.2 (issue #62 acceptance criterion)
