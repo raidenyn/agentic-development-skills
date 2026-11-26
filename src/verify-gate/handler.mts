@@ -26,7 +26,7 @@ import {
   waitLock,
 } from './lib/gate.mts';
 import { commonSessionDir, writeJsonAtomic } from './lib/state.mts';
-import { detectTicks, itemCounts, matchesGlob, suppressSeen } from './lib/triggers.mts';
+import { detectTicks, itemCounts, matchesGlob, matchesPathGlob, suppressSeen } from './lib/triggers.mts';
 import type {
   EventPayload,
   Handler,
@@ -297,13 +297,20 @@ async function afterTool(event: EventPayload, ctx: Ctx, deps: Deps, trace: Trace
   const texts: string[] = [];
   let ran = false;
   let contended = false;
-  for (const file of event.files ?? []) {
+  const all = event.files ?? [];
+  const globs = cfg.editFiles;
+  const files = globs ? all.filter((f) => globs.some((g) => matchesPathGlob(g, f))) : all;
+  if (all.length && !files.length) {
+    trace('edit-skipped');
+    return null;
+  }
+  for (const file of files) {
     const r = await runGate({ ...gateOptions(ctx, deps), trigger: 'edit', file });
     if (r.status === 'contended') contended = true;
     if (r.status === 'passed' || r.status === 'failed') ran = true;
     if (r.status === 'failed') texts.push(`verify: ${cmd} failed after the edit of ${file}: ${body(r)}`);
   }
-  if (!(event.files ?? []).length) return null;
+  if (!all.length) return null;
   trace(ran ? 'ran' : contended ? 'contended' : 'no-change');
   if (contended) texts.push(CONTENDED);
   return texts.length ? { context: texts.join('\n\n') } : null;

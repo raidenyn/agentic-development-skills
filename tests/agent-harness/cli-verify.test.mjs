@@ -67,6 +67,14 @@ test('check passes once the command is set', async () => {
   assert.match(check.stdout, /verify-gate: ok/);
 });
 
+test('check accepts editFiles', async () => {
+  const r = await withRuntime();
+  assert.equal((await vg(r, 'install')).code, 0);
+  setSection(r, { command: ['node', '-e', '0'], editFiles: ['**/*.ts', 'src/**'] });
+  const check = await installedVg(r, 'check');
+  assert.equal(check.code, 0, check.stderr);
+});
+
 test('maxBlocks 5 is rejected by check; other bad values too', async () => {
   const r = await withRuntime();
   assert.equal((await vg(r, 'install')).code, 0);
@@ -76,6 +84,9 @@ test('maxBlocks 5 is rejected by check; other bad values too', async () => {
     [{ command: ['x'], timeoutSeconds: -1 }, /timeoutSeconds/],
     [{ command: ['x'], taskFiles: 'a' }, /taskFiles/],
     [{ command: 'npm test' }, /set verify-gate\.command/],
+    [{ command: ['x'], editFiles: '**/*.ts' }, /verify-gate\.editFiles/],
+    [{ command: ['x'], editFiles: [] }, /verify-gate\.editFiles/],
+    [{ command: ['x'], editFiles: [''] }, /verify-gate\.editFiles/],
   ])) {
     setSection(r, section);
     const check = await installedVg(r, 'check');

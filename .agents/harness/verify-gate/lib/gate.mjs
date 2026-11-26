@@ -11,7 +11,7 @@ import { runCommand as defaultRunCommand } from './run.mjs';
 import { acquireGateLock, writeJsonAtomic } from './state.mjs';
 import { changedFiles as defaultChangedFiles, contentKey as defaultContentKey } from './tree.mjs';
 
-export const CONFIG_KEYS = Object.freeze(['command', 'base', 'taskFiles', 'timeoutSeconds', 'maxBlocks']);
+export const CONFIG_KEYS = Object.freeze(['command', 'base', 'taskFiles', 'editFiles', 'timeoutSeconds', 'maxBlocks']);
 export const REQUIRED_KEYS = Object.freeze(['command']);
 export const DEFAULTS = Object.freeze({
   base: 'origin/main',
@@ -48,6 +48,7 @@ export function normalizeConfig(section) {
     command: Array.isArray(s.command) ? s.command.map(String) : [],
     base: typeof s.base === 'string' && s.base ? s.base : DEFAULTS.base,
     taskFiles: strings(s.taskFiles) ? [...s.taskFiles] : [...DEFAULTS.taskFiles],
+    editFiles: strings(s.editFiles) ? [...s.editFiles] : null,
     timeoutSeconds:
       typeof s.timeoutSeconds === 'number' && s.timeoutSeconds > 0 ? s.timeoutSeconds : DEFAULTS.timeoutSeconds,
     maxBlocks: max,
@@ -75,6 +76,8 @@ export function configErrors(section) {
     errors.push('"verify-gate.base" must be a non-empty string');
   if (section.taskFiles !== undefined && !strings(section.taskFiles))
     errors.push('"verify-gate.taskFiles" must be a non-empty list of glob strings');
+  if (section.editFiles !== undefined && !strings(section.editFiles))
+    errors.push('"verify-gate.editFiles" must be a non-empty list of glob strings');
   if (
     section.timeoutSeconds !== undefined &&
     !(
@@ -96,7 +99,9 @@ export function configErrors(section) {
 
 export function configHash(cfg) {
   const c = normalizeConfig(cfg);
-  return sha256(JSON.stringify([c.command, c.base, c.taskFiles, c.timeoutSeconds, c.maxBlocks]));
+  const parts = [c.command, c.base, c.taskFiles, c.timeoutSeconds, c.maxBlocks];
+  if (c.editFiles) parts.push(c.editFiles);
+  return sha256(JSON.stringify(parts));
 }
 
 // ---- files --------------------------------------------------------------------------------------
