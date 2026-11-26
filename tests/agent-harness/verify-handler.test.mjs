@@ -7,7 +7,7 @@ import { existsSync, readFileSync, readdirSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { ASSETS } from './helpers.mjs';
+import { ASSETS, directSpawn } from './helpers.mjs';
 import { edit, editBefore, fire, proofCtx, shellAfter, shellBefore, turnEnd, verifyRepo } from './verify-helpers.mjs';
 
 const vg = (f) => import(pathToFileURL(join(ASSETS.verifyGate, f)).href);
@@ -82,6 +82,110 @@ test('an edit pass writes no pass record', async () => {
   await r.write('src/a.js', 'b\n');
   await fire(h, r, edit(['src/a.js']));
   assert.equal(r.passRecord(), null);
+});
+
+// ---- editFiles ----------------------------------------------------------------------------------
+
+function counting() {
+  const calls = { n: 0 };
+  const spawn = (argv, opts) => {
+    calls.n++;
+    return directSpawn(argv, opts);
+  };
+  return { spawn, calls };
+}
+const tsRepo = (config = { editFiles: ['**/*.ts'] }) => repo({ config });
+
+test('editFiles: an edit outside it spawns nothing', async () => {
+  const r = await tsRepo();
+  await r.write('docs/notes.md', 'x\n');
+  const { spawn, calls } = counting();
+  const { result, traced } = await fire(h, r, edit(['docs/notes.md']), { spawn });
+  assert.equal(result, null);
+  assert.deepEqual(traced, ['edit-skipped']);
+  assert.equal(calls.n, 0);
+  assert.equal(r.log().length, 0);
+});
+
+test('editFiles: edits inside it run', async () => {
+  const r = await tsRepo();
+  await r.write('src/a.ts', 'a\n');
+  await r.write('root.ts', 'a\n');
+  const { traced } = await fire(h, r, edit(['src/a.ts', 'root.ts']));
+  assert.deepEqual(traced, ['ran']);
+  assert.deepEqual(
+    r.log().map((l) => [l.trigger, l.file]),
+    [
+      ['edit', 'src/a.ts'],
+      ['edit', 'root.ts'],
+    ],
+  );
+});
+
+test('editFiles: a mixed call runs only matching files', async () => {
+  const r = await tsRepo();
+  await r.write('src/a.ts', 'a\n');
+  await fire(h, r, edit(['src/a.ts', 'README.md']));
+  assert.equal(r.log().length, 1);
+  assert.equal(r.log()[0].file, 'src/a.ts');
+});
+
+test('editFiles: dot segments in a pattern are ignored', async () => {
+  const r = await tsRepo({ editFiles: ['./src/**/*.ts'] });
+  await r.write('src/a.ts', 'a\n');
+  await fire(h, r, edit(['src/a.ts']));
+  assert.equal(r.log().length, 1);
+});
+
+test('editFiles: a backslash in a file name is not a separator', async () => {
+  const r = await tsRepo({ editFiles: ['src/*.ts'] });
+  await r.write('src\\a.ts', 'a\n');
+  const { spawn, calls } = counting();
+  const { traced } = await fire(h, r, edit(['src\\a.ts']), { spawn });
+  assert.deepEqual(traced, ['edit-skipped']);
+  assert.equal(calls.n, 0);
+});
+
+test('editFiles: a tick outside it still runs the task check', async () => {
+  const r = await tsRepo();
+  await tickCall(r);
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task'],
+  );
+});
+
+test('editFiles: a tool.after with no files traces nothing', async () => {
+  const r = await tsRepo();
+  const { spawn, calls } = counting();
+  const { result, traced } = await fire(h, r, edit([]), { spawn });
+  assert.equal(result, null);
+  assert.deepEqual(traced, []);
+  assert.equal(calls.n, 0);
+});
+
+test('editFiles: an unset command still fails the gate', async () => {
+  const r = await tsRepo();
+  await r.setConfig({ command: undefined });
+  await assert.rejects(fire(h, r, edit(['docs/notes.md'])), /set verify-gate\.command/);
+});
+
+test('editFiles: a shell call is unchanged', async () => {
+  const r = await tsRepo();
+  await call(r, shellBefore('sh1'), () => r.write(TASKS, tick(TASKS_TEXT, '1.3 Test the thing')), shellAfter('sh1'));
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task'],
+  );
+});
+
+test('no editFiles: a Markdown edit runs as before', async () => {
+  const r = await repo();
+  await r.write('docs/notes.md', 'x\n');
+  const { traced } = await fire(h, r, edit(['docs/notes.md']));
+  assert.deepEqual(traced, ['ran']);
+  assert.equal(r.log().length, 1);
+  assert.equal(r.log()[0].file, 'docs/notes.md');
 });
 
 // ---- ticked tasks -------------------------------------------------------------------------------

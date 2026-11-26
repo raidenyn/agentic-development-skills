@@ -12,9 +12,9 @@ Tick a group's boxes only after its tests pass, because every tick starts this r
 
 ## 2. Edit filter
 
-- [ ] 2.1 Add `matchesPathGlob(pattern, relPath)` to `src/verify-gate/lib/triggers.mts`. It matches segment by segment like the task-file walker: `.` and empty segments are dropped, `**` as a whole segment matches zero or more segments, and any other segment matches one segment through a local segment regex (`*` → `[^/]*`, `?` → `[^/]`, the rest escaped), not `matchesGlob`, which rewrites `\` in the path. Only the pattern has `\` turned into `/`; the path is split on `/` only, as the adapters deliver it. Unit tests in `triggers.test.mjs` cover `src/**.ts`, `src/**`, `./src/**/*.ts`, a backslash in a pattern, a backslash in a file name, a newline in a file name, a root file, `?`, and a fast `false` for twelve `**/x/` segments against 50 nested `x/` directories. The recursion is memoized by pattern and path index
-- [ ] 2.2 In `afterTool` (`src/verify-gate/handler.mts`), after the tick branch, keep only the edited files that match `editFiles`. Keep all of them when the key is absent. When `event.files` is non-empty and none are left, trace `edit-skipped` and return `null` before any `runGate`
-- [ ] 2.3 Handler tests in `verify-handler.test.mjs`. Count calls to the injected `spawn`, and count `r.log()` lines too:
+- [x] 2.1 Add `matchesPathGlob(pattern, relPath)` to `src/verify-gate/lib/triggers.mts`. It matches segment by segment like the task-file walker: `.` and empty segments are dropped, `**` as a whole segment matches zero or more segments, and any other segment matches one segment through a local segment regex (`*` → `[^/]*`, `?` → `[^/]`, the rest escaped), not `matchesGlob`, which rewrites `\` in the path. Only the pattern has `\` turned into `/`; the path is split on `/` only, as the adapters deliver it. Unit tests in `triggers.test.mjs` cover `src/**.ts`, `src/**`, `./src/**/*.ts`, a backslash in a pattern, a backslash in a file name, a newline in a file name, a root file, `?`, and a fast `false` for twelve `**/x/` segments against 50 nested `x/` directories. The recursion is memoized by pattern and path index
+- [x] 2.2 In `afterTool` (`src/verify-gate/handler.mts`), after the tick branch, keep only the edited files that match `editFiles`. Keep all of them when the key is absent. When `event.files` is non-empty and none are left, trace `edit-skipped` and return `null` before any `runGate`
+- [x] 2.3 Handler tests in `verify-handler.test.mjs`. Count calls to the injected `spawn`, and count `r.log()` lines too:
   - outside the scope: zero spawns, `null`, and `edit-skipped`;
   - `src/a.ts` and `root.ts` run;
   - a mixed call runs only the `.ts` file;
@@ -25,7 +25,7 @@ Tick a group's boxes only after its tests pass, because every tick starts this r
   - a shell call with a tick still runs `task`;
   - without the key, a Markdown edit runs as before;
   - in `verify-proof.test.mjs`, a sequence test with a constant injected content key: after adding the key, the proof reports a config change, a Markdown edit is still skipped, the next turn end runs and `verify-pass` then holds, and the turn end after it skips
-- [ ] 2.4 Host test in `verify-hosts.test.mjs`. With `AGENT_HARNESS_TRACE=1` and `editFiles: ["**/*.ts"]`, a Claude `PostToolUse` Edit of a Markdown file exits 0, prints no output and adds no `verify.log` line. Its trace line has `outcomes['verify-gate'] === 'edit-skipped'`
+- [x] 2.4 Host test in `verify-hosts.test.mjs`. With `AGENT_HARNESS_TRACE=1` and `editFiles: ["**/*.ts"]`, a Claude `PostToolUse` Edit of a Markdown file exits 0, prints no output and adds no `verify.log` line. Its trace line has `outcomes['verify-gate'] === 'edit-skipped'`
 
 ## 3. Docs and checks
 

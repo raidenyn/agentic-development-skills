@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ASSETS } from './helpers.mjs';
 
-const { matchesGlob, parseItem, itemCounts, detectTicks, suppressSeen } = await import(
+const { matchesGlob, matchesPathGlob, parseItem, itemCounts, detectTicks, suppressSeen } = await import(
   pathToFileURL(join(ASSETS.verifyGate, 'lib', 'triggers.mjs')).href
 );
 
@@ -22,6 +22,38 @@ test('matchesGlob: * stays within a segment, ** crosses segments', () => {
   assert.equal(matchesGlob('**/*.md', 'a.md'), true);
   assert.equal(matchesGlob('docs/*.md', 'docs/a.txt'), false);
   assert.equal(matchesGlob('a.b/*.md', 'aXb/c.md'), false, 'dots are literal');
+});
+
+test('matchesPathGlob: segment by segment, like the task-file walker', () => {
+  const rows = [
+    ['**/*.ts', 'root.ts', true],
+    ['**/*.ts', 'src/a/b.ts', true],
+    ['**/*.ts', 'README.md', false],
+    ['./src/**/*.ts', 'src/a.ts', true],
+    ['src/*.ts', 'src\\a.ts', false],
+    ['src\\*.ts', 'src/a.ts', true],
+    ['*.ts', 'src/a\\b.ts', false],
+    ['src/*.ts', 'src/a\\b.ts', true],
+    ['src/*.ts', 'src/a\n.ts', true],
+    ['src/a?.ts', 'src/a\n.ts', true],
+    ['src/**.ts', 'src/a.ts', true],
+    ['src/**.ts', 'src/nested/a.ts', false],
+    ['src/**', 'src/a.ts', true],
+    ['src/**', 'src/x/y.ts', true],
+    ['src/**', 'docs/a.md', false],
+    ['src/a?.ts', 'src/ab.ts', true],
+    ['src/a?.ts', 'src/a/b.ts', false],
+  ];
+  for (const [pattern, path, want] of rows)
+    assert.equal(matchesPathGlob(pattern, path), want, `${pattern} ~ ${JSON.stringify(path)}`);
+});
+
+test('matchesPathGlob: repeated globstars stay fast', () => {
+  const pattern = '**/x/'.repeat(12) + '**/target.ts';
+  const path = 'x/'.repeat(50) + 'other.ts';
+  const t0 = performance.now();
+  assert.equal(matchesPathGlob(pattern, path), false);
+  assert.ok(performance.now() - t0 < 1000);
 });
 
 test('parseItem: checkbox items with -, * and + bullets and CRLF', () => {
