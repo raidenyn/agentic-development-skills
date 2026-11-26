@@ -73,7 +73,7 @@
 
 ## 5. Onboarding (`SKILL.md` and `references/onboarding-github.md`)
 
-- [ ] 5.1 Rewrite "Onboard a board" as the conductor's checklist:
+- [x] 5.1 Rewrite "Onboard a board" as the conductor's checklist:
   - preflight with the one-conductor check across every project;
   - rename the thread;
   - fields;
@@ -82,23 +82,23 @@
   - the secret through `request_secret`;
   - triggers and webhooks;
   - skills to confirm.
-- [ ] 5.2 Remove the `PROJECT_URL`, settings PR, harness key and model-file steps and their reference sections. Keep keys, the approval rule, dry run and "proceed without asking".
-- [ ] 5.3 Update the onboarding report:
+- [x] 5.2 Remove the `PROJECT_URL`, settings PR, harness key and model-file steps and their reference sections. Keep keys, the approval rule, dry run and "proceed without asking".
+- [x] 5.3 Update the onboarding report:
   - triggers, webhooks and the list of repositories whose webhook is an owner step;
   - no PR or variable lines;
   - the dry-run note for steps that need the conductor thread.
 
 ## 6. Task run (`skills/task-run/`)
 
-- [ ] 6.1 Add the rule "1 task = 1 issue = 1 PR": `Closes <owner>/<repo>#<n>` in the pull request body.
-- [ ] 6.2 Add the follow-up task rule: key allocation and re-check, body, placement, the blocked-by and blocking links with read-back, the PR's notes, and stopping on a failed write.
-- [ ] 6.3 Write `references/follow-up-github.md` with the commands, adapted from `task-publishing`'s blocked-by section.
-- [ ] 6.4 Amend the "Only the report line" rule, add the `Board:` field, and update the phase report to the new wake sentence.
+- [x] 6.1 Add the rule "1 task = 1 issue = 1 PR": `Closes <owner>/<repo>#<n>` in the pull request body.
+- [x] 6.2 Add the follow-up task rule: key allocation and re-check, body, placement, the blocked-by and blocking links with read-back, the PR's notes, and stopping on a failed write.
+- [x] 6.3 Write `references/follow-up-github.md` with the commands, adapted from `task-publishing`'s blocked-by section.
+- [x] 6.4 Amend the "Only the report line" rule, add the `Board:` field, and update the phase report to the new wake sentence.
 
 ## 7. Docs and checks
 
-- [ ] 7.1 Update the `project-conductor` and `task-run` rows in `README.md`.
-- [ ] 7.2 Run `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'`, `pnpm run check` and `openspec validate conductor-owns-the-board`.
+- [x] 7.1 Update the `project-conductor` and `task-run` rows in `README.md`.
+- [x] 7.2 Run `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'`, `pnpm run check` and `openspec validate conductor-owns-the-board`.
 
 ## 8. Live proofs on the scratch board (evidence in `evidence/`)
 
