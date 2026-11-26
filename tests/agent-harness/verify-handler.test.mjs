@@ -215,9 +215,8 @@ test('long pass output keeps the last 60 lines', async () => {
   r.setOut(Array.from({ length: 100 }, (_, i) => `${i + 1}\n`).join(''));
   await r.write('src/a.js', 'b\n');
   const { result } = await fire(h, r, edit(['src/a.js']));
-  assert.ok(result.context.includes(':\n\n41\n'), result.context);
-  assert.ok(result.context.endsWith('\n100\n'), result.context);
-  assert.doesNotMatch(result.context, /\n40\n/);
+  const kept = Array.from({ length: 60 }, (_, i) => `${41 + i}\n`).join('');
+  assert.equal(result.context, `verify: sh ${r.script} passed after the edit of src/a.js:\n\n${kept}`);
 });
 
 test('stderr-only pass is shown', async () => {
@@ -225,7 +224,7 @@ test('stderr-only pass is shown', async () => {
   writeFileSync(r.script, "#!/bin/sh\necho 'note on stderr' >&2\n");
   await r.write('src/a.js', 'b\n');
   const { result } = await fire(h, r, edit(['src/a.js']));
-  assert.match(result.context, /passed after the edit of src\/a\.js:\n\nnote on stderr/);
+  assert.equal(result.context, `verify: sh ${r.script} passed after the edit of src/a.js:\n\nnote on stderr\n`);
 });
 
 test('two edited files: pass note before the failure, in file order', async () => {
@@ -237,9 +236,10 @@ test('two edited files: pass note before the failure, in file order', async () =
   await r.write('src/a.js', 'b\n');
   await r.write('docs/notes.md', '- [ ] changed\n');
   const { result } = await fire(h, r, edit(['src/a.js', 'docs/notes.md']));
-  assert.match(
+  assert.equal(
     result.context,
-    /passed after the edit of src\/a\.js:\n\nok a\n[\s\S]*failed after the edit of docs\/notes\.md: [\s\S]*E1 bad/,
+    `verify: sh ${r.script} passed after the edit of src/a.js:\n\nok a\n\n\n` +
+      `verify: sh ${r.script} failed after the edit of docs/notes.md: exit code 1.\n\nE1 bad\n`,
   );
 });
 

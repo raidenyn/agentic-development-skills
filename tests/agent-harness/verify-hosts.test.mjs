@@ -235,9 +235,9 @@ test("Claude Code: a passing edit run's output reaches additionalContext", async
   writeFileSync(join(r.dir, 'README.md'), 'hello world\n');
   const res = await run(fxClaude('PostToolUse-Edit', r.dir));
   assert.equal(res.code, 0, res.stderr);
-  assert.match(
+  assert.equal(
     JSON.parse(res.stdout).hookSpecificOutput.additionalContext,
-    /passed after the edit of README\.md:\n\nnote from lint/,
+    `verify: sh ${r.script} passed after the edit of README.md:\n\nnote from lint\n`,
   );
 });
 
@@ -250,8 +250,8 @@ test("OpenCode: a passing edit run's output is appended to result.content", asyn
   await p.hooks['execute.before'](before);
   writeFileSync(join(r.dir, 'README.md'), 'hello world\n');
   await p.hooks['execute.after'](input);
-  assert.ok(
-    input.result.content.some((c) => /passed after the edit of .*:\n\nnote from lint/.test(c.text ?? '')),
-    JSON.stringify(input.result.content),
+  assert.equal(
+    input.result.content.find((c) => String(c.text ?? '').startsWith('verify: '))?.text,
+    `verify: sh ${r.script} passed after the edit of README.md:\n\nnote from lint\n`,
   );
 });
