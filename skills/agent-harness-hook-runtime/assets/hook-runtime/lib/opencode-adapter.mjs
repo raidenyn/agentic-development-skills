@@ -300,7 +300,7 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
       while (slot.queue.length && !disposed) {
         const entry = slot.queue.shift();
         try {
-          await turnEnd(sid, entry);
+          await turnEnd(sid, entry, slot);
         } catch {}
       }
     } finally {
@@ -308,12 +308,20 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
     }
   }
 
-  async function turnEnd(sid, entry) {
+  async function turnEnd(sid, entry, slot) {
     const who = await begin(sid);
     const event = { type: 'turn.end', host: HOST, background: background(sid) };
     const merged = await run(event, who, now(), entry.received); // the budget starts at dequeue
     // A newer session.execution.started supersedes this result: not delivered, released.
-    if (disposed || (generations.get(sid) ?? 0) !== entry.generation) return void (await callBounded(merged.release));
+    const superseded = disposed || (generations.get(sid) ?? 0) !== entry.generation;
+    if (superseded) {
+      // The newest superseded result is shown as a notice: only with no later turn end queued.
+      const stale = typeof merged.stale === 'string' ? merged.stale : '';
+      if (!disposed && slot.queue.length === 0 && stale)
+        await within(() => ctx.session.synthetic({ sessionID: sid, text: stale, resume: false }), CALLBACK_MS);
+      await callBounded(merged.release);
+      return;
+    }
     const text = unique([merged.block, merged.context, merged.notices]).join(JOIN);
     if (!text) return;
     let resume = typeof merged.block === 'string';

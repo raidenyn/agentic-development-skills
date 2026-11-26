@@ -10,7 +10,7 @@
         "lib/claude-adapter.mjs": "2d23589b378393fff378555b2db4b96499e75b58b8e0867ce992d9d5746d688f",
         "lib/config.mjs": "afcabd0f71591de520665f08798e5456e5abdb6ed95bb4ff6a79f24739270d40",
         "lib/install.mjs": "d1abb61c1b9bd95317c4efb0b8205ed0bd24e16a29a0de4304b0a29634b0dffa",
-        "lib/opencode-adapter.mjs": "f3714b51372a701213f4cb68db16f138745c19c62c40dd1ded2e43b9412ac232",
+        "lib/opencode-adapter.mjs": "3b06b062125bf636cea72b228b3023882ed022f4b75fc0ab5782846697f2d78f",
         "lib/runtime.mjs": "20f2a9cfd2a36289511cb02beddbc44230d34f3bcd5f2b40b5e49a72b9f88ec4",
         "lib/state.mjs": "250eceda1407574c725d19721977ab0eb1d11a99787600bdef8e93df2d4f77c0",
         "lib/supervisor.mjs": "7c5a7778e5869438ff01bff31e1b3c56ce8efd1c2224845c8e103be746eef710",
