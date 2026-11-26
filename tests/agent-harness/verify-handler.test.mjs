@@ -208,6 +208,7 @@ test('silent and whitespace-only edit passes return null', async () => {
   r.setOut('  \n\n');
   await r.write('src/a.js', 'c\n');
   assert.equal((await fire(h, r, edit(['src/a.js'], 'c-edit2'))).result, null);
+  assert.equal(r.log().length, 2);
 });
 
 test('long pass output keeps the last 60 lines', async () => {
