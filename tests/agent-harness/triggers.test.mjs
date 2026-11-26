@@ -43,6 +43,7 @@ test('matchesPathGlob: segment by segment, like the task-file walker', () => {
     ['src/**', 'docs/a.md', false],
     ['src/a?.ts', 'src/ab.ts', true],
     ['src/a?.ts', 'src/a/b.ts', false],
+    ['src/a?.ts', 'src/a😀.ts', true],
   ];
   for (const [pattern, path, want] of rows)
     assert.equal(matchesPathGlob(pattern, path), want, `${pattern} ~ ${JSON.stringify(path)}`);
@@ -53,7 +54,8 @@ test('matchesPathGlob: repeated globstars stay fast', () => {
   const path = 'x/'.repeat(50) + 'other.ts';
   const t0 = performance.now();
   assert.equal(matchesPathGlob(pattern, path), false);
-  assert.ok(performance.now() - t0 < 1000);
+  const ms = performance.now() - t0;
+  assert.ok(ms < 1000, `took ${ms} ms`);
 });
 
 test('parseItem: checkbox items with -, * and + bullets and CRLF', () => {

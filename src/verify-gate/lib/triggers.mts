@@ -5,6 +5,8 @@
 
 export type Counts = { ticked: number; unticked: number };
 
+const escapeRe = (s: string): string => s.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+
 // `*` matches within one path segment, `**` across segments, `?` one character other than `/`.
 export function matchesGlob(pattern: unknown, relPath: unknown): boolean {
   const path = String(relPath).replace(/\\/g, '/');
@@ -25,7 +27,7 @@ export function matchesGlob(pattern: unknown, relPath: unknown): boolean {
     } else if (c === '?') {
       re += '[^/]';
     } else {
-      re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+      re += escapeRe(c);
     }
   }
   return new RegExp(`^${re}$`).test(path);
@@ -36,9 +38,9 @@ const segmentRe = (seg: string): RegExp => {
   for (const c of seg) {
     if (c === '*') re += '[^/]*';
     else if (c === '?') re += '[^/]';
-    else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    else re += escapeRe(c);
   }
-  return new RegExp(`^${re}$`, 's');
+  return new RegExp(`^${re}$`, 'u');
 };
 
 // Segment by segment: a whole `**` segment matches zero or more path segments, any other segment

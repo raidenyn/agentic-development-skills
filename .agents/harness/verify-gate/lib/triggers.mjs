@@ -4,6 +4,8 @@
 // afterwards. Line positions and hunks do not matter. Swapping which of two identically labelled
 // items is ticked leaves the counts unchanged and is not detected (a stated limit).
 
+const escapeRe = (s) => s.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+
 // `*` matches within one path segment, `**` across segments, `?` one character other than `/`.
 export function matchesGlob(pattern, relPath) {
   const path = String(relPath).replace(/\\/g, '/');
@@ -24,7 +26,7 @@ export function matchesGlob(pattern, relPath) {
     } else if (c === '?') {
       re += '[^/]';
     } else {
-      re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+      re += escapeRe(c);
     }
   }
   return new RegExp(`^${re}$`).test(path);
@@ -35,9 +37,9 @@ const segmentRe = (seg) => {
   for (const c of seg) {
     if (c === '*') re += '[^/]*';
     else if (c === '?') re += '[^/]';
-    else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    else re += escapeRe(c);
   }
-  return new RegExp(`^${re}$`, 's');
+  return new RegExp(`^${re}$`, 'u');
 };
 
 // Segment by segment: a whole `**` segment matches zero or more path segments, any other segment

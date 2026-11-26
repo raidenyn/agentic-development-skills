@@ -30,7 +30,7 @@
         "lib/run.mjs": "c59f1033816d5c82bce2a7337c5f6c8d4fb5f508dd1322b5ab0ad387ab6e0e5c",
         "lib/state.mjs": "a9b14cec05e171b088ac4710951c9df69c66d13ec07026fc01c6e57486f9cdaf",
         "lib/tree.mjs": "563ad861cd89398f2423edccacae18d0706945d00ddd3de769abdf23d9b96cd7",
-        "lib/triggers.mjs": "e640f2b60e165f3fdb15e009576e9feba407809d520df8d0b304bee01e098d54",
+        "lib/triggers.mjs": "f513429acf9d6df30cf291bbe42b781e8f1450a395dcfc8e26cf7eae2ee4fd42",
         "tool.json": "5d70eb809565383ccf5ebb11c155d733b174e53dcac6ccaa5f01d3333f82291e"
       }
     }
