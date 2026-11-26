@@ -31,7 +31,7 @@ The hook runtime must be installed first. The gate's `install` refuses without i
 The changed list is the union of three sets: files that differ from `VERIFY_BASE` in the working tree, untracked files that are not ignored, and files whose bytes or stat data changed since the last full pass.
 
 - **Pass and fail.** Exit 0 is a pass; anything else is a failure. A signal, a timeout (`timeoutSeconds`) and a command that cannot start count as failures too.
-- **Output.** Output is capped at 1 MiB, and the last 60 lines go to the model. On an edit pass the same tail goes to the model as `verify: <command> passed after the edit of <file>: ...`, which is how a command hands it a note. A command that prints nothing on a pass stays silent.
+- **Output.** Output is capped at 1 MiB, and the last 60 lines of a failing run go to the model. On an edit pass the same tail goes to the model as `verify: <command> passed after the edit of <file>: ...`, which is how a command hands it a note. A command that prints nothing on a pass stays silent.
 - **Timeout.** On timeout the process group gets SIGTERM, then SIGKILL after 5 s.
 - **Leftovers.** Processes the command leaves behind in its group are killed too, so do not start daemons from it.
 
