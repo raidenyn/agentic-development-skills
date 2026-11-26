@@ -141,6 +141,12 @@ test('a failing edit check keeps stdout and stderr apart', async () => {
   );
 });
 
+test('a stdout-only unterminated failure starts the failed line on a new line', async () => {
+  const out = await editRun("printf 'stdout-fragment'; exit 1");
+  assert.equal(out.code, 1);
+  assert.equal(out.stderr, 'stdout-fragment\nverify: failed (exit 1): node_modules/.bin/biome check scripts/x.mts\n');
+});
+
 test('an edit check that cannot start reports it', async () => {
   const out = await editRun(null);
   assert.equal(out.code, 1);
