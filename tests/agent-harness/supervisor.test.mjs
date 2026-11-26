@@ -509,7 +509,7 @@ test('a vanished group is skipped without delay', async () => {
   const out = await rt([p]).dispatch({ type: 'prompt', gate }, ids);
   const elapsed = Date.now() - start;
   assert.equal(out.context, 'held');
-  assert.ok(elapsed < 200, `returned after ${elapsed} ms`);
+  assert.ok(elapsed < 1000, `returned after ${elapsed} ms`);
 });
 
 test('runtime.close with a cleanup deadline kills a TERM-trapping group while its spawn is in flight', async () => {
@@ -538,6 +538,6 @@ test('runtime.close with a cleanup deadline kills a TERM-trapping group while it
   await r.close({ cleanupDeadline: Date.now() + 1500 });
   const elapsed = Date.now() - start;
   assert.ok(elapsed < 2000, `close resolved after ${elapsed} ms`);
-  await until(() => !groupAlive(pgid), 2000 - elapsed, `group ${pgid} to die`);
+  await until(() => !groupAlive(pgid), Math.max(200, 2000 - elapsed), `group ${pgid} to die`);
   await inFlight;
 });

@@ -70,8 +70,9 @@ Every trigger that reaches the gate first compares the working-tree content key 
 - **Subagents on OpenCode.** A blocked subagent's pre-fix result can reach the parent before the fix, because OpenCode hands the parent every round of a subagent's work. The parent may act once on the failing result. It is then handed the fixed result, and its own turn end verifies the final tree. On Claude Code, the parent gets the result after the fix.
 - **Identical labels.** Swapping which of two items with the same text is ticked leaves the counts unchanged, and is not detected as a tick.
 - **Loose objects.** The private index writes loose git objects for untracked files. `git gc` prunes them.
-- **Failure identity.** A changed tail is a new failure. The count is per session and is not reset by a pass, and the 10-block backstop bounds it. This differs from veles's "node and step, 3 in a row"; a follow-up proposes parallel commands keyed on the failing command.
-- **Manual runs.** A killed `verify-gate run` is not reaped, and a manual run that takes over a dead hook's lock does not reap it.
+- **Failure identity.** A changed tail is a new failure. The count is per session and is not reset by a pass, and the 10-block backstop bounds it. This differs from the old turn-end hook this gate replaced, whose limit was "node and step, 3 in a row"; a follow-up proposes parallel commands keyed on the failing command.
+- **Manual runs.** A killed `verify-gate run` is not reaped, and a manual run that takes over a dead hook's lock does not reap that hook's recorded groups.
+- **Signals.** A signal that arrives before a charged result is delivered can drop the result without refunding its charge. The charge counts toward the limit, and the next turn end checks again.
 - **Pid reuse.** A dead hook's recorded group could, within 24 h, belong to an unrelated process of the same user.
 
 ## Making it fast

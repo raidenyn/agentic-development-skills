@@ -312,7 +312,8 @@ async function setup(ctx, { runtimeFactory, setTimer, clearTimer, capabilities, 
     const who = await begin(sid);
     const event = { type: 'turn.end', host: HOST, background: background(sid) };
     const merged = await run(event, who, now(), entry.received); // the budget starts at dequeue
-    // A newer session.execution.started supersedes this result: not delivered, released.
+    // A newer session.execution.started supersedes this result: not delivered as a block, its
+    // release is called, and its stale text may still be shown as a notice.
     const superseded = disposed || (generations.get(sid) ?? 0) !== entry.generation;
     if (superseded) {
       // The newest superseded result is shown as a notice: only with no later turn end queued.

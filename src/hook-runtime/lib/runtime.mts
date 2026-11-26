@@ -44,7 +44,7 @@ export interface RuntimeOptions {
 export interface Runtime {
   dispatch(event: EventPayload, opts?: DispatchOptions): Promise<DispatchResult>;
   proof(name: string, ctx?: ProofCtx): Promise<string | null>;
-  // Closes every handler that has a close; the others are ignored.
+  // Closes every handler that has a close; the others are ignored. Close errors are swallowed.
   close(opts?: { cleanupDeadline?: number }): Promise<void>;
   handlers: RuntimeHandler[];
   problems: string[];

@@ -4,13 +4,13 @@
     "hook-runtime": {
       "version": "0.1.4",
       "files": {
-        "claude.mjs": "3f1ea0365e3f251ab53986459402f5c08df7f3df5b77b581d8f46e6ad514ed53",
+        "claude.mjs": "d5268536a80f2edbdaffcb12969f07ccbf3f94fa67149aece9776963cfc46531",
         "cli.mjs": "3331ac704c0354eae128cd51a3e07b0a0b0b6b7bd7de518bdd439a86bc315491",
         "lib/capabilities.mjs": "554bb968549ed7292ff4c5501f655fe218627b23db11d2539ce919259b0b9e93",
         "lib/claude-adapter.mjs": "2d23589b378393fff378555b2db4b96499e75b58b8e0867ce992d9d5746d688f",
         "lib/config.mjs": "afcabd0f71591de520665f08798e5456e5abdb6ed95bb4ff6a79f24739270d40",
         "lib/install.mjs": "d1abb61c1b9bd95317c4efb0b8205ed0bd24e16a29a0de4304b0a29634b0dffa",
-        "lib/opencode-adapter.mjs": "3b06b062125bf636cea72b228b3023882ed022f4b75fc0ab5782846697f2d78f",
+        "lib/opencode-adapter.mjs": "d3a7b759861997f8b6df7e8fb81770aeb4754cce6091386a803ea747b1eba70e",
         "lib/runtime.mjs": "db3db363bfa790c95082c1be5a65aed5d723ab17aa855856c72e0928270cc849",
         "lib/state.mjs": "0eb56ddc5457799a3348cbd701cd4f714727d2da3ea3ee3d6c07ef33c6c75ccc",
         "lib/supervisor.mjs": "1a931c6bc186ae82d47a0269fa66e1661fff0cc69acbae371560e8ced023374c",

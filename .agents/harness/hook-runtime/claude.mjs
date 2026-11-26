@@ -20,7 +20,9 @@ const runtimes = new Set();
 // The entry of another worktree of the same repository, when main() delegates to it (design D2).
 let delegate = null;
 let signalled = false;
-// The result main() returned but runAsScript has not written yet, so a signal can release it.
+// The result main() returned but runAsScript has not finished writing yet. stdout writes are
+// synchronous on Linux, so it is pending until the write returns, and a signal can still arrive
+// after the bytes are written; the listener releases it because delivery cannot be confirmed.
 let pending = null;
 
 // Close every runtime this process created, and the delegated copy's runtimes too. One failure does
