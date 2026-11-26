@@ -519,7 +519,7 @@ In the survey, the URL is not known yet. The plan lists each repository as "regi
 
 The trigger exists, so its URL is not known in this run: only its creation returned it. Ask for no secret and register no hook. The `Webhook owner steps:` list is carried instead.
 
-Read this thread's own messages, newest first, as [The backward scan](triggers-github.md#the-backward-scan) does (`t3_thread_read` with `view` `"activity"`), every page to the start of the thread, into `<work>/scan-<k>.json`. Then:
+Read this thread's own messages, newest first, as [The backward scan](triggers-github.md#the-backward-scan) does (`t3_thread_read` with `view` `"activity"`, `limit` 100, `runLimit` 50 and `maxCharsPerItem` 20000), every page to the start of the thread, into `<work>/scan-<k>.json`. Without `runLimit` 50 the tool returns only the current run and the carried list is wrong. Then:
 
 ```bash
 jq -s 'add | unique_by(.position)' <work>/scan-*.json | jq -r --rawfile repos <work>/repos.txt '

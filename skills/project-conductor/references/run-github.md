@@ -40,7 +40,7 @@ Run every read anyway, so one report lists all gaps. Preflight writes nothing.
 
 ### Identity
 
-The conductor is named by its own title, `project-conductor <board URL>`, and by the `conductor` key of the board readme's [settings block](#settings-block). This part reads the title and takes the board from it. Anchor: `#identity`.
+The conductor is named by its own title, `project-conductor <board URL>`, and by the `conductor` key of the board readme's [settings block](#settings-block). This part reads the title and takes the board from it. **This read happens on every wake, a repeat included. Never take the title from the thread's earlier messages, from the onboarding or from memory: call the two T3 tools below now.** Anchor: `#identity`.
 
 ```bash
 gh auth status                                   # logged in, and the token scopes include "project"
@@ -50,7 +50,7 @@ gh api user --jq .login                          # <agent>
 Then read the conductor's own thread:
 
 1. Call the T3 tool `t3_thread_configure` with no arguments. Its `threadId` is `<conductor id>`.
-2. Call `t3_thread_read` with `threadId` `<conductor id>` and `limit` 1. Write its `thread.title` to `<work>/title.txt`, as is.
+2. Call `t3_thread_read` with `threadId` `<conductor id>` and `limit` 1. Write its `thread.title` to `<work>/title.txt`, as is. The file must be non-empty; a missing or empty title file is an identity failure.
 
 Check the title against the exact form and take the board from it:
 
@@ -861,7 +861,7 @@ An issue with an empty time has no kept reports in this wake; only the triggerin
 
 ### Collect
 
-Read the conductor's own incoming messages: call `t3_thread_read` with `threadId` `<conductor id>`, `view` `"activity"`, `limit` 100 and `maxCharsPerItem` 20000. Write each answer's `items` to `<work>/inbox-<k>.json`, with `<k>` 1, 2, …. The answer is newest first: for the next page, call again with `beforePosition` set to the answer's `earlierPosition`. Stop when `earlierPosition` is null, or when the oldest item of the page has an `updatedAt` earlier than the earliest time in `claims.json`. With no time in `claims.json`, read only the first page. An item with `textTruncated` true is read on with `itemId` and `textOffset` set to its `nextTextOffset`, and its text is joined before the parse.
+Read the conductor's own incoming messages: call `t3_thread_read` with `threadId` `<conductor id>`, `view` `"activity"`, `limit` 100, `runLimit` 50 and `maxCharsPerItem` 20000. Write each answer's `items` to `<work>/inbox-<k>.json`, with `<k>` 1, 2, …. The answer is newest first: for the next page, call again with `beforePosition` set to the answer's `earlierPosition`. **`runLimit` 50 is required:** without it the tool returns only the current run, and the scan silently misses phase reports from earlier runs. It is the host's maximum. Stop when `earlierPosition` is null, or when the oldest item of the page has an `updatedAt` earlier than the earliest time in `claims.json`. With no time in `claims.json`, read only the first page. An item with `textTruncated` true is read on with `itemId` and `textOffset` set to its `nextTextOffset`, and its text is joined before the parse.
 
 A message that ends with the old sentence "Run one wake of the project-conductor skill for this repository." counts the same as one that ends with the new sentence: its report lines are collected and judged alike.
 

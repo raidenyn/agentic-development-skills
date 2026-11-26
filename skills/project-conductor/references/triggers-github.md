@@ -252,7 +252,7 @@ No candidate: the condition does not hold, and no thread is read.
 
 ### The backward scan
 
-The bounds come from this thread's own messages. Read them newest first: call `t3_thread_read` with `threadId` `<conductor id>`, `view` `"activity"`, `limit` 100 and `maxCharsPerItem` 20000, and write each answer's `items` to `<work>/scan-<k>.json`, with `<k>` 1, 2, …. For the next page, call again with `beforePosition` set to the answer's `earlierPosition`. Join the text of an item with `textTruncated` true as [Collect](run-github.md#collect) does. After each page, run:
+The bounds come from this thread's own messages. Read them newest first: call `t3_thread_read` with `threadId` `<conductor id>`, `view` `"activity"`, `limit` 100, `runLimit` 50 and `maxCharsPerItem` 20000, and write each answer's `items` to `<work>/scan-<k>.json`, with `<k>` 1, 2, …. For the next page, call again with `beforePosition` set to the answer's `earlierPosition`. **`runLimit` 50 is required:** without it the tool returns only the current run, and the scan silently misses the earlier onboarding, trigger-check and register reports. It is the host's maximum; a report older than 50 runs is out of the scan's reach, and the report says so. Join the text of an item with `textTruncated` true as [Collect](run-github.md#collect) does. After each page, run:
 
 ```bash
 cat > <work>/missed.jq <<'EOF'
