@@ -29,7 +29,7 @@ Tick a group's boxes only after its tests pass, because every tick starts this r
 
 ## 3. Docs and checks
 
-- [ ] 3.1 Update `skills/agent-harness-verify-gate/SKILL.md`:
+- [x] 3.1 Update `skills/agent-harness-verify-gate/SKILL.md`:
   - an `editFiles` row in "Config keys";
   - the "Edit" bullet says only files in `editFiles` run;
   - a "Making it fast" step to set `editFiles`, which notes that the hook process still starts;
@@ -37,8 +37,8 @@ Tick a group's boxes only after its tests pass, because every tick starts this r
   - the two warnings that the command runs "on the first edit" say "on the first edit in scope" (the warning about untrusted hooks stays as strong);
   - Onboard step 3 names `editFiles`, and "Verify live" says to break the command with an edit of a file in `editFiles` when it is set;
   - `edit-skipped` in the trace outcomes of "Verify live"
-- [ ] 3.2 Run `pnpm run harness:update`, and check that `lock.json` already has `verify-gate` at `0.2.0`
-- [ ] 3.3 `pnpm run check`, `python3 scripts/skills.py validate`, `claude plugin validate .` and `python3 -m unittest discover -s scripts -p 'test_*.py'` pass
+- [x] 3.2 Run `pnpm run harness:update`, and check that `lock.json` already has `verify-gate` at `0.2.0`
+- [x] 3.3 `pnpm run check`, `python3 scripts/skills.py validate`, `claude plugin validate .` and `python3 -m unittest discover -s scripts -p 'test_*.py'` pass
 
 ## After the merge (not tracked here)
 

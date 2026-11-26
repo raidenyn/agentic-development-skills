@@ -7,7 +7,7 @@ description: "Use when a repo's verify command should run automatically on agent
 
 A handler for the agent harness hook runtime (skill `agent-harness-hook-runtime`). It runs one command, the repo's verify command, when an agent edits a file, when it ticks a task, and at every turn end. A failing turn end blocks the agent until the command passes, at most three times for the same failure. When nothing changed since the last full pass, nothing runs.
 
-Before starting an agent in a clone you do not trust, read its `.claude/settings.json`, `opencode.json`, `.agents/harness.json` and `.agents/harness/`, and the scripts the `verify-gate.command` in `.agents/harness.json` runs: these hooks run code on every tool call, and that command runs on the first edit and at every turn end.
+Before starting an agent in a clone you do not trust, read its `.claude/settings.json`, `opencode.json`, `.agents/harness.json` and `.agents/harness/`, and the scripts the `verify-gate.command` in `.agents/harness.json` runs: these hooks run code on every tool call, and that command runs on the first edit in scope and at every turn end.
 
 ## When to use
 
@@ -39,9 +39,9 @@ Run the same command by hand with `node .agents/harness/verify-gate/cli.mjs run`
 
 ## Triggers
 
-Every trigger first compares the working-tree content key (a git tree id from a private index plus a stat digest, both under `<git dir>/agent-harness/verify-gate/`) and the config with the last full pass. If both are unchanged, nothing runs.
+Every trigger that reaches the gate first compares the working-tree content key (a git tree id from a private index plus a stat digest, both under `<git dir>/agent-harness/verify-gate/`) and the config with the last full pass. If both are unchanged, nothing runs.
 
-- **Edit.** After an edit-kind tool call, the gate runs once per edited file with `VERIFY_TRIGGER=edit` and `VERIFY_FILE`. A failure is added to the tool result as `verify: <command> failed after the edit of <file>: ...`. An edit run never records or clears a pass.
+- **Edit.** After an edit-kind tool call, the gate runs once per edited file with `VERIFY_TRIGGER=edit` and `VERIFY_FILE`. A failure is added to the tool result as `verify: <command> failed after the edit of <file>: ...`. An edit run never records or clears a pass. When `editFiles` is set, only edited files matching it run; an edit of any other file starts no verify process, returns before the content-key check and is traced as `edit-skipped`.
 - **Ticked task.** A tick is a checkbox in a file matching `taskFiles` changing from `- [ ]` to `- [x]`. The gate catches ticks made by edits and by shell commands alike.
   - At each shell or edit `tool.before`, it counts the boxes per item text.
   - At the matching `tool.after`, it compares the counts, so moved and reordered items do not matter.
@@ -72,13 +72,14 @@ Every trigger first compares the working-tree content key (a git tree id from a 
 
 ## Making it fast
 
-The no-change shortcut covers turns that changed nothing. Every other trigger runs the command, so its speed is the command's job.
+The no-change shortcut covers turns that changed nothing. Every other trigger that reaches the gate runs the command, so its speed is the command's job.
 
-1. **Use the test runner's related-test support first.** Examples: `vitest related --run <files>`, `jest --findRelatedTests <files>`, or the Go packages that contain the changed files.
+1. **Limit edits to what the command checks.** Set `editFiles` to the globs the edit command covers, for example `["**/*.ts"]`. An edit of another file then starts no verify process (the hook itself still starts).
+2. **Use the test runner's related-test support first.** Examples: `vitest related --run <files>`, `jest --findRelatedTests <files>`, or the Go packages that contain the changed files.
    - Feed it `VERIFY_FILE` on `edit`. Checking one file (lint, type check, its related tests) is usually enough there, because the next full run covers the rest.
    - Only when the full suite is too slow for every turn end, feed it the paths in `VERIFY_CHANGED_FILES` on `task` and `turn-end` too, and keep the full suite in CI.
-2. **Build a mapping by hand only where the stack has no such support.** For example, map source folders to test folders in the verify script, and fall back to the full suite for any path it does not know.
-3. **Keep the full checks for `task` and `turn-end`**, and keep `timeoutSeconds` above the slowest honest run.
+3. **Build a mapping by hand only where the stack has no such support.** For example, map source folders to test folders in the verify script, and fall back to the full suite for any path it does not know.
+4. **Keep the full checks for `task` and `turn-end`**, and keep `timeoutSeconds` above the slowest honest run.
 
 A small repo-owned script that branches on `VERIFY_TRIGGER` is the usual shape:
 
@@ -100,6 +101,7 @@ The section is `verify-gate` in `.agents/harness.json`. `check` rejects unknown 
 | `command` | none, required (`install` writes `[]`) | the verify argv, a non-empty list of strings |
 | `base` | `"origin/main"` | the ref `VERIFY_BASE` is taken from |
 | `taskFiles` | `["openspec/changes/*/tasks.md"]` | globs of the task files; `*` matches within one path segment, `**` across segments, `?` one character |
+| `editFiles` | unset (every edit runs) | globs of the files the `edit` run checks, same syntax as `taskFiles`; ticks in other files are still caught |
 | `timeoutSeconds` | `900` | the command's timeout |
 | `maxBlocks` | `3` | blocks per failure and session, from 1 to 3 |
 
@@ -107,7 +109,7 @@ The `tool.after` and `turn.end` deadline is `timeoutSeconds` plus 10 s. That val
 
 On Claude Code the hook timeout is 1800 s and the runtime keeps 7 s of it, so keep `timeoutSeconds` at or below about 1780.
 
-Any change to the section counts as a change, so the next trigger runs the command.
+Any change to the section counts as a change, so the next trigger that reaches the gate runs the command.
 
 ## `verify-pass`
 
@@ -123,16 +125,17 @@ The gate registers the proof `verify-pass`. Another handler calls `context.proof
    - **`command`.** Find what the repo already uses to say the work is done: its CI steps, `AGENTS.md`, the `Makefile` or the `package.json` scripts. Prefer a repo-owned script that branches on `VERIFY_TRIGGER`, and make it fast as described above.
    - **`base`.** The default branch's remote ref.
    - **`taskFiles`.** Where the repo keeps its checkbox task lists.
+   - **`editFiles`.** Optional speed-up: the globs of the files the edit command checks, so other edits start no verify process.
    - **`timeoutSeconds`.** Above the slowest honest full run.
 4. **Ignore build output.** Make sure everything the command and the build write is in `.gitignore`.
 5. **Run it once by hand.** Run `node .agents/harness/verify-gate/cli.mjs run`. It must pass on a clean tree, and its pass seeds the no-change shortcut.
 6. **CI.** Add `node .agents/harness/verify-gate/cli.mjs check` to CI, next to the runtime's `check`. It fails until `command` is set, and on lock or config errors. Name the verify command and `.agents/harness/` in one line of `AGENTS.md`.
 7. **Commit** `.agents/`.
 8. **Verify live.** Start a new session on each host the repo uses, then:
-   - make one edit that breaks the command and check that the failure arrives after the tool call;
+   - make one edit, of a file in `editFiles` when it is set, that breaks the command and check that the failure arrives after the tool call;
    - let one turn end and check that it is blocked;
    - fix the edit, and check that the next turn end passes and that a turn end with no change runs nothing.
-   - For timings, set `AGENT_HARNESS_TRACE=1`: `<git dir>/agent-harness/hook-runtime/trace.jsonl` records `no-change`, `ran` or `contended` per event.
+   - For timings, set `AGENT_HARNESS_TRACE=1`: `<git dir>/agent-harness/hook-runtime/trace.jsonl` records `no-change`, `ran`, `contended` or `edit-skipped` per event.
 
 ## Update
 
@@ -154,4 +157,4 @@ In the skill's own source repo, `assets/verify-gate/` is generated from TypeScri
 
 The host configs belong to the hook runtime. Remove them with that skill if no handler is left.
 
-Before starting an agent in a clone you do not trust, read its `.claude/settings.json`, `opencode.json`, `.agents/harness.json` and `.agents/harness/`, and the scripts the `verify-gate.command` in `.agents/harness.json` runs: these hooks run code on every tool call, and that command runs on the first edit and at every turn end.
+Before starting an agent in a clone you do not trust, read its `.claude/settings.json`, `opencode.json`, `.agents/harness.json` and `.agents/harness/`, and the scripts the `verify-gate.command` in `.agents/harness.json` runs: these hooks run code on every tool call, and that command runs on the first edit in scope and at every turn end.
