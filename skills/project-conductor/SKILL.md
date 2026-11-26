@@ -1,13 +1,13 @@
 ---
 name: project-conductor
-description: "Use when a GitHub Project board and its repository must be prepared for unattended task runs, for example \"onboard this board\", \"set up the conductor for this repo\" or \"check that the board is ready for the loop\", or when a message asks to run one wake: start Ready tasks, handle phase reports, switch a task thread's model, for example \"Run one wake of the project-conductor skill for this repository.\" Onboarding sets PROJECT_URL, creates the Run phase, Attempt and Run thread fields, proposes the conductor settings and model file, keys the board's open issues and checks the approval rule, with a dry-run form. A wake claims Ready tasks and launches their threads on the plan model, answers phase reports and switches a planned thread to the implement model. Not for publishing tasks."
+description: "Use when a GitHub Project board and its repository must be prepared for unattended task runs, for example \"onboard this board\", \"set up the conductor for this repo\" or \"check that the board is ready for the loop\", or when a message asks to run one wake of the conductor: a webhook or timer trigger (Trigger: webhook. or Trigger: timer.), a phase report from a task thread, or a manual wake, for example \"Run one wake of the project-conductor skill for this board.\" Onboarding sets PROJECT_URL, creates the Run phase, Attempt and Run thread fields, proposes the conductor settings and model file, keys the board's open issues and checks the approval rule, with a dry-run form. A wake repairs half-made claims, settles the threads of merged work, answers phase reports and switches a planned thread to the implement model, then claims Ready tasks and launches their threads on the plan model. Not for publishing tasks."
 ---
 
 # Project conductor
 
 The conductor runs the tasks of a GitHub Project board unattended, from Ready to merged. Before it can run a board, the board and the one repository it serves must be prepared.
 
-This skill holds two procedures: **Onboard a board** prepares the board and the repository, and **Run one wake** starts Ready tasks, answers phase reports and switches a task thread's model. The names below are frozen: the wake reads them.
+This skill holds two procedures: **Onboard a board** prepares the board and the repository, and **Run one wake** repairs half-made claims, settles merged work, answers phase reports, switches a task thread's model and starts Ready tasks. The names below are frozen: the wake reads them.
 
 The onboarding commands are in [references/onboarding-github.md](references/onboarding-github.md), and the wake's commands are in [references/run-github.md](references/run-github.md). Every step below names the section that holds its commands and the requirement of the spec it meets.
 
@@ -226,7 +226,15 @@ Keys: <n> identified, <n> keyed in this run, <n> without a key (listed above wit
 
 ## Run one wake
 
-One wake runs three steps once, in this order: Repair, Advance, Start. Then it ends with the wake report. All commands are in [references/run-github.md](references/run-github.md). (Spec: Wake procedure exists.)
+One wake runs four steps once. All commands are in [references/run-github.md](references/run-github.md). (Spec: Wake procedure exists; Wake order.) The order:
+
+1. [Before the steps](#before-the-steps): preflight and the identity check. An identity failure ends the wake here, with the report.
+2. [Repair](#1-repair), then [Settle](#2-settle). Both run also when the settings block has a gap.
+3. [Read again](#after-settle) when Repair or Settle wrote anything.
+4. The [end-of-board check](references/triggers-github.md#end-of-the-board).
+5. [Advance](#3-advance), then [Start](#4-start). Neither runs when the settings block has a gap, and Start is skipped at the end of the board.
+6. The [automatic trigger check](references/triggers-github.md#automatic-check), only when its condition holds.
+7. The [wake report](#wake-report).
 
 ### Wake inputs
 
@@ -250,7 +258,7 @@ Reference: [Preflight](references/run-github.md#preflight), [Models](references/
 6. **Ready filter.** Run the [Ready filter](references/run-github.md#ready-filter) on the board read once. Advance and Start both use the board read and the filter's lines.
 7. **Models.** Resolve only the role a step uses: plan for Start, implement for Advance, never review. A missing line, a bare name, no match or an unsupported effort stops that step only, and is reported with the line as written in the block.
 
-Run every read, so one report lists every gap. A wake-wide gap (`gh` login or scope, a board field or option, a failed board read, or a settings block gap) means Advance and Start write nothing in this wake; the report names it with the owner's step. A finding of step 5 is per repository, never wake-wide: it stops only the starts of that repository's items, which are reported, and other repositories go on. A failed T3 project list stops Start only, since no task can be launched without a project; Advance goes on. Preflight writes nothing. The label `blocked` is created in a repository only when a stop there first needs it, as [The label `blocked`](references/run-github.md#the-label-blocked) says; when it cannot be created, the stops in that repository are reported for the owner, never written. (Spec: Stop label exists.)
+Run every read, so one report lists every gap. A wake-wide gap (`gh` login or scope, a board field or option, a failed board read, or a settings block gap) means Advance and Start write nothing in this wake, while Repair and Settle still run; the report names it with the owner's step. A finding of step 5 is per repository, never wake-wide: it stops only the starts of that repository's items, which are reported, and other repositories go on. A failed T3 project list stops Start only, since no task can be launched without a project; Advance goes on. Preflight writes nothing. The label `blocked` is created in a repository only when a stop there first needs it, as [The label `blocked`](references/run-github.md#the-label-blocked) says; when it cannot be created, the stops in that repository are reported for the owner, never written. (Spec: Stop label exists.)
 
 ### Wake rules
 
@@ -266,13 +274,48 @@ Run every read, so one report lists every gap. A wake-wide gap (`gh` login or sc
 
 ### 1. Repair
 
-Not done yet: the task "Repair claims, settle merged work and wake on events" adds it. Half-made claims are listed in the report.
+Reference: [Repair](references/run-github.md#repair), [Release](references/run-github.md#release) and [Stop without a report](references/run-github.md#stop-without-a-report). Spec: Repair half-made claims; Release order.
 
-### 2. Advance
+Repair runs first in every wake that passes the identity check, also when the settings block has a gap.
+
+1. **Scope.** Each open board issue whose whole first line is a task key, that is assigned to the agent or has a non-empty "Run thread". An issue labelled `blocked` is skipped whole and listed: no record, no release, no stop.
+2. **Find the thread** by the launch key `<repo>#<issue> attempt <Attempt, or 1 when empty>`. With "Run thread" set, `t3_thread_read` on that id decides. With it empty, `t3_thread_search` in the repository's T3 project with `limit` 50 decides, titles compared exactly. A read error, a search error or 50 matches is unknown: skip and report. Only an explicit `thread_not_found` is missing. A repository with no T3 project, or several, is reported only: never searched without a `projectId`, released or stopped.
+3. **Decide,** as the [table](references/run-github.md#decide) says:
+   - a live thread with the launch key as title needs nothing;
+   - a missing or archived thread, or another title, is a stop;
+   - one exact match is recorded in "Run thread" and read back;
+   - several matches, or several linked branches, is a stop;
+   - no match releases the claim when there is no claimed branch, or the branch has no commits beyond its base and no pull request; a branch with work is a stop, "work without a thread".
+4. **Release** in six writes, each read back: delete the empty branch, clear "Run phase", clear "Attempt", Status "Ready" when it is "In progress", clear "Run thread", and remove the agent from the assignees, last. A wake that dies part-way leaves the agent assigned, so the next Repair finishes it.
+
+A stop writes the label `blocked` and the comment of [Stop without a report](references/run-github.md#stop-without-a-report) with `Step: Repair.`. Every item gets one line in `<work>/repair.tsv`. A failed write stops that item, never the wake.
+
+### 2. Settle
+
+Reference: [Settle](references/run-github.md#settle). Spec: Settle merged work.
+
+Settle runs after Repair, under the same identity check, also when the settings block has a gap.
+
+1. **Scope.** Each board issue with a non-empty "Run thread" that is open, or was closed in the last 7 days.
+2. **The branch** is the thread's `branch` from `t3_thread_read`. A thread with no branch is skipped and reported.
+3. **The merged pull request,** looked for on GitHub by that branch and in the thread's `pullRequests`. It counts only when it merged, its head is that branch in `<repo>` itself, and its author is the agent or has the association `OWNER`, `MEMBER` or `COLLABORATOR`. A lookup error is unknown: skip the item. None: nothing.
+4. **Read the issue again.** Closed: settle. Open, merged less than 5 minutes ago: leave it to the next wake. Open, merged earlier: unless it already has `blocked`, write the label and the comment with `Step: Settle.` and the reason "merged without closing its issue", before settling.
+5. **Settle the thread** with `t3_thread_organize`, unless it is already settled. Step 4 runs whatever the thread's state.
+
+Every item gets one line in `<work>/settle.tsv`.
+
+### After Settle
+
+Reference: [Read again](references/run-github.md#read-again) and [End of the board](references/triggers-github.md#end-of-the-board). Spec: Board read again after Repair and Settle; Wake order.
+
+1. **Read again.** When `<work>/wrote` exists, Repair or Settle wrote something: read the board again and run the Ready filter again. Advance and Start judge the new read, so a released item that is Ready can start in the same wake.
+2. **End of the board.** Run the [end-of-board check](references/triggers-github.md#end-of-the-board). When it holds, Advance still runs, Start does not, and the triggers are disabled after Advance.
+
+### 3. Advance
 
 Reference: [Reports](references/run-github.md#reports), [Switch](references/run-github.md#switch) and [Stop](references/run-github.md#stop). Spec: Which reports are judged; Blocked items are not advanced; Answer order; and the requirements of each answer.
 
-Advance runs only when Preflight has no wake-wide gap, the board was read whole and the implement model resolves.
+Advance runs only when Preflight has no wake-wide gap, the board was read whole and the implement model resolves. It judges the board read again when Repair or Settle wrote.
 
 1. **Collect** the phase reports: lines of incoming messages from another thread, with the sender from host metadata, as in [Collect](references/run-github.md#collect). A `phase-done` line typed by a person is not a report.
 2. **Judge** them with the [Judge](references/run-github.md#judge) script: drop the reports whose stop is already [recorded](references/run-github.md#recorded-stops), keep only the newest per item from its "Run thread" for the current "Attempt", and route the rest. An item labelled `blocked` is not advanced: "blocked, waiting for the owner".
@@ -287,45 +330,61 @@ Advance runs only when Preflight has no wake-wide gap, the board was read whole 
 
    Every `stop` adds the label `blocked` and the agent comment of [Stop](references/run-github.md#stop). An item that an answer of this wake stopped is not advanced by a later line of the same wake.
 
-### 3. Start
+### 4. Start
 
 Reference: [Ready filter](references/run-github.md#ready-filter) and [Claim](references/run-github.md#claim). Spec: Ready rule; Items that are not tasks; Waiting for Ready is reported; Trusted issues only; Taken items are left alone; Parallel limit; Look before claiming; Claim order; Start instruction.
 
-Start runs only when Preflight has no wake-wide gap, the board was read whole, the T3 projects were listed and the plan model resolves.
+Start runs only when Preflight has no wake-wide gap, the board was read whole, the T3 projects were listed, the plan model resolves and the board has not ended.
 
 1. **Filter.** Take the lines of the [Ready filter](references/run-github.md#ready-filter), run on the board read before the steps. It decides Ready by the three conditions, then applies the start guards: overflow, taken, trust. Keep its line for every item: the report gives the reason of each `skip`.
 2. **Slots.** Count the items in use and the free slots, as in [Slots](references/run-github.md#slots). Take the `start` items in ascending order of repository, compared without case, then issue number, while a slot is free. A candidate left over stays Ready and is reported.
 3. **Look before claiming.** For each candidate, check that its repository's T3 project still exists (`no-project:<repo>` otherwise), read it again and search that project for a thread titled exactly with its launch key, as in [Look before claiming](references/run-github.md#look-before-claiming). Anything changed, a verdict other than `start`, or such a thread: skip it and report it.
 4. **Claim.** Write the seven [writes](references/run-github.md#writes) in order, reading each back: assign the agent, Status "In progress", "Attempt" 1, "Run phase" plan, the linked branch, the thread launched on the plan model with the [start instruction](references/run-github.md#start), and "Run thread". A failed write stops this item's claim: report it as a half-made claim, and go on with the next candidate.
 
+### After Start
+
+Reference: [Automatic check](references/triggers-github.md#automatic-check). Spec: Wake order.
+
+Run the [automatic trigger check](references/triggers-github.md#automatic-check) only when its condition holds: a timer wake that finds an event the webhook missed. It never runs in a webhook wake or a manual wake.
+
 ### Wake report
 
 Every wake ends with this report, a wake with nothing to do included. (Spec: Wake report.)
 
 ```markdown
-## Wake: <repo>, board <board URL>
+## Wake: board <board URL>
 
-Trigger: <manual wake | report line "<line>">
+Trigger: <webhook | timer | manual wake | report line "<line>">
+
+### Repaired
+- <repo>#<issue>: <ok | recorded | released | stopped | skip | unknown | report-only | failed>, <detail: the thread id, the writes made, or the reason>
+
+### Settled
+- <repo>#<issue>: <settled | already-settled | labelled | wait | none | skip | unknown | failed>, <detail: the thread id, the pull request, or the reason>
 
 ### Started
-- #<issue> <title>: thread <threadId>, branch <branch>
+- <repo>#<issue> <title>: thread <threadId>, branch <branch>
 
 ### Not started
-- #<issue> <title>: <reason, from the filter's verdict, the slots or the claim's look>
+- <repo>#<issue> <title>: <reason, from the filter's verdict, the slots or the claim's look>
 
 ### Report answers
-- #<issue> <message id> from <sender id>: <finish-switch | stop | handled | act | not-idle | report-only | recorded | superseded | blocked>, <reason; for act the thread id and the change folder; for stop the reason and the phase to resume in>
+- <repo>#<issue> <message id> from <sender id>: <finish-switch | stop | handled | act | not-idle | report-only | recorded | superseded | blocked>, <reason; for act the thread id and the change folder; for stop the reason and the phase to resume in>
 
 ### Half-made claims
-- #<issue>: <the writes that completed, and the write that failed with its error>
+- <repo>#<issue>: <the writes that completed, and the write that failed with its error>
+
+### Triggers
+- <the state of the triggers when this wake changed or checked them, or "not checked">
 
 ### Gaps (owner step)
 - <what is missing or invalid, and the owner's exact step>
-
-Repair: not done yet.
 ```
 
 - Every list is printed, with "none" when it is empty.
-- Under Not started, list every board item the filter did not print `start` for, with the wording of its reason in [Ready filter](references/run-github.md#ready-filter), and every candidate a slot, the look or the thread search held back.
+- The Trigger line names the wake's `Trigger:` line, the phase report line that started it, or a manual wake.
+- Under Repaired and Settled, list every line of `<work>/repair.tsv` and `<work>/settle.tsv`, a `skip blocked` item and every issue labelled for a merge that left it open included. Under Settled, `none` lines (no merged pull request) may be left out; say how many.
+- Under Not started, list every board item the filter did not print `start` for, with the wording of its reason in [Ready filter](references/run-github.md#ready-filter), and every candidate a slot, the look or the thread search held back. At the end of the board, say that Start did not run.
+- Under Triggers, give what the end-of-board step or the automatic check did, as [triggers-github.md](references/triggers-github.md) words it.
 - Under Gaps, list every gap of the steps before, every model that did not resolve, a board read that failed, and every stop that was reported in place of being written.
-- When no item was started and no report was answered, say so above the lists: "Nothing to do in this wake."
+- When nothing was repaired or settled, no item was started and no report was answered, say so above the lists: "Nothing to do in this wake."

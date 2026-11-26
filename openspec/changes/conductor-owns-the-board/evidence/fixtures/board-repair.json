@@ -1,0 +1,260 @@
+[
+  {
+    "id": "PVTI_ax1",
+    "type": "ISSUE",
+    "isArchived": false,
+    "status": {
+      "name": "In progress"
+    },
+    "phase": {
+      "name": "Feature"
+    },
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 1,
+      "title": "Task 1",
+      "state": "OPEN",
+      "closedAt": null,
+      "body": "<!-- task: scratch-rfc/m1-greeting/1 -->\nKeyed and assigned.",
+      "repository": {
+        "nameWithOwner": "a/x",
+        "owner": {
+          "login": "a"
+        }
+      },
+      "milestone": {
+        "number": 1,
+        "state": "OPEN"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "login": "raidenyn-shadow"
+          }
+        ]
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_ax2",
+    "type": "ISSUE",
+    "isArchived": false,
+    "status": {
+      "name": "In progress"
+    },
+    "phase": {
+      "name": "Feature"
+    },
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 2,
+      "title": "Task 2",
+      "state": "OPEN",
+      "closedAt": null,
+      "body": "No key here.\nAssigned.",
+      "repository": {
+        "nameWithOwner": "a/x",
+        "owner": {
+          "login": "a"
+        }
+      },
+      "milestone": {
+        "number": 1,
+        "state": "OPEN"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "login": "raidenyn-shadow"
+          }
+        ]
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_ax3",
+    "type": "ISSUE",
+    "isArchived": false,
+    "status": {
+      "name": "In progress"
+    },
+    "phase": {
+      "name": "Feature"
+    },
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 3,
+      "title": "Task 3",
+      "state": "OPEN",
+      "closedAt": null,
+      "body": "<!-- task: scratch-rfc/m1-greeting/3 -->\nKeyed, blocked, assigned.",
+      "repository": {
+        "nameWithOwner": "a/x",
+        "owner": {
+          "login": "a"
+        }
+      },
+      "milestone": {
+        "number": 1,
+        "state": "OPEN"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "login": "raidenyn-shadow"
+          }
+        ]
+      },
+      "labels": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "name": "Blocked"
+          }
+        ]
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  },
+  {
+    "id": "PVTI_ax4",
+    "type": "ISSUE",
+    "isArchived": false,
+    "status": {
+      "name": "In progress"
+    },
+    "phase": {
+      "name": "Feature"
+    },
+    "runPhase": {
+      "name": "plan"
+    },
+    "attempt": {
+      "number": 1
+    },
+    "runThread": {
+      "text": "thread-4"
+    },
+    "content": {
+      "__typename": "Issue",
+      "number": 4,
+      "title": "Task 4",
+      "state": "OPEN",
+      "closedAt": null,
+      "body": "<!-- task: scratch-rfc/m1-greeting/4 -->\nKeyed with a Run thread, no assignee.",
+      "repository": {
+        "nameWithOwner": "a/x",
+        "owner": {
+          "login": "a"
+        }
+      },
+      "milestone": {
+        "number": 1,
+        "state": "OPEN"
+      },
+      "author": {
+        "login": "raidenyn-shadow"
+      },
+      "assignees": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "labels": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "blockedBy": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "linkedBranches": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "userContentEdits": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  }
+]

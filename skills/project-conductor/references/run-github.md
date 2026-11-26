@@ -467,6 +467,211 @@ A Ready task whose only blocker was closed as not planned prints `start`, when n
 
 The fixtures in `openspec/changes/conductor-owns-the-board/evidence/fixtures/` pin the per-repository keys: on `board-two-repos.json` with `repos-two.json`, the filter prints exactly `a/x#5 start` and `b/y#5 skip not-ready`.
 
+## Repair
+
+Repair finds claims that a wake left half-made, and finishes or undoes them. It runs first, in every wake that passes the identity check of [Preflight](#preflight), also when the [settings block](#settings-block) has a gap: it needs no setting. It needs the board read whole. Anchor: `#repair`.
+
+Every line of Repair goes to `<work>/repair.tsv`, one per item, as `<repo>#<issue>\t<action>\t<detail>`. Every write that succeeds also runs `touch <work>/wrote`. Save the re-read query and `reread` of [Look before claiming](#look-before-claiming) first: Repair uses them too.
+
+### Repair scope
+
+Repair covers each open board issue that is not archived on the board, whose whole first line is a task key, and that is assigned to `<agent>` or has a non-empty "Run thread". An issue without a key is never touched. An issue labelled `blocked` is not repaired, but it is listed:
+
+```bash
+cat > <work>/repair-scope.jq <<'EOF'
+def firstline: (.body // "") | (split("\n")[0] // "") | rtrimstr("\r");
+.[] | select(.isArchived != true and .content.__typename == "Issue" and .content.state == "OPEN")
+| select(.content | firstline | test("^<!-- task: [a-z0-9-]+/[a-z0-9-]+/[0-9]+ -->$"))
+| (any(.content.assignees.nodes[]; .login == $agent)) as $mine
+| ((.runThread.text // "") != "") as $run
+| select($mine or $run or .content.assignees.totalCount > (.content.assignees.nodes | length))
+| "\(.content.repository.nameWithOwner)#\(.content.number) " + (
+    if .content.labels.totalCount > (.content.labels.nodes | length) then "skip overflow:labels"
+    elif any(.content.labels.nodes[]; (.name | ascii_downcase) == "blocked") then "skip blocked"
+    elif ($mine or $run) | not then "skip overflow:assignees"
+    else "repair" end)
+EOF
+jq -r --arg agent <agent> -f <work>/repair-scope.jq <work>/board.json > <work>/repair-scope.txt
+```
+
+Only the `repair` lines are repaired. A `skip blocked` item gets no record, no release and no stop: write `<repo>#<issue>\tskip\tblocked, waiting for the owner` to `repair.tsv`. A `skip overflow:<list>` item is unknown: its labels or assignees have more entries than the read returned, so it is skipped and reported.
+
+The fixture `openspec/changes/conductor-owns-the-board/evidence/fixtures/board-repair.json` holds four items. With `--arg agent raidenyn-shadow`, the scope prints exactly `a/x#1 repair`, `a/x#3 skip blocked` and `a/x#4 repair`: `a/x#1` is keyed and assigned, `a/x#2` is assigned without a key, `a/x#3` is keyed, assigned and `blocked`, and `a/x#4` is keyed with a "Run thread" and no assignee.
+
+### The facts of one item
+
+```bash
+jq -r --arg r <repo> --argjson n <issue> '.[] | select(.content.repository.nameWithOwner == $r and .content.number == $n)
+  | "item=\(.id) run-thread=\(.runThread.text // "") attempt=\(.attempt.number // "") status=\(.status.name // "")",
+    "launch-key=\($r)#\($n) attempt \(.attempt.number // 1)",
+    "branches=\(.content.linkedBranches.totalCount) \([.content.linkedBranches.nodes[].ref.name] | join(" "))",
+    "pull-requests=\([.content.closedByPullRequestsReferences.nodes[] | select(.isCrossRepository == false) | "#\(.number)"] | join(" "))"' <work>/board.json
+```
+
+The launch key is `<repo>#<issue> attempt <Attempt, or 1 when empty>`, as the second line prints it.
+
+### Decide
+
+Take the first row that applies. The thread lookups:
+
+- **"Run thread" set.** Call `t3_thread_read` with `threadId` the "Run thread" and `limit` 1. Only the error code `thread_not_found` means the thread is missing. Any other error is unknown. On an answer, read `thread.archived` and `thread.title`.
+- **"Run thread" empty.** Call `t3_thread_search` with `query` the launch key, `projectId` `<project of repo>` and `limit` 50. An error is unknown. An answer with 50 `matches` is unknown too, because more may exist. The exact matches are the `matches[]` whose `title` equals the launch key, character for character.
+
+| # | Found | Action in `repair.tsv` |
+|---|---|---|
+| 1 | `<project of repo>` is `null`: the repository has no T3 project, or several | `report-only`, "no T3 project for `<repo>`" or "several T3 projects for `<repo>`: <ids>". Never searched without a `projectId`, never released, never stopped. When `t3_project_list` failed, the detail is "the T3 projects could not be listed". A repository whose `default` is `null` (it cannot be read) is `report-only` too |
+| 2 | "Run thread" set; the read fails with another error than `thread_not_found` | `unknown`, with the error |
+| 3 | "Run thread" set; the thread exists, `archived` is false, and its title is the launch key | `ok`: nothing is written. A live thread whose branch has no commit yet is left alone |
+| 4 | "Run thread" set; `thread_not_found`, `archived` true, or another title | `stopped`: [Stop without a report](#stop-without-a-report), reason "Run thread <id> is missing", "Run thread <id> is archived" or "Run thread <id> is titled <title>, not <launch key>" |
+| 5 | "Run thread" empty; the search fails or returns 50 matches | `unknown`, with the error or "50 matches" |
+| 6 | "Run thread" empty; more than one exact match | `stopped`, reason "several threads have the launch key <launch key>: <ids>" |
+| 7 | "Run thread" empty; one exact match | `recorded`: [Record the thread](#record-the-thread) |
+| 8 | "Run thread" empty; no exact match; linked branches overflow their page | `unknown`, "linked branches overflow" |
+| 9 | "Run thread" empty; no exact match; more than one linked branch | `stopped`, reason "several linked branches: <names>" |
+| 10 | "Run thread" empty; no exact match; no linked branch, and a closing pull request that is not cross-repository | `stopped`, reason "work without a thread" |
+| 11 | "Run thread" empty; no exact match; no linked branch and no such pull request | `released`: [Release](#release), without its first write |
+| 12 | "Run thread" empty; no exact match; one linked branch | run the two [branch checks](#release). Both print `0`: `released`. Either prints more: `stopped`, reason "work without a thread". Either fails: `unknown`, with the error |
+
+"No match" can still be wrong, because the search is not exhaustive. A release is safe anyway: Start launches with `clientRequestId` set to the launch key, which returns the existing thread instead of a second one, and the launch's read-back then records it.
+
+**Look before the first write.** Before the first write of a `recorded`, `released` or `stopped` item, read it again with `reread <owner> <name> <issue> <work>/repair-<owner>-<name>-<issue>.json`. The scope must still print `repair` for it, and these facts must equal the board read: "Run thread", "Attempt", "Run phase", Status, the assignees and the linked branches:
+
+```bash
+facts='map({runThread, attempt, runPhase, status, a: [.content.assignees.nodes[].login], b: [.content.linkedBranches.nodes[].ref.name]})'
+diff <(jq -S --arg r <repo> --argjson n <issue> "[.[] | select(.content.repository.nameWithOwner == \$r and .content.number == \$n)] | $facts" <work>/board.json) \
+     <(jq -S "$facts" <work>/repair-<owner>-<name>-<issue>.json)                    # must print nothing
+jq -r --arg agent <agent> -f <work>/repair-scope.jq <work>/repair-<owner>-<name>-<issue>.json   # must print "<repo>#<issue> repair"
+```
+
+A failed read, a difference, or another line: `unknown`, "changed during the wake". Nothing is written.
+
+A failed write or read-back stops that item, never the wake: write `failed` with the writes that completed and the one that failed, and go on with the next item. The writes that completed stay, and the next wake's Repair continues from them.
+
+### Record the thread
+
+Write the one exact match's `threadId` into "Run thread", with the field id of [Writes](#writes):
+
+```bash
+gh project item-edit --id <item id> --project-id <project id> --field-id <run thread field> --text <threadId>
+```
+
+Read back with `reread` and the state print of [Writes](#writes): `run-thread=<threadId>`. No thread is launched.
+
+### Release
+
+A release undoes a claim that has no thread. Anchor: `#release`.
+
+**The branch checks** come first, for the one linked branch `<branch>`. Both must print `0`:
+
+```bash
+gh api repos/<repo>/compare/<default>...<branch> --jq .ahead_by                  # commits beyond its base
+gh api "repos/<repo>/pulls?state=all&head=<owner>:<branch>" --jq length          # pull requests from it
+```
+
+Then make the six writes in this order. Read each one back before the next; the read-back runs `reread <owner> <name> <issue> <work>/after-<owner>-<name>-<issue>.json` and the state print of [Writes](#writes). A write whose field already holds its target is skipped, so a release that a wake left part-way is finished by the next one. The ids come from `<work>/fields.json`, as in [Writes](#writes), and `<ready>` is:
+
+```bash
+jq -r '.fields[] | select(.name == "Status") | .options[] | select(.name == "Ready") | .id' <work>/fields.json   # <ready>
+```
+
+1. Delete the empty branch, which drops its link. Only after both branch checks printed `0`, and only when the item has a linked branch. Read back: `gh api repos/<repo>/git/ref/heads/<branch>` fails with `HTTP 404`, and `branches=` no longer holds `<branch>`.
+
+   ```bash
+   gh api -X DELETE repos/<repo>/git/refs/heads/<branch>
+   ```
+
+2. Clear "Run phase". Read back: `run-phase=null`.
+
+   ```bash
+   gh project item-edit --id <item id> --project-id <project id> --field-id <run phase field> --clear
+   ```
+
+3. Clear "Attempt". Read back: `attempt=null`.
+
+   ```bash
+   gh project item-edit --id <item id> --project-id <project id> --field-id <attempt field> --clear
+   ```
+
+4. Status "Ready", only when it is "In progress". Read back: `status=Ready`.
+
+   ```bash
+   gh project item-edit --id <item id> --project-id <project id> --field-id <status field> --single-select-option-id <ready>
+   ```
+
+5. Clear "Run thread". Read back: `run-thread=null`.
+
+   ```bash
+   gh project item-edit --id <item id> --project-id <project id> --field-id <run thread field> --clear
+   ```
+
+6. Remove the agent from the assignees, last. Read back: `assignees=` no longer holds `<agent>`.
+
+   ```bash
+   gh issue edit <issue> --repo <repo> --remove-assignee <agent>
+   ```
+
+A wake that dies part-way leaves the agent assigned, so the issue stays in the scope, and the next wake's Repair finishes the release. A released item that is Ready is judged by Start in the same wake, on the [board read again](#read-again).
+
+When the board has a gap of [The board](#the-board), such as a missing Status option "Ready" or a missing run field, a write that needs it is not made: the item is `failed`, with that gap.
+
+## Settle
+
+Settle finds a task whose pull request has merged, and settles its thread. It runs after Repair, under the same identity check, also when the settings block has a gap. Anchor: `#settle`.
+
+Every line of Settle goes to `<work>/settle.tsv`, one per item, as `<repo>#<issue>\t<action>\t<detail>`. Every write that succeeds also runs `touch <work>/wrote`.
+
+### Settle scope
+
+Settle covers each board issue with a non-empty "Run thread" that is open, or that was closed in the last 7 days:
+
+```bash
+jq -r '(now - 7 * 86400) as $since
+  | .[] | select(.content.__typename == "Issue" and ((.runThread.text // "") != ""))
+  | select(.content.state == "OPEN"
+           or (.content.closedAt != null and (.content.closedAt | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) >= $since))
+  | "\(.content.repository.nameWithOwner) \(.content.number) \(.runThread.text)"' <work>/board.json > <work>/settle-scope.txt
+```
+
+### Per item
+
+Take the items one at a time. `<run thread>` is the third column.
+
+1. **The thread.** Call `t3_thread_read` with `threadId` `<run thread>` and `limit` 1. An error is `unknown`, with the error; `thread_not_found` is `skip`, "Run thread <id> is missing" (Repair stops an open item for it). `<branch>` is `thread.branch`, and `<settled>` is `thread.settled`. An empty or missing `branch` is `skip`, "the thread has no branch": the API ignores an empty `head` filter, so it would return every pull request.
+2. **The merged pull request.** Look on GitHub, by the branch:
+
+   ```bash
+   f=<owner>-<name>-<issue>
+   gh api "repos/<repo>/pulls?state=closed&head=<owner>:<branch>" --jq '[.[] | select(.merged_at != null and .head.repo.full_name == "<repo>" and .head.ref == "<branch>")]' \
+     > <work>/merged-$f.json; echo "exit $?"
+   ```
+
+   Then look at the thread's `pullRequests`: for each entry that names a pull request of `<repo>`, read it with `gh api repos/<repo>/pulls/<number> --jq '[.] | map(select(.merged_at != null and .head.repo.full_name == "<repo>" and .head.ref == "<branch>"))'`, and add the answer to the same file (`jq -s add`). An exit other than 0, on any lookup, is `unknown`, "the pull requests could not be read": skip the item, never read it as none. Keep only the pull requests whose author is the agent or has the association `OWNER`, `MEMBER` or `COLLABORATOR`:
+
+   ```bash
+   jq -r --arg agent <agent> '[.[] | select(.user.login == $agent or (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")))]
+     | unique_by(.number) | if length == 0 then "none" else "merged \(map(.merged_at) | max) \(map("#\(.number)") | join(" "))" end' <work>/merged-$f.json
+   ```
+
+   `none`: write `none` to `settle.tsv`. Nothing is written. A pull request without `Closes` is found too.
+3. **Read the issue again,** and decide by its state:
+
+   ```bash
+   gh issue view <issue> --repo <repo> --json state,labels \
+     --jq '"state=\(.state) blocked=\(any(.labels[]; (.name | ascii_downcase) == "blocked"))"'
+   ```
+
+   A failed read is `unknown`. Then:
+   - **Closed:** go on to step 4.
+   - **Open, merged less than 5 minutes ago** (the newest `merged_at` against `date -u +%s`): `wait`. Nothing is written; the next wake looks again, since GitHub may not have closed the issue yet.
+   - **Open, merged earlier:** one task, one issue, one pull request was broken. Unless `blocked=true`, write [Stop without a report](#stop-without-a-report) with `Step: Settle.` and the reason "merged without closing its issue". A failed stop write ends the item here: the thread is not settled, so the next wake tries again. Then go on to step 4.
+4. **Settle the thread,** unless `<settled>` is already true: call `t3_thread_organize` with `action` `settle` and `threadId` `<run thread>`. Read back with `t3_thread_read`: `thread.settled` is true.
+
+Step 3 runs whatever the thread's state, so a wake that died between settling and labelling is finished by the next one. Nothing else on the board changes. The actions are `settled`, `already-settled`, `labelled` (with the settle that followed), `wait`, `none`, `skip`, `unknown` and `failed`.
+
+## Read again
+
+When `<work>/wrote` exists, Repair or Settle changed the board. Read the board again, as in [Board](#board), into the same `<work>/board.json`, and run the [Ready filter](#ready-filter) again into `<work>/filter.txt`, before the end-of-board check, Advance and Start. `<work>/repos.json` is kept. A failed read again is a failed board read: Advance and Start write nothing in this wake. Without `<work>/wrote`, the first read stands. Anchor: `#read-again`.
+
 ## Claim
 
 Claim the `start` lines of the filter in the order of [Slots](#slots), while a slot is free. Before the first write of each item, check its repository, read it again and search for its thread. Every command of one item uses that item's `<repo>`, `<owner>`, `<name>`, `<default>` and `<project of repo>`. Anchor: `#claim`.
@@ -887,7 +1092,7 @@ Answer `act`. The report lists the item with its thread id and the change folder
 
 ## Stop
 
-A stop puts the label `blocked` on the issue and an agent comment that records the report. Anchor: `#stop`.
+A stop puts the label `blocked` on the issue and an agent comment that records the report. A stop of Repair or Settle has no report: it uses [Stop without a report](#stop-without-a-report). Anchor: `#stop`.
 
 `<message id>`, `<sender id>` and `<report line>` are the report's message id, sender and trimmed line, as in `judged.tsv`. `<Run phase>` is the item's "Run phase": the phase to resume in. `<reason>` is the answer's reason, with no full stop at its end:
 
@@ -923,6 +1128,37 @@ Read both back: the labels hold `blocked` (`gh issue view <issue> --repo <repo> 
 When the label `blocked` could not be read or created in `<repo>`, write neither: report the stop with its comment text, for the owner.
 
 The report lists every stop with the issue, the reason and the phase to resume in.
+
+### Stop without a report
+
+Repair and Settle stop an item that needs the owner, but they answer no report, so their comment names the step instead. Anchor: `#stop-without-a-report`.
+
+`<Step>` is `Repair` or `Settle`, and `<reason>` is the reason of [Repair](#decide) or [Settle](#per-item), with no full stop at its end. Make sure the label exists in `<repo>`, as in [The label `blocked`](#the-label-blocked). Then add the label first, then the comment:
+
+```bash
+gh issue edit <issue> --repo <repo> --add-label blocked
+printf 'Run stopped by the conductor.\nStep: %s.\nReason: %s.\n' '<Step>' '<reason>' > <work>/stop-<owner>-<name>-<issue>.md
+gh issue comment <issue> --repo <repo> --body-file <work>/stop-<owner>-<name>-<issue>.md
+```
+
+The comment reads:
+
+```text
+Run stopped by the conductor.
+Step: <Repair | Settle>.
+Reason: <reason>.
+```
+
+Read both back. The labels hold `blocked`, as in [Stop](#stop). The agent's comments hold one whose body starts with `Run stopped by the conductor.\nStep: ` with its `Step:` and `Reason:` lines:
+
+```bash
+gh api repos/<repo>/issues/<issue>/comments --paginate \
+  --jq '.[] | select(.user.login == "<agent>") | .body | gsub("\r"; "") | select(startswith("Run stopped by the conductor.\nStep: "))' \
+  > <work>/stops-<owner>-<name>-<issue>.txt
+grep -qxF 'Reason: <reason>.' <work>/stops-<owner>-<name>-<issue>.txt && grep -qxF 'Step: <Step>.' <work>/stops-<owner>-<name>-<issue>.txt && echo "stop recorded"
+```
+
+Only the label suppresses a repeat: Repair skips an item labelled `blocked`, and Settle does not label it again. A failed write or read-back stops that item, never the wake. When the label `blocked` could not be read or created in `<repo>`, write neither: report the stop with its comment text, for the owner.
 
 ### The label `blocked`
 
