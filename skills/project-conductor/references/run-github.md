@@ -520,14 +520,14 @@ Take the first row that applies. The thread lookups:
 | # | Found | Action in `repair.tsv` |
 |---|---|---|
 | 1 | `<project of repo>` is `null`: the repository has no T3 project, or several | `report-only`, "no T3 project for `<repo>`" or "several T3 projects for `<repo>`: <ids>". Never searched without a `projectId`, never released, never stopped. When `t3_project_list` failed, the detail is "the T3 projects could not be listed". A repository whose `default` is `null` (it cannot be read) is `report-only` too |
-| 2 | "Run thread" set; the read fails with another error than `thread_not_found` | `unknown`, with the error |
-| 3 | "Run thread" set; the thread exists, `archived` is false, and its title is the launch key | `ok`: nothing is written. A live thread whose branch has no commit yet is left alone |
-| 4 | "Run thread" set; `thread_not_found`, `archived` true, or another title | `stopped`: [Stop without a report](#stop-without-a-report), reason "Run thread <id> is missing", "Run thread <id> is archived" or "Run thread <id> is titled <title>, not <launch key>" |
-| 5 | "Run thread" empty; the search fails or returns 50 matches | `unknown`, with the error or "50 matches" |
-| 6 | "Run thread" empty; more than one exact match | `stopped`, reason "several threads have the launch key <launch key>: <ids>" |
-| 7 | "Run thread" empty; one exact match | `recorded`: [Record the thread](#record-the-thread) |
-| 8 | "Run thread" empty; no exact match; linked branches overflow their page | `unknown`, "linked branches overflow" |
-| 9 | "Run thread" empty; no exact match; more than one linked branch | `stopped`, reason "several linked branches: <names>" |
+| 2 | linked branches overflow their page, whatever "Run thread" holds | `unknown`, "linked branches overflow" |
+| 3 | more than one linked branch, whatever "Run thread" holds | `stopped`, reason "several linked branches: <names>" |
+| 4 | "Run thread" set; the read fails with another error than `thread_not_found` | `unknown`, with the error |
+| 5 | "Run thread" set; the thread exists, `archived` is false, and its title is the launch key | `ok`: nothing is written. A live thread whose branch has no commit yet is left alone |
+| 6 | "Run thread" set; `thread_not_found`, `archived` true, or another title | `stopped`: [Stop without a report](#stop-without-a-report), reason "Run thread <id> is missing", "Run thread <id> is archived" or "Run thread <id> is titled <title>, not <launch key>" |
+| 7 | "Run thread" empty; the search fails or returns 50 matches | `unknown`, with the error or "50 matches" |
+| 8 | "Run thread" empty; more than one exact match | `stopped`, reason "several threads have the launch key <launch key>: <ids>" |
+| 9 | "Run thread" empty; one exact match | `recorded`: [Record the thread](#record-the-thread) |
 | 10 | "Run thread" empty; no exact match; no linked branch, and a closing pull request that is not cross-repository | `stopped`, reason "work without a thread" |
 | 11 | "Run thread" empty; no exact match; no linked branch and no such pull request | `released`: [Release](#release), without its first write |
 | 12 | "Run thread" empty; no exact match; one linked branch | run the two [branch checks](#release). Both print `0`: `released`. Either prints more: `stopped`, reason "work without a thread". Either fails: `unknown`, with the error |

@@ -284,7 +284,7 @@ Repair runs first in every wake that passes the identity check, also when the se
    - a live thread with the launch key as title needs nothing;
    - a missing or archived thread, or another title, is a stop;
    - one exact match is recorded in "Run thread" and read back;
-   - several matches, or several linked branches, is a stop;
+   - several matches is a stop, and so are several linked branches, whatever "Run thread" holds;
    - no match releases the claim when there is no claimed branch, or the branch has no commits beyond its base and no pull request; a branch with work is a stop, "work without a thread".
 4. **Release** in six writes, each read back: delete the empty branch, clear "Run phase", clear "Attempt", Status "Ready" when it is "In progress", clear "Run thread", and remove the agent from the assignees, last. A wake that dies part-way leaves the agent assigned, so the next Repair finishes it.
 
