@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -30,6 +31,28 @@ export async function tempRepo({ commit = true, files = {} } = {}) {
     git('commit', '-q', '-m', 'init');
   }
   return { dir, git, write, cleanup: () => rm(dir, { recursive: true, force: true }) };
+}
+
+// A linked worktree of `r` on a new branch, in its own temp folder. `cleanup` works even when the
+// main repo was removed first.
+/** @param {{ dir: string }} r @param {{ branch?: string }} [opts] */
+export async function linkedWorktree(r, { branch = 'wt' } = {}) {
+  const parent = await mkdtemp(join(tmpdir(), 'agent-harness-wt-'));
+  const dir = join(realpathSync(parent), 'wt');
+  execFileSync('git', ['worktree', 'add', '-q', '-b', branch, dir], { cwd: r.dir, stdio: ['ignore', 'pipe', 'pipe'] });
+  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const write = async (rel, text) => {
+    const file = join(dir, rel);
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, text);
+  };
+  const cleanup = async () => {
+    try {
+      execFileSync('git', ['worktree', 'remove', '--force', dir], { cwd: r.dir, stdio: 'ignore' });
+    } catch {}
+    await rm(parent, { recursive: true, force: true });
+  };
+  return { dir, git, write, cleanup };
 }
 
 /** @param {string} script @param {string[]} [args] @param {{ cwd?: string, input?: string, env?: Record<string, string | undefined> }} [opts] */

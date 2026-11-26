@@ -281,7 +281,7 @@ function how(run, cfg) {
   }
 }
 
-// ---- the charge ledger (blocks.json at the root session folder) ---------------------------------
+// ---- the charge ledger (blocks.json in the session folder under the git common dir) -------------
 // Decided under the gate lock. The ledger has its own short lock, so `ack` and `release` never wait
 // for a long run.
 
