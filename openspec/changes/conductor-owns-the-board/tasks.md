@@ -1,6 +1,6 @@
 ## 0. Trigger syntax
 
-- [ ] 0.1 On a throwaway trigger, settle the `replayKey` template for `x-github-delivery` and whether the `body.pull_request.merged notEquals false` filter passes issue events. Record the results in `evidence/00-trigger-syntax.md`, and update the design and the spec when they differ.
+- [x] 0.1 On a throwaway trigger, settle the `replayKey` template for `x-github-delivery` and whether the `body.pull_request.merged notEquals false` filter passes issue events. Record the results in `evidence/00-trigger-syntax.md`, and update the design and the spec when they differ.
 
 ## 1. Contract change
 

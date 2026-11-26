@@ -206,9 +206,9 @@ Both are created with `bindToCurrentThread: true` and `freshSession: true`.
 | `project-conductor timer` | `interval`, `everyMs` = `reconcileMinutes` × 60000 | `Trigger: timer.` + the wake sentence |
 
 The webhook trigger's schedule is `webhook` with:
-- **Filters:** `headers.x-github-event` in `issues`, `pull_request`, and `body.action` equals `closed`. If the Verification shows that `body.pull_request.merged` `notEquals` `false` passes issue events and drops unmerged closes, that filter is added too.
+- **Filters:** `headers.x-github-event` in `issues`, `pull_request`, and `body.action` equals `closed`. No filter on `merged`: Task 0 showed that `body.pull_request.merged` `notEquals` `false` also drops every issue delivery (`evidence/00-trigger-syntax.md`).
 - **Signature:** header `x-hub-signature-256`, prefix `sha256=`, hex. The secret comes from the owner (Decision 8).
-- **Dedupe:** `replayKey` from the `x-github-delivery` header; a constant `coalesceKey` with a 120 s window.
+- **Dedupe:** `replayKey` `{{headers.x-github-delivery}}`, which Task 0 proved drops a repeated delivery; a constant `coalesceKey` with a 120 s window.
 - **`maxDeliveryAgeMinutes`:** `reconcileMinutes`.
 
 - **Closed, unmerged PRs.** Filters only combine with AND, so a pull request closed without merging also wakes the conductor. That wake finds nothing to do.

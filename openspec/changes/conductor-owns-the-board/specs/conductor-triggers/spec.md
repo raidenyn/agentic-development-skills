@@ -4,9 +4,9 @@
 The conductor SHALL have exactly two T3 scheduled tasks bound to its own thread (`bindToCurrentThread: true`), each with a fresh session (`freshSession: true`):
 - `project-conductor webhook`:
   - a `webhook` schedule;
-  - filters `headers.x-github-event` in `issues`, `pull_request`, and `body.action` equals `closed`. They MUST also include `body.pull_request.merged` `notEquals` `false` when the plan's Task 0 shows that this filter passes issue events. Otherwise an unmerged close wakes the conductor and finds nothing to do;
+  - filters `headers.x-github-event` in `issues`, `pull_request`, and `body.action` equals `closed`, and no filter on `merged`. A merged filter would drop every issue delivery (evidence `00-trigger-syntax.md`), so an unmerged close wakes the conductor, which finds nothing to do;
   - an HMAC signature on header `x-hub-signature-256`, with prefix `sha256=` and hex encoding;
-  - a `replayKey` from the `x-github-delivery` header, in the template syntax established by the plan's Task 0, and a constant `coalesceKey` with a 120 second window;
+  - `replayKey` `{{headers.x-github-delivery}}`, and a constant `coalesceKey` with a 120 second window;
   - `maxDeliveryAgeMinutes` equal to `reconcileMinutes`.
 - `project-conductor timer`: an `interval` schedule of `reconcileMinutes` × 60000 ms.
 
@@ -22,7 +22,7 @@ Each prompt MUST be one line `Trigger: webhook.` or `Trigger: timer.`, followed 
 
 #### Scenario: Pull request closed without a merge
 - **WHEN** a pull request of a repository of the board closes unmerged
-- **THEN** no run starts when the merged filter is in place; otherwise one run starts and finds nothing to do
+- **THEN** one run starts and finds nothing to do
 
 ### Requirement: Webhook payload is only a hint
 A webhook wake SHALL read everything again from GitHub and T3, and MUST NOT take any fact from the request.
