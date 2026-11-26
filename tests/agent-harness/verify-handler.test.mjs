@@ -640,9 +640,24 @@ test('the handler declares its interface', () => {
   assert.equal(h.manual, 'Run node .agents/harness/verify-gate/cli.mjs run by hand.');
   assert.equal(typeof h.proofs['verify-pass'], 'function');
   assert.equal(handlerMod.default.name, 'verify-gate');
-  assert.deepEqual(handlerMod.CONFIG_KEYS, ['command', 'base', 'taskFiles', 'timeoutSeconds', 'maxBlocks']);
+  assert.deepEqual(handlerMod.CONFIG_KEYS, [
+    'command',
+    'base',
+    'taskFiles',
+    'editFiles',
+    'timeoutSeconds',
+    'maxBlocks',
+  ]);
   assert.deepEqual(handlerMod.REQUIRED_KEYS, ['command']);
   assert.deepEqual(createVerifyHandler({ timeoutSeconds: 5 }).timeouts, { 'tool.after': 15000, 'turn.end': 15000 });
+});
+
+test('configHash without editFiles matches 0.1.2', async () => {
+  const { configHash } = await vg('lib/gate.mjs');
+  const s = { command: ['x'] };
+  assert.equal(configHash(s), '4af7534d293897869cc73e3c84170b91d8bd2d6adc2d27f4d3a80b755b2d530e');
+  assert.notEqual(configHash({ ...s, editFiles: ['**/*.ts'] }), configHash(s));
+  assert.notEqual(configHash({ ...s, editFiles: ['a'] }), configHash({ ...s, editFiles: ['b'] }));
 });
 
 test('the edit, run and key functions are injectable', async () => {

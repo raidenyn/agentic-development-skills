@@ -2,10 +2,10 @@
 
 Tick a group's boxes only after its tests pass, because every tick starts this repo's full check.
 
-- [ ] 1.0 Bump `src/verify-gate/tool.json` to `0.2.0` first. Run `pnpm run harness:update`, never `pnpm run build` alone, before tests and commits, and commit the regenerated assets and `.agents/harness` with each change. This repo's own gate runs `pnpm run check`, which includes `vendored.test.mjs`
-- [ ] 1.1 Add `editFiles` to `CONFIG_KEYS`, an `editFiles: string[] | null` field to `GateConfig` and `normalizeConfig`, and the `configErrors` check ("must be a non-empty list of glob strings") in `src/verify-gate/lib/gate.mts`
-- [ ] 1.2 Make `configHash` append `editFiles` only when it is set, so a section without it keeps its current hash
-- [ ] 1.3 Tests:
+- [x] 1.0 Bump `src/verify-gate/tool.json` to `0.2.0` first. Run `pnpm run harness:update`, never `pnpm run build` alone, before tests and commits, and commit the regenerated assets and `.agents/harness` with each change. This repo's own gate runs `pnpm run check`, which includes `vendored.test.mjs`
+- [x] 1.1 Add `editFiles` to `CONFIG_KEYS`, an `editFiles: string[] | null` field to `GateConfig` and `normalizeConfig`, and the `configErrors` check ("must be a non-empty list of glob strings") in `src/verify-gate/lib/gate.mts`
+- [x] 1.2 Make `configHash` append `editFiles` only when it is set, so a section without it keeps its current hash
+- [x] 1.3 Tests:
   - `check` rejects `editFiles` given as `"**/*.ts"`, `[]` or `[""]` and accepts a valid list (`cli-verify.test.mjs`).
   - Update the `CONFIG_KEYS` assertion.
   - A hash test shows that a section without the key keeps the `0.1.2` hash (a hex literal from the 0.1.2 build), and that setting or changing the key changes it.
