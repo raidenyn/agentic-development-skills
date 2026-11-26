@@ -46,8 +46,8 @@ export interface HandlerContext {
 
 export type HandlerResult =
   | { deny: string }
-  | { context: string }
-  | { block: string; ack?: () => unknown; release?: () => unknown };
+  | { context: string; stale?: string }
+  | { block: string; stale?: string; ack?: () => unknown; release?: () => unknown };
 
 // Returns null when the proof holds, otherwise the failure text.
 export type ProofCheck = (context: HandlerContext) => string | null | undefined | Promise<string | null | undefined>;
@@ -76,6 +76,8 @@ export interface DispatchResult {
   deny?: string;
   block?: string;
   context?: string;
+  // The text to show if the result is superseded; joins the handlers' stale texts with JOIN.
+  stale?: string;
   ack?: () => Promise<void>;
   release?: () => Promise<void>;
 }

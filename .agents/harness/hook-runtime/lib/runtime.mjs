@@ -78,6 +78,9 @@ function validate(result, type) {
   if (!RESULT_KINDS[type].includes(kind)) return { error: `returned ${kind}, which ${type} does not accept` };
   if (typeof result[kind] !== 'string') return { error: `returned a ${kind} that is not text` };
   const out = { kind, text: result[kind] };
+  if (kind === 'block' || kind === 'context') {
+    if (typeof result.stale === 'string') out.stale = result.stale;
+  }
   if (kind === 'block') {
     if (typeof result.ack === 'function') out.ack = result.ack;
     if (typeof result.release === 'function') out.release = result.release;
@@ -233,6 +236,7 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
     }
     const deadlines = isObject(config['hook-runtime']?.deadlines) ? config['hook-runtime'].deadlines : {};
     const texts = { deny: [], block: [], context: [] };
+    const staleTexts = [];
     const acks = [];
     const releases = [];
     const cleanups = [];
@@ -263,6 +267,7 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
       }
       if (r.result) {
         texts[r.result.kind].push(r.result.text);
+        if (r.result.stale !== undefined) staleTexts.push(r.result.stale);
         if (r.result.ack) acks.push(r.result.ack);
         if (r.result.release) releases.push(r.result.release);
       }
@@ -274,6 +279,7 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
     if (texts.deny.length) out.deny = texts.deny.join(JOIN);
     if (texts.block.length) out.block = texts.block.join(JOIN);
     if (texts.context.length && !out.deny) out.context = texts.context.join(JOIN);
+    if (staleTexts.length) out.stale = staleTexts.join(JOIN);
     if (acks.length)
       out.ack = async () => {
         for (const fn of acks) await callQuietly(fn);
