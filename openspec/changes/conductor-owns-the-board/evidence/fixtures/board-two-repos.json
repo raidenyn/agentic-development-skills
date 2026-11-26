@@ -1,0 +1,56 @@
+[
+  {
+    "id": "PVTI_ax5",
+    "type": "ISSUE",
+    "isArchived": false,
+    "status": {"name": "Ready"},
+    "phase": {"name": "Feature"},
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 5,
+      "title": "R1: add a greeting function",
+      "state": "OPEN",
+      "closedAt": null,
+      "body": "<!-- task: scratch-rfc/m1-greeting/1 -->\nAdd a greeting function.",
+      "repository": {"nameWithOwner": "a/x", "owner": {"login": "a"}},
+      "milestone": {"number": 1, "state": "OPEN"},
+      "author": {"login": "raidenyn-shadow"},
+      "assignees": {"totalCount": 0, "nodes": []},
+      "labels": {"totalCount": 0, "nodes": []},
+      "blockedBy": {"totalCount": 0, "nodes": []},
+      "linkedBranches": {"totalCount": 0, "nodes": []},
+      "closedByPullRequestsReferences": {"totalCount": 0, "nodes": []},
+      "userContentEdits": {"totalCount": 0, "nodes": []}
+    }
+  },
+  {
+    "id": "PVTI_by5",
+    "type": "ISSUE",
+    "isArchived": false,
+    "status": {"name": "Backlog"},
+    "phase": {"name": "Feature"},
+    "runPhase": null,
+    "attempt": null,
+    "runThread": null,
+    "content": {
+      "__typename": "Issue",
+      "number": 5,
+      "title": "R2: add a farewell function",
+      "state": "OPEN",
+      "closedAt": null,
+      "body": "<!-- task: scratch-rfc/m1-greeting/2 -->\nAdd a farewell function.",
+      "repository": {"nameWithOwner": "b/y", "owner": {"login": "b"}},
+      "milestone": {"number": 1, "state": "OPEN"},
+      "author": {"login": "raidenyn-shadow"},
+      "assignees": {"totalCount": 0, "nodes": []},
+      "labels": {"totalCount": 0, "nodes": []},
+      "blockedBy": {"totalCount": 0, "nodes": []},
+      "linkedBranches": {"totalCount": 0, "nodes": []},
+      "closedByPullRequestsReferences": {"totalCount": 0, "nodes": []},
+      "userContentEdits": {"totalCount": 0, "nodes": []}
+    }
+  }
+]
