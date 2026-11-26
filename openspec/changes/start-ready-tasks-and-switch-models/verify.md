@@ -26,12 +26,10 @@
 
 ## 2. Task Completion (`tasks.md`)
 
-- [ ] All `- [ ]` have been changed to `- [x]`: 20 of 23
+- [ ] All `- [ ]` have been changed to `- [x]`: 22 of 23 (updated 2026-11-26: 1.6 and 4.2 were proved by wake 8, see `evidence/06-rejections.md`)
 
 | Task | Reason incomplete | Blocks archive? |
 |---|---|---|
-| 1.6 | The issues are created. The second-author edit of E (#21) waits for `raidenyn` to accept the write invite on `raidenyn-shadow/task-run-scratch` (permission is still `read`). | Yes, until the edit is proved or the PR marks criterion 2's second-author case "not done" with the reason |
-| 4.2 | The same case. K, C and L are proved (`evidence/06-rejections.md`). | Same as 1.6 |
 | 5.2 | The PR report is written in finalize, when the PR is opened. | No; finalize does it |
 
 ---

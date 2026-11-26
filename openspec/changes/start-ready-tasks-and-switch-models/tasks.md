@@ -13,7 +13,7 @@
   - the scratch repository registered as a T3 project, and the `.claude/skills/` path proved with `project-conductor` on Claude and OpenCode;
   - every item already on the board (#1 to #12) moved to Backlog, closed or removed;
   - the `project-conductor` key checked.
-- [ ] 1.6 Create the keyed test issues in a marked milestone, on the board, with R1 to R3 first so they have the lowest numbers:
+- [x] 1.6 Create the keyed test issues in a marked milestone, on the board, with R1 to R3 first so they have the lowest numbers:
   - three Ready tasks;
   - one keyless;
   - one with an open "Ready to start when" condition, in Backlog;
@@ -57,7 +57,7 @@
 - [x] 4.0 Copy both skills into the scratch repository's `.claude/skills/`, and prove that a fresh Claude thread loads both and a fresh OpenCode thread on the implement model loads `task-run`. Re-copy after every skill edit.
 
 - [x] 4.1 Wake the conductor with three Ready tasks and `maxParallel` 2. Record that exactly two threads start, that the board shows assignee, In progress, plan, Attempt 1, the thread id and a linked branch, and that the third stays Ready (criterion 1). Save the board read and the wake report to `evidence/`.
-- [ ] 4.2 Record the wake report for the keyless, edited-by-second-account, open-condition and linked-branch issues: each is reported and not started (criterion 2).
+- [x] 4.2 Record the wake report for the keyless, edited-by-second-account, open-condition and linked-branch issues: each is reported and not started (criterion 2).
 - [x] 4.3 Run one started thread through planning, with a codeword given only in a planning turn. Record:
   - the phase report;
   - the switch;
