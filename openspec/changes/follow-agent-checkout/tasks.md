@@ -27,5 +27,5 @@
 ## 5. Live proof and PR
 
 - [x] 5.1 Live run in a throwaway repo with the built 0.1.3 tools installed (this repo's main checkout runs 0.1.2 until merge): a Claude Code session started in its main checkout `cd`s into a linked worktree placed inside the project folder (or added with `--add-dir`) with a failing verify command and ends a turn, with `AGENT_HARNESS_TRACE=1`; record the block text, the worktree's `trace.jsonl` and the common-dir `blocks.json` in the PR
-- [ ] 5.2 Open the PR with each acceptance criterion and its evidence, the changed contracts and areas, the new tool versions, the deviations (the `verify-gate` change and size, needed for the block-limit criterion; "keeps `CLAUDE_PROJECT_DIR`" vs "silent"; a worktree at `verify-gate` 0.1.2 still resets the limit), effects on waiting onboarding tasks, and any follow-up task found on the way
+- [x] 5.2 Open the PR with each acceptance criterion and its evidence, the changed contracts and areas, the new tool versions, the deviations (the `verify-gate` change and size, needed for the block-limit criterion; "keeps `CLAUDE_PROJECT_DIR`" vs "silent"; a worktree at `verify-gate` 0.1.2 still resets the limit), effects on waiting onboarding tasks, and any follow-up task found on the way
 - [ ] 5.3 After merge, link the Pages catalog release that carries the new versions
