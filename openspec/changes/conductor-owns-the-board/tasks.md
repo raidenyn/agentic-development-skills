@@ -4,72 +4,72 @@
 
 ## 1. Contract change
 
-- [ ] 1.1 Add an amendment entry to `openspec/design/archive/2026-11-unattended-task-runs/rfc-run-board-tasks-unattended.md` covering:
+- [x] 1.1 Add an amendment entry to `openspec/design/archive/2026-11-unattended-task-runs/rfc-run-board-tasks-unattended.md` covering:
   - Settings: the board readme block replaces `PROJECT_URL`, the `harness.json` key and `repo-run-models.md`;
   - the model cell `<provider>/<model>#<effort>`;
   - the conductor serving a board, from a thread that may be in "No project";
   - Onboarding without `PROJECT_URL` and without a PR;
   - 1 task = 1 issue = 1 PR.
-- [ ] 1.2 Commit the amendment and the change folder as their own commit, separate from the behaviour changes.
+- [x] 1.2 Commit the amendment and the change folder as their own commit, separate from the behaviour changes.
 
 ## 2. Wake: board as the unit (`skills/project-conductor/references/run-github.md`)
 
-- [ ] 2.1 Extend `board.graphql`:
+- [x] 2.1 Extend `board.graphql`:
   - the project `readme`;
   - per item: `repository { nameWithOwner owner { login } }`, `milestone { number state }`, the issue `closedAt`;
   - `mergedAt` on the closing pull requests.
-- [ ] 2.2 Replace the served-repository preflight:
+- [x] 2.2 Replace the served-repository preflight:
   - the identity check: title `project-conductor <board URL>` and the block's `conductor` equals the own id;
   - the settings block parser with its defaults and gaps;
   - per-repository facts: default branch, permission, the T3 project by `canonicalKey` compared without case.
-- [ ] 2.3 Change Models to the `<provider>/<model>#<effort>` cell, and make its report lines name the readme block.
-- [ ] 2.4 Key the filter, judge, claims, stops and claim files by `<repo>#<n>`:
+- [x] 2.3 Change Models to the `<provider>/<model>#<effort>` cell, and make its report lines name the readme block.
+- [x] 2.4 Key the filter, judge, claims, stops and claim files by `<repo>#<n>`:
   - take the trust owner per item;
   - retire `other-repo`;
   - add the Ready-filter verdicts `no-project:<repo>` and `gap:projects:<repo>`, read from `repos.json`, with Claim checking again before its writes;
   - run Claim's thread search and the launch in the item's T3 project.
-- [ ] 2.5 Create the `blocked` label lazily per repository.
-- [ ] 2.6 Update the Start and Apply instructions:
+- [x] 2.5 Create the `blocked` label lazily per repository.
+- [x] 2.6 Update the Start and Apply instructions:
   - add the `Board:` line;
   - use the new wake sentence;
   - keep accepting the old sentence.
 
 ## 3. Wake: Repair, Settle, order (`SKILL.md` and `run-github.md`)
 
-- [ ] 3.1 Write Repair:
+- [x] 3.1 Write Repair:
   - the scope;
   - deciding by `t3_thread_read` when "Run thread" is set, and by search when it is empty;
   - unknown on errors or 50 matches;
   - record, release or stop, as in the table of design Decision 10.
-- [ ] 3.2 Write the release, in its order and with a read-back per write: branch, Run phase, Attempt, Status, Run thread, assignee.
-- [ ] 3.3 Add the second Stop form (`Step: Repair|Settle`) and its read-back.
-- [ ] 3.4 Write Settle:
+- [x] 3.2 Write the release, in its order and with a read-back per write: branch, Run phase, Attempt, Status, Run thread, assignee.
+- [x] 3.3 Add the second Stop form (`Step: Repair|Settle`) and its read-back.
+- [x] 3.4 Write Settle:
   - the branch from `t3_thread_read`;
   - the merged-PR lookup with `gh api …/pulls?state=closed&head=`;
   - the 5-minute grace;
   - label before settle when the issue stays open;
   - the 7-day window for closed items.
-- [ ] 3.5 Add these to the wake: the board read again after Repair or Settle wrote, the end-of-board check, the wake order, and the new report sections. Drop `Repair: not done yet.`.
-- [ ] 3.6 Update the skill's description: board-based, the wake triggers, Repair and Settle.
+- [x] 3.5 Add these to the wake: the board read again after Repair or Settle wrote, the end-of-board check, the wake order, and the new report sections. Drop `Repair: not done yet.`.
+- [x] 3.6 Update the skill's description: board-based, the wake triggers, Repair and Settle.
 
 ## 4. Triggers (`skills/project-conductor/references/triggers-github.md`, new)
 
-- [ ] 4.1 Write the two `schedule_task` calls:
+- [x] 4.1 Write the two `schedule_task` calls:
   - filters, signature, `replayKey`, `coalesceKey`, `maxDeliveryAgeMinutes`;
   - the `Trigger:` prompts.
-- [ ] 4.2 Write Register the webhook:
+- [x] 4.2 Write Register the webhook:
   - read the admin permission first;
   - list and reuse hooks by URL, or create one;
   - the owner's steps text.
-- [ ] 4.3 Write Check the triggers:
+- [x] 4.3 Write Check the triggers:
   - list by `projectId` and `boundThreadId`;
   - update in place, re-enable, create the timer;
   - create the webhook trigger only on command, with `request_secret`.
-- [ ] 4.4 Write the automatic check:
+- [x] 4.4 Write the automatic check:
   - the missed-event condition and its exclusions;
   - the bounded backward scan;
   - the unattended form.
-- [ ] 4.5 Write the end of the board: the condition, skipping Start, disabling the triggers after Advance, settling itself, and the resume command.
+- [x] 4.5 Write the end of the board: the condition, skipping Start, disabling the triggers after Advance, settling itself, and the resume command.
 
 ## 5. Onboarding (`SKILL.md` and `references/onboarding-github.md`)
 

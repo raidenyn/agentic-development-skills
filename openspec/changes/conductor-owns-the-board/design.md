@@ -280,7 +280,7 @@ This calls `list_scheduled_tasks` inside a run. The tool's advice "do not call t
 
   Because the bound includes the last check, one missed event runs the check once, not on every wake.
 
-It never runs in a webhook wake or a manual wake.
+It never runs in a webhook wake or a manual wake, nor in a timer wake that finds the end of the board, a failed board read or a settings gap, because that wake cannot act on the result.
 
 **Accepted gap:** a lost timer wakes nothing. The owner's command fixes it.
 
