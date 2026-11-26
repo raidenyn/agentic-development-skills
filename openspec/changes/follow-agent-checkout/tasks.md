@@ -19,10 +19,10 @@
 
 ## 4. Docs, versions and build
 
-- [ ] 4.1 Update `skills/agent-harness-hook-runtime/SKILL.md`: `repoRoot` is the agent's checkout (Handler interface), and a Host behaviour bullet for the move and the silent cases
-- [ ] 4.2 Update `skills/agent-harness-verify-gate/SKILL.md`: the block counter is per session under the git common directory
-- [ ] 4.3 Bump `version` in `src/hook-runtime/tool.json` and `src/verify-gate/tool.json` once each, then run `pnpm run harness:update`
-- [ ] 4.4 Run `pnpm run check`, `python3 scripts/skills.py validate`, `claude plugin validate .` and `python3 -m unittest discover -s scripts -p 'test_*.py'`
+- [x] 4.1 Update `skills/agent-harness-hook-runtime/SKILL.md`: `repoRoot` is the agent's checkout (Handler interface), and a Host behaviour bullet for the move and the silent cases
+- [x] 4.2 Update `skills/agent-harness-verify-gate/SKILL.md`: the block counter is per session under the git common directory
+- [x] 4.3 Bump `version` in `src/hook-runtime/tool.json` and `src/verify-gate/tool.json` once each, then run `pnpm run harness:update`
+- [x] 4.4 Run `pnpm run check`, `python3 scripts/skills.py validate`, `claude plugin validate .` and `python3 -m unittest discover -s scripts -p 'test_*.py'`
 
 ## 5. Live proof and PR
 
