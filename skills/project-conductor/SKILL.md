@@ -1,15 +1,15 @@
 ---
 name: project-conductor
-description: "Use when a GitHub Project board and its repository must be prepared for unattended task runs, for example \"onboard this board\", \"set up the conductor for this repo\" or \"check that the board is ready for the loop\", or when a message asks to run one wake of the conductor: a webhook or timer trigger (Trigger: webhook. or Trigger: timer.), a phase report from a task thread, or a manual wake, for example \"Run one wake of the project-conductor skill for this board.\" Onboarding sets PROJECT_URL, creates the Run phase, Attempt and Run thread fields, proposes the conductor settings and model file, keys the board's open issues and checks the approval rule, with a dry-run form. A wake repairs half-made claims, settles the threads of merged work, answers phase reports and switches a planned thread to the implement model, then claims Ready tasks and launches their threads on the plan model. Not for publishing tasks."
+description: "Use when a GitHub Project board and its repository must be prepared for unattended task runs, for example \"onboard this board\", \"set up the conductor for this repo\" or \"check that the board is ready for the loop\", or when a message asks to run one wake of the conductor: a webhook or timer trigger (Trigger: webhook. or Trigger: timer.), a phase report from a task thread, or a manual wake, for example \"Run one wake of the project-conductor skill for this board.\" Onboarding sets PROJECT_URL, creates the Run phase, Attempt and Run thread fields, proposes the conductor settings and model file, keys the board's open issues and checks the approval rule, with a dry-run form. A wake repairs half-made claims, settles the threads of merged work, answers phase reports and switches a planned thread to the implement model, then claims Ready tasks and launches their threads on the plan model. Also \"check the triggers\" and \"register the webhook for owner/name\". Not for publishing tasks."
 ---
 
 # Project conductor
 
 The conductor runs the tasks of a GitHub Project board unattended, from Ready to merged. Before it can run a board, the board and the one repository it serves must be prepared.
 
-This skill holds two procedures: **Onboard a board** prepares the board and the repository, and **Run one wake** repairs half-made claims, settles merged work, answers phase reports, switches a task thread's model and starts Ready tasks. The names below are frozen: the wake reads them.
+This skill holds four procedures: **Onboard a board** prepares the board and the repository, **Run one wake** repairs half-made claims, settles merged work, answers phase reports, switches a task thread's model and starts Ready tasks, **Check the triggers** keeps the conductor's webhook trigger and timer as they should be, and **Register the webhook** adds the webhook trigger's URL to one repository. The names below are frozen: the wake reads them.
 
-The onboarding commands are in [references/onboarding-github.md](references/onboarding-github.md), and the wake's commands are in [references/run-github.md](references/run-github.md). Every step below names the section that holds its commands and the requirement of the spec it meets.
+The onboarding commands are in [references/onboarding-github.md](references/onboarding-github.md), the wake's commands are in [references/run-github.md](references/run-github.md), and the commands of the triggers, the webhooks and the end of the board are in [references/triggers-github.md](references/triggers-github.md). Every step below names the section that holds its commands and the requirement of the spec it meets.
 
 ## Onboarding inputs
 
@@ -343,9 +343,10 @@ Start runs only when Preflight has no wake-wide gap, the board was read whole, t
 
 ### After Start
 
-Reference: [Automatic check](references/triggers-github.md#automatic-check). Spec: Wake order.
+Reference: [End of the board](references/triggers-github.md#end-of-the-board) and [Automatic check](references/triggers-github.md#automatic-check). Spec: End of the board; Automatic trigger check on a missed event; Wake order.
 
-Run the [automatic trigger check](references/triggers-github.md#automatic-check) only when its condition holds: a timer wake that finds an event the webhook missed. It never runs in a webhook wake or a manual wake.
+1. **End of the board.** When the [end-of-board check](references/triggers-github.md#end-of-the-board) held, after Advance: disable both triggers with `schedule_task` `enabled: false`, never deleting them; give the command "check the triggers" in the report to resume after a milestone is reopened; and, as the wake's last tool call, settle this thread with `t3_thread_organize` `settle` and no `threadId`. Never archive this thread. A failed disable leaves the thread unsettled, so the next wake tries again.
+2. **Automatic check.** Run the [automatic trigger check](references/triggers-github.md#automatic-check) only when its condition holds: a timer wake whose board shows an issue closed or a pull request merged more than `reconcileMinutes` ago, after the last webhook run (plus 120 s), the last `## Trigger check` report and the newest onboarding report, in a repository not on the newest `Webhook owner steps:` line. It runs [Check the triggers](#check-the-triggers) in its unattended form: it never asks for a secret, and never creates the webhook trigger. It never runs in a webhook wake, a manual wake or a wake that found the end of the board.
 
 ### Wake report
 
@@ -388,3 +389,29 @@ Trigger: <webhook | timer | manual wake | report line "<line>">
 - Under Triggers, give what the end-of-board step or the automatic check did, as [triggers-github.md](references/triggers-github.md) words it.
 - Under Gaps, list every gap of the steps before, every model that did not resolve, a board read that failed, and every stop that was reported in place of being written.
 - When nothing was repaired or settled, no item was started and no report was answered, say so above the lists: "Nothing to do in this wake."
+
+## Check the triggers
+
+Reference: [Triggers](references/triggers-github.md#triggers) and [Check the triggers](references/triggers-github.md#check-the-triggers). Spec: Two triggers bound to the conductor; Trigger check.
+
+The owner runs it in the conductor thread with "check the triggers", for example after changing `reconcileMinutes` or reopening a milestone. The automatic check runs its unattended form. It never runs as part of every wake.
+
+1. **Preflight** as a wake: identity, board, settings block, repositories, and the end-of-board condition. An identity failure stops it.
+2. **List** this thread's triggers with `list_scheduled_tasks`, passing this thread's `projectId`, and select them by `boundThreadId` and the titles `project-conductor webhook` and `project-conductor timer`.
+3. **Compare** them with the two `schedule_task` objects of [Triggers](references/triggers-github.md#triggers) for the current `reconcileMinutes`.
+4. **Fix:** update a trigger that differs in place by `scheduledTaskId`, so its URL stays; re-enable a disabled one unless the board has ended; create a missing timer. Create a missing webhook trigger only on the owner's command, with two `request_secret` calls: a `secretRef` for the trigger and a `file` for the hooks. Then the report says that every repository's hook must be registered again with the new URL.
+5. **Register the webhook** for each repository the owner names.
+
+It ends with the `## Trigger check` report, whose last line is `Webhook owner steps: <repo>, <repo>` (or `none`), the full list.
+
+## Register the webhook
+
+Reference: [Register the webhook](references/triggers-github.md#register-the-webhook). Spec: Register the webhook for one repository.
+
+Onboarding runs it for each repository of the board; the owner runs it alone with "register the webhook for `<repo>`". Its inputs are the repository, the webhook trigger's URL (from the trigger just created, or pasted from T3's Settings) and the secret through `request_secret` with `delivery: "file"`.
+
+1. **Read the admin permission first.** Without admin, ask for no secret and go to step 3.
+2. **With admin,** list the repository's hooks. Reuse the hook whose `config.url` equals the URL and set its events to `issues` and `pull_request`; otherwise create one hook with the URL, the secret, `content_type` `json` and those two events. Read it back.
+3. **Without admin, or when a write is refused,** try nothing else. The report gives the owner's steps of [Owner steps](references/triggers-github.md#owner-steps): the webhook settings page, the payload URL, the content type `application/json`, "the secret you gave at onboarding", and the events "Issues" and "Pull requests".
+
+The secret is never printed or stored. A standalone run ends with its report and the `Webhook owner steps:` line, listing every repository whose registration is an owner step after this run.
