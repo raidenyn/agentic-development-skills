@@ -291,7 +291,14 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
     return out;
   }
 
-  return { dispatch, proof, handlers: sorted, problems };
+  // A failing close does not skip the others; the caller gets no error, because there is nothing
+  // useful left to do once a handler's worker is gone.
+  async function close(opts = {}) {
+    const closers = sorted.filter((h) => typeof h.close === 'function').map((h) => callQuietly(() => h.close(opts)));
+    await Promise.allSettled(closers);
+  }
+
+  return { dispatch, proof, close, handlers: sorted, problems };
 }
 
 export async function loadHandlers(repoRoot, { loadBudgetMs = LOAD_BUDGET_MS } = {}) {

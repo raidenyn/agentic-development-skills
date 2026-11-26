@@ -44,6 +44,8 @@ export interface RuntimeOptions {
 export interface Runtime {
   dispatch(event: EventPayload, opts?: DispatchOptions): Promise<DispatchResult>;
   proof(name: string, ctx?: ProofCtx): Promise<string | null>;
+  // Closes every handler that has a close; the others are ignored.
+  close(opts?: { cleanupDeadline?: number }): Promise<void>;
   handlers: RuntimeHandler[];
   problems: string[];
 }
@@ -356,7 +358,14 @@ export function createRuntime(
     return out;
   }
 
-  return { dispatch, proof, handlers: sorted, problems };
+  // A failing close does not skip the others; the caller gets no error, because there is nothing
+  // useful left to do once a handler's worker is gone.
+  async function close(opts: { cleanupDeadline?: number } = {}): Promise<void> {
+    const closers = sorted.filter((h) => typeof h.close === 'function').map((h) => callQuietly(() => h.close(opts)));
+    await Promise.allSettled(closers);
+  }
+
+  return { dispatch, proof, close, handlers: sorted, problems };
 }
 
 export async function loadHandlers(

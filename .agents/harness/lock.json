@@ -11,9 +11,9 @@
         "lib/config.mjs": "afcabd0f71591de520665f08798e5456e5abdb6ed95bb4ff6a79f24739270d40",
         "lib/install.mjs": "d1abb61c1b9bd95317c4efb0b8205ed0bd24e16a29a0de4304b0a29634b0dffa",
         "lib/opencode-adapter.mjs": "3b06b062125bf636cea72b228b3023882ed022f4b75fc0ab5782846697f2d78f",
-        "lib/runtime.mjs": "20f2a9cfd2a36289511cb02beddbc44230d34f3bcd5f2b40b5e49a72b9f88ec4",
+        "lib/runtime.mjs": "db3db363bfa790c95082c1be5a65aed5d723ab17aa855856c72e0928270cc849",
         "lib/state.mjs": "0eb56ddc5457799a3348cbd701cd4f714727d2da3ea3ee3d6c07ef33c6c75ccc",
-        "lib/supervisor.mjs": "829c4128821bfd3058f0ca537f55753fc488021fb77926835aa6ba04854565bd",
+        "lib/supervisor.mjs": "1a931c6bc186ae82d47a0269fa66e1661fff0cc69acbae371560e8ced023374c",
         "lib/worker-entry.mjs": "c9564de05717b3bfd00ab60aa8a884f773334d6d96650e688671e2874704cce3",
         "opencode/index.mjs": "ea7c4c9b355fede5f2544f28e0e380a8b77b2ccea938858e984382a302faab16",
         "tool.json": "5d3876c84854d5c48f6a84ea2631e7408600ef03201b66f0ee65757e838a56d7"

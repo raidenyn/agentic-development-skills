@@ -33,7 +33,7 @@ interface WorkerMeta {
 }
 export interface WorkerHandler extends Handler {
   tool: string;
-  close(): Promise<void>;
+  close(opts?: { cleanupDeadline?: number }): Promise<void>;
   workerGens(): number[];
 }
 
@@ -581,9 +581,9 @@ class HandlerPool {
     }
   }
 
-  async close(): Promise<void> {
+  async close({ cleanupDeadline }: { cleanupDeadline?: number } = {}): Promise<void> {
     this.closed = true;
-    await Promise.all(this.workers.map((w) => w.retire('closed')));
+    await Promise.all(this.workers.map((w) => w.retire('closed', { cleanupDeadline })));
   }
 }
 
@@ -616,7 +616,7 @@ export async function startWorker(
     proofs,
     handle: (event: EventPayload, ctx: HandlerContext, internal?: { cleanupDeadline?: number }) =>
       pool.handle(event, ctx, internal),
-    close: () => pool.close(),
+    close: (opts?: { cleanupDeadline?: number }) => pool.close(opts),
     workerGens: () => pool.workers.map((w) => w.gen),
   };
 }

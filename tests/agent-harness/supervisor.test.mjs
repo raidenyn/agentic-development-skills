@@ -16,7 +16,9 @@ const { installTool } = await lib('install.mjs');
 
 const repo = await tempRepo();
 const proxies = [];
+const groups = [];
 after(async () => {
+  for (const pgid of groups) killGroup(pgid);
   for (const p of proxies) await p.close();
   await repo.cleanup();
 });
@@ -508,4 +510,34 @@ test('a vanished group is skipped without delay', async () => {
   const elapsed = Date.now() - start;
   assert.equal(out.context, 'held');
   assert.ok(elapsed < 200, `returned after ${elapsed} ms`);
+});
+
+test('runtime.close with a cleanup deadline kills a TERM-trapping group while its spawn is in flight', async () => {
+  const dir = scratch('closer');
+  const marker = join(dir, 'pgid');
+  const p = await proxy(
+    'closer',
+    `
+    export default {
+      name: 'closer', events: ['prompt'],
+      handle(ev, c) {
+        return c.spawn(['sh', '-c', 'echo $$ > "$1"; trap "" TERM; sleep 30; :', 'sh', ev.marker], { cwd: c.repoRoot });
+      },
+    };
+  `,
+  );
+  // A handler without close is ignored rather than making close fail.
+  const r = rt([p, { name: 'plain', events: [], handle: () => null }]);
+  const inFlight = r.dispatch({ type: 'prompt', marker }, ids).catch((err) => err);
+  const pidText = () => (existsSync(marker) ? readFileSync(marker, 'utf8').trim() : '');
+  await until(() => /^\d+$/.test(pidText()), 2000, 'the spawned group to record its pid');
+  const pgid = Number(pidText());
+  groups.push(pgid);
+  assert.equal(groupAlive(pgid), true, 'the group is running');
+  const start = Date.now();
+  await r.close({ cleanupDeadline: Date.now() + 1500 });
+  const elapsed = Date.now() - start;
+  assert.ok(elapsed < 2000, `close resolved after ${elapsed} ms`);
+  await until(() => !groupAlive(pgid), 2000 - elapsed, `group ${pgid} to die`);
+  await inFlight;
 });

@@ -528,9 +528,9 @@ class HandlerPool {
     }
   }
 
-  async close() {
+  async close({ cleanupDeadline } = {}) {
     this.closed = true;
-    await Promise.all(this.workers.map((w) => w.retire('closed')));
+    await Promise.all(this.workers.map((w) => w.retire('closed', { cleanupDeadline })));
   }
 }
 
@@ -559,7 +559,7 @@ export async function startWorker(toolDir, { loadBudgetMs = 2000, tool = basenam
     manual: meta.manual,
     proofs,
     handle: (event, ctx, internal) => pool.handle(event, ctx, internal),
-    close: () => pool.close(),
+    close: (opts) => pool.close(opts),
     workerGens: () => pool.workers.map((w) => w.gen),
   };
 }
