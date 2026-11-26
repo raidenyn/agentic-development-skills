@@ -75,7 +75,8 @@ List every T3 project: call `t3_project_list` with `limit` 100, and again with `
 For each project whose `deletedAt` is null, call `t3_thread_search` with `query` `<title>`, `projectId` the project's id and `limit` 50. The search matches by word prefix and also message text, so compare every `matches[].title` with `<title>` exactly, character for character:
 
 - An exact match whose thread id is not `<conductor id>`: **stop the run.** Nothing is written. The report names the thread and its project: "Thread `<id>` in project `<project title>` is already titled `<title>`. Run the onboarding there, or archive that thread first."
-- A failed search, or 50 matches with no such exact match: that project could not be checked, because more may exist. Stop the run and name the project and the error. A second conductor is worse than a stopped onboarding.
+- 50 matches with no exact match from another thread: the search matches message text too, and task threads carry the board URL and the wake sentence, so a busy project fills the page without another conductor. Go on, and list under Pending "search not exhaustive for project `<id>`". The tool ranks title matches first, and the block's `conductor` is the exact guard.
+- A failed search: that project could not be checked. Stop the run and name the project and the error.
 
 The search skips archived threads, so an archived conductor never stops the run.
 
