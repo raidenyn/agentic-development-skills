@@ -3,7 +3,7 @@
 // pass record rules and contention.
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { existsSync, readFileSync, readdirSync, utimesSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -186,6 +186,73 @@ test('no editFiles: a Markdown edit runs as before', async () => {
   assert.deepEqual(traced, ['ran']);
   assert.equal(r.log().length, 1);
   assert.equal(r.log()[0].file, 'docs/notes.md');
+});
+
+test('edit pass with output returns a passed note naming the file', async () => {
+  const r = await repo();
+  r.setOut('eslint --fix rewrote src/a.js\n');
+  await r.write('src/a.js', 'b\n');
+  const { result, traced } = await fire(h, r, edit(['src/a.js']));
+  assert.match(
+    result.context,
+    /^verify: sh .*verify\.sh passed after the edit of src\/a\.js:\n\neslint --fix rewrote src\/a\.js\n$/,
+  );
+  assert.deepEqual(traced, ['ran']);
+  assert.equal(r.passRecord(), null);
+});
+
+test('silent and whitespace-only edit passes return null', async () => {
+  const r = await repo();
+  await r.write('src/a.js', 'b\n');
+  assert.equal((await fire(h, r, edit(['src/a.js']))).result, null);
+  r.setOut('  \n\n');
+  await r.write('src/a.js', 'c\n');
+  assert.equal((await fire(h, r, edit(['src/a.js'], 'c-edit2'))).result, null);
+});
+
+test('long pass output keeps the last 60 lines', async () => {
+  const r = await repo();
+  r.setOut(Array.from({ length: 100 }, (_, i) => `${i + 1}\n`).join(''));
+  await r.write('src/a.js', 'b\n');
+  const { result } = await fire(h, r, edit(['src/a.js']));
+  assert.ok(result.context.includes(':\n\n41\n'), result.context);
+  assert.ok(result.context.endsWith('\n100\n'), result.context);
+  assert.doesNotMatch(result.context, /\n40\n/);
+});
+
+test('stderr-only pass is shown', async () => {
+  const r = await repo();
+  writeFileSync(r.script, "#!/bin/sh\necho 'note on stderr' >&2\n");
+  await r.write('src/a.js', 'b\n');
+  const { result } = await fire(h, r, edit(['src/a.js']));
+  assert.match(result.context, /passed after the edit of src\/a\.js:\n\nnote on stderr/);
+});
+
+test('two edited files: pass note before the failure, in file order', async () => {
+  const r = await repo();
+  writeFileSync(
+    r.script,
+    '#!/bin/sh\nif [ "$VERIFY_FILE" = "docs/notes.md" ]; then echo "E1 bad"; exit 1; fi\necho "ok a"\n',
+  );
+  await r.write('src/a.js', 'b\n');
+  await r.write('docs/notes.md', '- [ ] changed\n');
+  const { result } = await fire(h, r, edit(['src/a.js', 'docs/notes.md']));
+  assert.match(
+    result.context,
+    /passed after the edit of src\/a\.js:\n\nok a\n[\s\S]*failed after the edit of docs\/notes\.md: [\s\S]*E1 bad/,
+  );
+});
+
+test('passing tick and turn end with output add nothing', async () => {
+  const r = await repo();
+  r.setOut('progress: all good\n');
+  assert.equal((await tickCall(r)).result, null);
+  await r.write('src/a.js', 'b\n');
+  assert.equal((await fire(h, r, turnEnd())).result, null);
+  assert.deepEqual(
+    r.log().map((l) => l.trigger),
+    ['task', 'turn-end'],
+  );
 });
 
 // ---- ticked tasks -------------------------------------------------------------------------------

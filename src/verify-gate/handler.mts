@@ -308,6 +308,9 @@ async function afterTool(event: EventPayload, ctx: Ctx, deps: Deps, trace: Trace
     const r = await runGate({ ...gateOptions(ctx, deps), trigger: 'edit', file });
     if (r.status === 'contended') contended = true;
     if (r.status === 'passed' || r.status === 'failed') ran = true;
+    if (r.status === 'passed' && String(r.tail ?? '').trim()) {
+      texts.push(`verify: ${cmd} passed after the edit of ${file}:\n\n${r.tail}`);
+    }
     if (r.status === 'failed') texts.push(`verify: ${cmd} failed after the edit of ${file}: ${body(r)}`);
   }
   if (!all.length) return null;
