@@ -32,7 +32,9 @@ Always pass `--repo <repo>` to `gh issue`, `gh pr` and `gh label`, with the item
 Read all of this before Repair, Settle, Advance and Start. Run the parts in this order: [Identity](#identity), [The board](#the-board) (its fields), the [Board](#board) read, the [Settings block](#settings-block) with the second half of the identity check, then [Repositories](#repositories). The [Ready filter](#ready-filter) runs last, on the board read and `<work>/repos.json`. Anchor: `#preflight`.
 
 - **An identity failure** means the wake writes nothing at all: no Repair, no Settle, no Advance, no Start. The report names the fix.
-- **Any other gap** means Advance and Start write nothing in this wake, and the report names the gap and its owner step.
+- **A wake-wide gap** means Advance and Start write nothing in this wake, and the report names the gap and its owner step. The wake-wide gaps are: `gh` not logged in or without the `project` scope, a missing or misnamed board field or option, a failed board read, and any `gap` line of the [settings block](#settings-block).
+- **A repository finding** of [Repositories](#repositories) (a repository that cannot be read, no push permission, no T3 project or several) is not wake-wide. It stops only the starts of that repository's items: they are reported, and the items of other repositories go on. Advance, Repair and Settle follow their own rules for them.
+- **A failed `t3_project_list`** is a gap for Start only: no task can be launched without a project, so Start writes nothing in this wake. Advance needs no project and goes on.
 
 Run every read anyway, so one report lists all gaps. Preflight writes nothing.
 
@@ -206,7 +208,7 @@ for r in $(cat <work>/repos.txt); do
 done | jq -s . > <work>/repos-gh.json
 ```
 
-Then list every T3 project: call the T3 tool `t3_project_list` with `limit` 100, and again with `cursor` set to the answer's `nextCursor` while it is not null. Write each answer to `<work>/t3-projects-<k>.json`, with `<k>` 1, 2, …, as is. A failed call is a gap for every repository: "The T3 projects could not be listed: <error>." Then build `<work>/repos.json`:
+Then list every T3 project: call the T3 tool `t3_project_list` with `limit` 100, and again with `cursor` set to the answer's `nextCursor` while it is not null. Write each answer to `<work>/t3-projects-<k>.json`, with `<k>` 1, 2, …, as is. A failed call, on any page, is a gap for Start only: "The T3 projects could not be listed: <error>." Start writes nothing in this wake; Advance goes on. Then replace the saved pages with one empty list (`echo '{"projects": []}' > <work>/t3-projects-1.json`, after removing the other pages), so that a partial list is never matched and the filter still runs. Then build `<work>/repos.json`:
 
 ```bash
 jq -s '[.[].projects[] | select(.deletedAt == null)]' <work>/t3-projects-*.json > <work>/t3-projects.json
@@ -223,12 +225,14 @@ jq -n --slurpfile gh <work>/repos-gh.json --slurpfile p <work>/t3-projects.json 
 - **No such project:** `projectId` is `null` and `projectIds` is empty. The Ready filter prints `skip no-project:<repo>` for the repository's Ready items. Repair and Settle still cover them, because they need no checkout.
 - **Several such projects:** `projectId` is `null`, and `projectIds` lists them. This is a gap for that repository only: the Ready filter prints `skip gap:projects:<repo>` for its Ready items.
 
-| Result | Gap, owner step |
+These findings are per repository, never wake-wide: each stops only the starts of that repository's items, which are reported with the owner step below, while the items of other repositories go on.
+
+| Result | Repository finding, owner step |
 |---|---|
 | `unreadable repository <repo>` | "Give the agent account read access to `<repo>`." Its items are not started: [Claim](#look-before-claiming) skips them before any write. |
 | `push` is not `true` | "Give the agent account write access to `<repo>`." Its items are not started: Claim skips them before any write. |
 | `projectIds` is empty | Not a gap of the wake. Report each `no-project:<repo>` item with: "Add a T3 project for a checkout of `<repo>`." |
-| `projectIds` has more than one id | "`<repo>` has several T3 projects: <ids>. Keep one." |
+| `projectIds` has more than one id | "`<repo>` has several T3 projects: <ids>. Keep one." Its Ready items print `skip gap:projects:<repo>`. |
 
 The label `blocked` is not read here. It is created per repository, the first time a stop there needs it: see [The label `blocked`](#the-label-blocked).
 
@@ -614,7 +618,7 @@ jq -r '.[0] | "assignees=\([.content.assignees.nodes[].login] | join(",")) statu
 
 Advance judges phase reports. Collect them, drop the ones already stopped, keep the newest per item, then answer each one by [Switch](#switch). Anchor: `#reports`.
 
-Advance runs only when Preflight has no gap, the board was read whole by [Board](#board), and the implement model resolves by [Models](#models). Otherwise it answers no report and writes and sends nothing: its report line names the gap, and every report is judged again at the next wake.
+Advance runs only when Preflight has no [wake-wide gap](#preflight), the board was read whole by [Board](#board), and the implement model resolves by [Models](#models). Otherwise it answers no report and writes and sends nothing: its report line names the gap, and every report is judged again at the next wake.
 
 ### What a report is
 

@@ -250,7 +250,7 @@ Reference: [Preflight](references/run-github.md#preflight), [Models](references/
 6. **Ready filter.** Run the [Ready filter](references/run-github.md#ready-filter) on the board read once. Advance and Start both use the board read and the filter's lines.
 7. **Models.** Resolve only the role a step uses: plan for Start, implement for Advance, never review. A missing line, a bare name, no match or an unsupported effort stops that step only, and is reported with the line as written in the block.
 
-Run every read, so one report lists every gap. A gap means Advance and Start write nothing in this wake; the report names it with the owner's step. Preflight writes nothing. The label `blocked` is created in a repository only when a stop there first needs it, as [The label `blocked`](references/run-github.md#the-label-blocked) says; when it cannot be created, the stops in that repository are reported for the owner, never written. (Spec: Stop label exists.)
+Run every read, so one report lists every gap. A wake-wide gap (`gh` login or scope, a board field or option, a failed board read, or a settings block gap) means Advance and Start write nothing in this wake; the report names it with the owner's step. A finding of step 5 is per repository, never wake-wide: it stops only the starts of that repository's items, which are reported, and other repositories go on. A failed T3 project list stops Start only, since no task can be launched without a project; Advance goes on. Preflight writes nothing. The label `blocked` is created in a repository only when a stop there first needs it, as [The label `blocked`](references/run-github.md#the-label-blocked) says; when it cannot be created, the stops in that repository are reported for the owner, never written. (Spec: Stop label exists.)
 
 ### Wake rules
 
@@ -272,7 +272,7 @@ Not done yet: the task "Repair claims, settle merged work and wake on events" ad
 
 Reference: [Reports](references/run-github.md#reports), [Switch](references/run-github.md#switch) and [Stop](references/run-github.md#stop). Spec: Which reports are judged; Blocked items are not advanced; Answer order; and the requirements of each answer.
 
-Advance runs only when Preflight has no gap, the board was read whole and the implement model resolves.
+Advance runs only when Preflight has no wake-wide gap, the board was read whole and the implement model resolves.
 
 1. **Collect** the phase reports: lines of incoming messages from another thread, with the sender from host metadata, as in [Collect](references/run-github.md#collect). A `phase-done` line typed by a person is not a report.
 2. **Judge** them with the [Judge](references/run-github.md#judge) script: drop the reports whose stop is already [recorded](references/run-github.md#recorded-stops), keep only the newest per item from its "Run thread" for the current "Attempt", and route the rest. An item labelled `blocked` is not advanced: "blocked, waiting for the owner".
@@ -291,7 +291,7 @@ Advance runs only when Preflight has no gap, the board was read whole and the im
 
 Reference: [Ready filter](references/run-github.md#ready-filter) and [Claim](references/run-github.md#claim). Spec: Ready rule; Items that are not tasks; Waiting for Ready is reported; Trusted issues only; Taken items are left alone; Parallel limit; Look before claiming; Claim order; Start instruction.
 
-Start runs only when Preflight has no gap, the board was read whole and the plan model resolves.
+Start runs only when Preflight has no wake-wide gap, the board was read whole, the T3 projects were listed and the plan model resolves.
 
 1. **Filter.** Take the lines of the [Ready filter](references/run-github.md#ready-filter), run on the board read before the steps. It decides Ready by the three conditions, then applies the start guards: overflow, taken, trust. Keep its line for every item: the report gives the reason of each `skip`.
 2. **Slots.** Count the items in use and the free slots, as in [Slots](references/run-github.md#slots). Take the `start` items in ascending order of repository, compared without case, then issue number, while a slot is free. A candidate left over stays Ready and is reported.
