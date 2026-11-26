@@ -315,13 +315,15 @@ async function turnEnd(event: EventPayload, ctx: Ctx, deps: Deps, trace: Trace):
   const root = (ctx.agentId ?? 'main') === 'main';
   const background = Number.isInteger(event.background) ? (event.background as number) : 0;
   const { lock } = services(ctx);
-  const sessionDir = ledgerDirOf(ctx);
+  // Looked up only when a charge is made or settled: it costs a git call.
+  let ledger: string | undefined;
+  const sessionDir = () => (ledger ??= ledgerDirOf(ctx));
   const max = cfg.maxBlocks;
   // A root turn end with running subagents is a notice and is never charged.
   const charging = !(root && background > 0);
   const onFailure = charging
     ? async (failure: Failure) => ({
-        charge: await chargeBlock({ lock, sessionDir, key: failureKey(failure, ctx.repoRoot), max }),
+        charge: await chargeBlock({ lock, sessionDir: sessionDir(), key: failureKey(failure, ctx.repoRoot), max }),
       })
     : undefined;
   const r = await runGate({ ...gateOptions(ctx, deps), trigger: 'turn-end', onFailure });
@@ -346,8 +348,8 @@ async function turnEnd(event: EventPayload, ctx: Ctx, deps: Deps, trace: Trace):
   }
   return {
     block: `verify: ${cmd} failed (attempt ${c!.n} of ${max}). Fix the failure before ending the turn: ${body(r)}`,
-    ack: () => confirmCharge({ lock, sessionDir, id: c!.id }),
-    release: () => refundCharge({ lock, sessionDir, id: c!.id }),
+    ack: () => confirmCharge({ lock, sessionDir: sessionDir(), id: c!.id }),
+    release: () => refundCharge({ lock, sessionDir: sessionDir(), id: c!.id }),
   };
 }
 

@@ -192,6 +192,44 @@ test('(guard) a symlinked CLAUDE_PROJECT_DIR with cwd at its real path keeps the
   assert.equal(context(edit), 'files README.md');
 });
 
+test('a worktree reached through a symlink keeps that spelling, so edit paths stay repo-relative', async () => {
+  const r = await mainRepo();
+  const wt = await worktreeOf(r);
+  const link = join(scratch(), 'wt-link');
+  symlinkSync(wt.dir, link);
+  mkdirSync(join(wt.dir, 'deep'), { recursive: true });
+  const out = await prompt(r.dir, join(link, 'deep'));
+  assert.equal(out.code, 0, out.stderr);
+  assert.equal(rootOf(out), link);
+  const p = fixture('PostToolUse-Edit', link);
+  p.tool_input.file_path = join(link, 'README.md');
+  const edit = await runNode(CLAUDE_MJS, [], {
+    cwd: '/',
+    input: JSON.stringify(p),
+    env: { CLAUDE_PROJECT_DIR: r.dir },
+  });
+  assert.equal(edit.code, 0, edit.stderr);
+  assert.equal(context(edit), 'files README.md');
+});
+
+test('a git call that hangs in cwd is cut off at about 2 s and keeps CLAUDE_PROJECT_DIR', async () => {
+  const r = await mainRepo();
+  const wt = await worktreeOf(r);
+  const bin = scratch('agent-harness-bin-');
+  const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+  writeFileSync(
+    join(bin, 'git'),
+    `#!/bin/sh\n[ "$(pwd -P)" = '${wt.dir}' ] && exec sleep 10\nexec '${realGit}' "$@"\n`,
+  );
+  chmodSync(join(bin, 'git'), 0o755);
+  const t0 = Date.now();
+  const out = await prompt(r.dir, wt.dir, { PATH: `${bin}:${process.env.PATH}` });
+  const took = Date.now() - t0;
+  assert.equal(out.code, 0, out.stderr);
+  assert.equal(rootOf(out), r.dir);
+  assert.ok(took >= 1900 && took < 5000, `took ${took} ms`);
+});
+
 test('(guard) a missing cwd folder keeps CLAUDE_PROJECT_DIR', async () => {
   const r = await mainRepo();
   const out = await prompt(r.dir, join(r.dir, 'gone', 'away'));

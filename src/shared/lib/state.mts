@@ -45,6 +45,7 @@ export function gitCommonDir(repoRoot: string): string {
     cwd: repoRoot,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 2000,
   }).trim();
   return realpathSync(resolve(repoRoot, out));
 }

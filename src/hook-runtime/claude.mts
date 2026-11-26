@@ -3,7 +3,7 @@
 // every path: a hook never blocks the host on its own failure.
 import { spawn as spawnChild } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { capabilityNotice, HOST_CAPABILITIES } from './lib/capabilities.mts';
 import { CLAUDE_EVENTS, HOST, toEvent, toOutput } from './lib/claude-adapter.mts';
@@ -119,7 +119,18 @@ async function resolveCheckout(
   if (!home.ok) return { root: project };
   if (!here.ok) return here.exited ? { skip: true } : { root: project };
   if (here.common !== home.common) return { skip: true };
-  return here.top === home.top ? { root: project } : { root: here.top };
+  return here.top === home.top ? { root: project } : { root: spelledAs(at, here.top) };
+}
+
+// The ancestor of `at` whose real path is `top`, so a worktree reached through a symlink keeps the
+// agent's spelling (edit paths are made repo-relative by string); `top` when none matches.
+function spelledAs(at: string, top: string): string {
+  for (let dir = resolve(at); ; dir = dirname(dir)) {
+    try {
+      if (realpathSync(dir) === top) return dir;
+    } catch {}
+    if (dirname(dir) === dir) return top;
+  }
 }
 
 // Resolves once fn() settles or the deadline passes, whichever is first; never rejects.
@@ -204,7 +215,6 @@ export async function main({
         env: { ...env, CLAUDE_PROJECT_DIR: repoRoot },
         spawn,
         now: startClock,
-        capabilities,
         resolved: true,
       });
     }
