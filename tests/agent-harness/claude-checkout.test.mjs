@@ -231,6 +231,10 @@ test('Stop in a linked worktree with a failing verify command blocks there', asy
   const res = JSON.parse(out.stdout);
   assert.equal(res.decision, 'block', out.stdout);
   assert.match(res.reason, /WT FAIL/);
+  // The charge sits in the common-dir ledger (main's git dir) and was confirmed after delivery.
+  const charges = r.blocks('claude-code', p.session_id)?.charges ?? [];
+  assert.equal(charges.length, 1, JSON.stringify(charges));
+  assert.equal(charges[0].confirmed, true);
 });
 
 // ---- bounded resolution, through main() in a child process --------------------------------------

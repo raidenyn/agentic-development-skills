@@ -13,9 +13,9 @@
 
 ## 3. Block ledger in the git common directory (D3)
 
-- [ ] 3.1 Write a failing test in `tests/agent-harness/verify-handler.test.mjs`: `maxBlocks` 2, two blocks for one failure in the main checkout, then the same failure in a linked worktree with the same session id gives the limit notice; a different session still blocks
-- [ ] 3.2 Add `commonSessionDir` to `src/shared/lib/state.mts` (`git rev-parse --git-common-dir` resolved against `repoRoot`, same id cleaning as `rootSessionStateDir`) and use it for `chargeBlock`, `confirmCharge` and `refundCharge` in `src/verify-gate/handler.mts`
-- [ ] 3.3 Add a test that in a main checkout the ledger path equals today's `rootSessionStateDir` path, and extend the end-to-end test from 2.2 to find one confirmed charge in the common-dir `blocks.json`; update the ledger comments in `handler.mts` and `gate.mts`
+- [x] 3.1 Write a failing test in `tests/agent-harness/ledger-worktree.test.mjs` (new file, with the state tests of 3.3): `maxBlocks` 2, two blocks for one failure in the main checkout, then the same failure in a linked worktree with the same session id gives the limit notice; a different session still blocks
+- [x] 3.2 Add `commonSessionDir` to `src/shared/lib/state.mts` (`git rev-parse --git-common-dir` resolved against `repoRoot`, same id cleaning as `rootSessionStateDir`) and use it for `chargeBlock`, `confirmCharge` and `refundCharge` in `src/verify-gate/handler.mts`
+- [x] 3.3 Add a test that in a main checkout the ledger path equals today's `rootSessionStateDir` path, and extend the end-to-end test from 2.2 to find one confirmed charge in the common-dir `blocks.json`; update the ledger comments in `handler.mts` and `gate.mts`
 
 ## 4. Docs, versions and build
 

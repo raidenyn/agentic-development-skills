@@ -4,12 +4,13 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 export interface SessionKey {
   repoRoot: string;
@@ -37,6 +38,17 @@ export function gitDir(repoRoot: string): string {
   }).trim();
 }
 
+// The git directory every worktree of the repository shares. No --path-format: older git echoes
+// an unknown option and exits 0; the common dir prints relative in a main checkout.
+export function gitCommonDir(repoRoot: string): string {
+  const out = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
+  return realpathSync(resolve(repoRoot, out));
+}
+
 export function toolStateDir(repoRoot: string, tool: string): string {
   return join(gitDir(repoRoot), 'agent-harness', tool);
 }
@@ -48,6 +60,14 @@ const clean = (id: unknown): string => {
 
 export function rootSessionStateDir({ repoRoot, tool, host, sessionId }: SessionKey): string {
   const dir = join(toolStateDir(repoRoot, tool), 'sessions', `${clean(host)}-${clean(sessionId)}`);
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+// <git common dir>/agent-harness/<tool>/sessions/<host>-<session>: session state that follows the
+// session across the repository's worktrees. In a main checkout it is rootSessionStateDir.
+export function commonSessionDir({ repoRoot, tool, host, sessionId }: SessionKey): string {
+  const dir = join(gitCommonDir(repoRoot), 'agent-harness', tool, 'sessions', `${clean(host)}-${clean(sessionId)}`);
   mkdirSync(dir, { recursive: true });
   return dir;
 }

@@ -25,7 +25,7 @@ import {
   verifyPass,
   waitLock,
 } from './lib/gate.mts';
-import { writeJsonAtomic } from './lib/state.mts';
+import { commonSessionDir, writeJsonAtomic } from './lib/state.mts';
 import { detectTicks, itemCounts, matchesGlob, suppressSeen } from './lib/triggers.mts';
 import type {
   EventPayload,
@@ -55,9 +55,12 @@ const CLEANUP_MS = 5000;
 const SKIP_DIRS = new Set(['.git', 'node_modules']);
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-// The state layout (hook-runtime lib/state.mjs): <tool>/sessions/<host>-<session>/<agent>.
+// The state layout (hook-runtime lib/state.mjs): <tool>/sessions/<host>-<session>/<agent>. The block
+// ledger is the session's across worktrees: <git common dir>/agent-harness/verify-gate/sessions/
+// <host>-<session>, which is the root session folder in a main checkout.
 const toolDirOf = (ctx: Ctx) => resolve(ctx.stateDir, '..', '..', '..');
-const sessionDirOf = (ctx: Ctx) => dirname(ctx.stateDir);
+const ledgerDirOf = (ctx: Ctx) =>
+  commonSessionDir({ repoRoot: ctx.repoRoot, tool: 'verify-gate', host: ctx.host, sessionId: ctx.sessionId });
 const callFile = (ctx: Ctx, callId: unknown) =>
   join(ctx.stateDir, 'calls', `${String(callId).replace(/[^A-Za-z0-9._-]/g, '_')}.json`);
 const services = (ctx: Ctx) => ({ spawn: ctx.spawn ?? localSpawn, lock: ctx.lock ?? localLock });
@@ -312,7 +315,7 @@ async function turnEnd(event: EventPayload, ctx: Ctx, deps: Deps, trace: Trace):
   const root = (ctx.agentId ?? 'main') === 'main';
   const background = Number.isInteger(event.background) ? (event.background as number) : 0;
   const { lock } = services(ctx);
-  const sessionDir = sessionDirOf(ctx);
+  const sessionDir = ledgerDirOf(ctx);
   const max = cfg.maxBlocks;
   // A root turn end with running subagents is a notice and is never charged.
   const charging = !(root && background > 0);
