@@ -124,19 +124,19 @@
   - a redelivery of the same delivery id does not run again;
   - two events within 120 s show the coalesce behaviour;
   - an unmerged PR close behaves as Task 0 decided.
-- [ ] 8.6 Settle and end proofs:
+- [x] 8.6 Settle and end proofs:
   - a normal merge settles its thread;
   - a test PR merged with its issue left open gets `blocked` and settles;
   - with "M1 other" closed and "M1 scratch" open, the triggers stay enabled;
   - with both closed and nothing in flight, both triggers are disabled and the conductor is settled, not archived; reopening "M1 scratch" and "check the triggers" re-enables them;
   - evidence: thread states and `list_scheduled_tasks`.
-- [ ] 8.7 Run "register the webhook for `raidenyn/line-mcp`" with the scratch URL. Expect a refusal, the owner's steps, and nothing written.
+- [x] 8.7 Run "register the webhook for `raidenyn/line-mcp`" with the scratch URL. Expect a refusal, the owner's steps, and nothing written.
 - [x] 8.8 Follow-up rule proof (run before 8.6): T2 from 8.4, which does not fit, creates a keyed follow-up in Backlog with the blocked-by and blocking links, and its PR closes the original issue.
-- [ ] 8.9 Re-enable or delete the scratch triggers as the owner prefers, and record the leftovers.
+- [x] 8.9 Re-enable or delete the scratch triggers as the owner prefers, and record the leftovers.
 
 ## 9. Pull request
 
-- [ ] 9.1 The PR reports:
+- [x] 9.1 The PR reports:
   - each acceptance criterion of #35 with its evidence;
   - the signature and dedupe answer;
   - the contracts changed;
@@ -144,4 +144,4 @@
   - the features removed, with where each went;
   - effects on later tasks;
   - the proposed follow-ups: the hooked rule at finalize once harness M2 exists, and onboarding `line-mcp` with the readme block.
-- [ ] 9.2 Sync the delta specs, archive the change in the same PR, and rewrite the Purpose sections of `board-onboarding`, `conductor-wake` and the new `conductor-triggers` spec.
+- [x] 9.2 Sync the delta specs, archive the change in the same PR, and rewrite the Purpose sections of `board-onboarding`, `conductor-wake` and the new `conductor-triggers` spec.
