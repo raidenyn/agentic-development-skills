@@ -1,71 +1,93 @@
 # Onboard a board: GitHub commands
 
-The commands of the procedure in [SKILL.md](../SKILL.md), one section per step. Everything goes through the `gh` command line tool, `git` and `jq`. The commands below were checked against GitHub with `gh` 2.105. If a flag is missing in your version, check `gh <command> --help` before changing the approach.
+The commands of the procedure in [SKILL.md](../SKILL.md), one section per step. Everything goes through the `gh` command line tool, `jq` and the T3 MCP tools. The commands below were checked against GitHub with `gh` 2.105. If a flag is missing in your version, check `gh <command> --help` before changing the approach.
 
-Each section gives the read command first, then the condition for writing, then the write command. A dry run runs only the reads.
+Each section gives the read command first, then the condition for writing, then the write command. A dry run runs only the reads. Several reads are those of a wake: this file links them in [run-github.md](run-github.md) and [triggers-github.md](triggers-github.md) instead of repeating them.
+
+Onboarding no longer sets the repository variable `PROJECT_URL`, writes `.agents/harness.json` or `.agents/hooked-rules/repo-run-models.md`, or opens a `chore/project-conductor-onboarding` pull request. What an earlier onboarding left there is not read and not changed; the owner closes an open onboarding pull request by hand. `repo-review-models.md` is left alone for sessions started by hand.
 
 Placeholders:
 
 | Placeholder | Meaning |
 |---|---|
-| `<repo>` | The repository as `owner/name`, spelled as `gh api repos/<repo> --jq .full_name` returns it. Board items are compared with this spelling. |
-| `<owner>`, `<name>` | The two halves of `<repo>`. `<owner>` is the repository owner's login. |
 | `<board owner>`, `<n>` | The board's owner and number, from its URL: `https://github.com/users/<board owner>/projects/<n>` or `.../orgs/<board owner>/projects/<n>`. |
-| `<project id>` | The board's node id, from Preflight. |
 | `<board URL>` | The board's URL as `gh project view` returns it. |
+| `<project id>` | The board's node id, from Preflight. |
+| `<title>` | The conductor title, `project-conductor <board URL>`. |
+| `<conductor id>` | This thread's id, from Preflight. The thread that runs onboarding becomes the conductor. |
+| `<conductor project>` | This thread's T3 project, `thread.projectId` of its `t3_thread_read`. |
 | `<agent>` | The agent's login, from Preflight. |
-| `<default>` | The repository's default branch. |
-| `<work>` | A folder of this run in the scratchpad, such as `<scratchpad>/onboard-<name>`. Every saved file and the local clone go here. |
+| `<repo>` | **One** repository of the board, as `owner/name`, spelled as the board item's `repository.nameWithOwner`. A board may hold issues of several repositories: every per-repository command runs once for each, with its own `<repo>`. |
+| `<owner>`, `<name>` | The two halves of `<repo>`. `<owner>` is the repository owner's login, from `<work>/repos.json`. |
+| `<default>` | `<repo>`'s default branch, from `<work>/repos.json`. |
+| `<work>` | A folder of this run in the scratchpad, such as `<scratchpad>/onboard-<n>`. Every saved file goes here. A file of one repository is named with `<owner>-<name>`. |
 
-Always pass `--repo <repo>` to `gh issue`, `gh pr` and `gh variable`. Without it, `gh` resolves a bare number against the current checkout, which may be another repository.
+Always pass `--repo <repo>` to `gh issue` and `gh pr`. Without it, `gh` resolves a bare number against the current checkout, which may be another repository, or none.
 
 ## Preflight
 
 Check all of these, and stop the run on the first that fails:
 
 ```bash
+mkdir -p <work>/keys
 gh auth status                      # logged in, and the token scopes include "project"
 gh auth refresh -s project          # the fix when the scope is missing; the person runs it
 gh api user --jq .login             # <agent>
-gh api repos/<repo> --jq '.full_name, .owner.login, .default_branch, .permissions.admin, .permissions.push'
-gh project view <n> --owner <board owner> --format json --jq '"\(.id) \(.url) \(.title)"'
+gh project view <n> --owner <board owner> --format json > <work>/project.json
+jq -r '"\(.id) \(.url) \(.title)"' <work>/project.json        # <project id> <board URL> <board title>
+jq '{readme}' <work>/project.json > <work>/readme.json          # the input of the settings parser
+jq -j '.readme // ""' <work>/project.json > <work>/readme.survey  # the readme's exact bytes
 ```
 
-- `.full_name` is `<repo>` from here on, and `.owner.login` is `<owner>`. Take the owner from the repository, never from the token: the token belongs to the agent account.
 - Read the board by its explicit number and owner. Do not use `@me`: it names the token's account, not the board's owner.
-- `.permissions.push` false: the settings pull request (step 4) and the keys (step 5) are cannot do. Report it as an owner step: give the agent account write access.
-- `.permissions.admin` false: the variable (step 2) is an owner step. Without admin, classic branch protection cannot be read (step 6).
+- `jq -j` writes the readme without adding a newline, so `readme.survey` holds its bytes.
 
-## Repository variable
+Then read this thread, the one that becomes the conductor:
 
-Read:
+1. Call `t3_thread_configure` with no arguments. Its `threadId` is `<conductor id>`.
+2. Call `t3_thread_read` with `threadId` `<conductor id>` and `limit` 1. Keep `thread.title` and `thread.projectId` (`<conductor project>`).
+
+A failed call stops the run: "The onboarding could not read its own thread: <error>."
+
+## Conductor thread
+
+Two checks for another conductor of this board, then the rename. Both checks run before any write, in every run, a dry run included. (Spec: One conductor per board; The onboarding thread becomes the conductor.) Anchor: `#conductor-thread`.
+
+### The block's `conductor`
+
+Parse the readme with the parser of [Settings block](run-github.md#settings-block): save its `settings.jq` and run it on `<work>/readme.json`, into `<work>/settings-parsed.json` and `<work>/settings.json`.
 
 ```bash
-gh variable list --repo <repo> --json name,value \
-  --jq '.[] | select(.name == "PROJECT_URL") | .value'
+jq -r --arg me <conductor id> '.conductor // "none"
+  | if . == "none" then "none" elif . == $me then "this thread" else "other \(.)" end' <work>/settings.json
 ```
 
-A writer can read the variables, as checked on `line-mcp`. If the command fails, the value is "unknown, owner checks": put that in the plan and the report.
+- `none` or `this thread`: go on.
+- `other <id>`: call `t3_thread_read` with `threadId` `<id>` and `limit` 1.
+  - The answer has `thread.archived` false: **stop the run.** Nothing is written. The report names the thread: "The board's conductor is thread `<id>`, `<its title>`. Run the onboarding there, or archive that thread first."
+  - `thread.archived` true, or the error `thread_not_found`: that conductor is gone. Go on; the [settings block](#settings-block) plans `conductor` as change.
+  - Any other error: stop the run, "The conductor named in the board readme, `<id>`, could not be read: <error>."
 
-| Value | Plan |
+### Every T3 project
+
+List every T3 project: call `t3_project_list` with `limit` 100, and again with `cursor` set to `nextCursor` while it is not null. Write each answer to `<work>/t3-projects-<k>.json`, with `<k>` 1, 2, …, as is: [Repositories](#repositories) matches the repositories against the same files. "No project" is one of the listed projects, with its own id. A failed call stops the run.
+
+For each project whose `deletedAt` is null, call `t3_thread_search` with `query` `<title>`, `projectId` the project's id and `limit` 50. The search matches by word prefix and also message text, so compare every `matches[].title` with `<title>` exactly, character for character:
+
+- An exact match whose thread id is not `<conductor id>`: **stop the run.** Nothing is written. The report names the thread and its project: "Thread `<id>` in project `<project title>` is already titled `<title>`. Run the onboarding there, or archive that thread first."
+- A failed search, or 50 matches with no such exact match: that project could not be checked, because more may exist. Stop the run and name the project and the error. A second conductor is worse than a stopped onboarding.
+
+The search skips archived threads, so an archived conductor never stops the run.
+
+### The rename
+
+| This thread's title | Plan |
 |---|---|
-| equal to `<board URL>` | reuse |
-| empty output | create |
-| another value | change: show the old value and `<board URL>` |
+| exactly `<title>` | reuse |
+| `project-conductor <another board URL>` | cannot do: this thread conducts another board. Stop the run: "Run the onboarding of this board in a new thread." |
+| anything else | change: show the old title and `<title>` |
 
-Write only when `.permissions.admin` is true. Read the variable again first; if it changed since the survey, do not write: report it. Then:
-
-```bash
-gh variable set PROJECT_URL --repo <repo> --body "<board URL>"
-```
-
-Read it back with the read command above.
-
-When `.permissions.admin` is false, or the write fails, do not retry another way. Print this command for the owner, with the real board URL in place of `<board URL>`, under "Could not do (owner step)":
-
-```bash
-gh variable set PROJECT_URL --repo <repo> --body "<board URL>"
-```
+Write, only in this thread: call `t3_thread_update` with `action` `"rename"`, `title` `<title>` and no `threadId`. Read it back with `t3_thread_read`: `thread.title` must equal `<title>`. A refused rename is not tried another way: the owner step is "Rename this thread to `<title>`, exactly." Without the title the wakes fail their identity check, so the report puts this step first.
 
 ## Fields
 
@@ -143,273 +165,119 @@ jq '{
 
 Read the field back: every old option keeps its id, and the four names are there.
 
-## Settings pull request
 
-### Read
+## Settings block
 
-Read each file from a ref: the default branch, or a commit SHA. The raw media type returns the file's exact bytes. Create the folders of the run first, and `<work>/<sha>` once the SHA is known (below). `mkdir -p` also makes the nested folders of a default branch name with a `/`:
+The conductor's settings are one fenced `text` block after the line `<!-- project-conductor -->` in the board readme. Its format, its keys and their defaults are those of [Settings block](run-github.md#settings-block), and onboarding reads it with that parser, already run in [The block's `conductor`](#the-blocks-conductor). (Spec: Settings block in the board readme.) Anchor: `#settings-block`.
 
-```bash
-mkdir -p <work>/<default> <work>/planned <work>/keys
-# <path> is .agents/harness.json, .agents/hooked-rules/repo-run-models.md or .agents/hooked-rules/repo-review-models.md
-if gh api -H 'Accept: application/vnd.github.raw+json' \
-     "repos/<repo>/contents/<path>?ref=<ref>" > <work>/<ref>/<file> 2> <work>/err; then
-  echo present
-elif grep -q 'HTTP 404' <work>/err; then
-  rm <work>/<ref>/<file>; echo absent      # on a 404, gh writes the error body to stdout
-else
-  cat <work>/err; echo unreadable          # this step stops
-fi
-```
-
-Read all three from `ref=<default>`, and from the onboarding branch when it exists. Read the branch by its head SHA, never by its name (the name holds a `/`, and the head may move between reads):
+### Plan the block
 
 ```bash
-gh api repos/<repo>/git/ref/heads/chore/project-conductor-onboarding --jq .object.sha   # 404: no branch
+jq -r '.gaps[]' <work>/settings-parsed.json     # the gaps of the block as it is
 ```
 
-Which SHA to use is decided in "Compare with the branch and its pull request" below; then `mkdir -p <work>/<sha>` and read the three files with `ref=<sha>`.
-
-### The harness key
-
-Check in this order. First whether the file exists: when the read above answered `absent`, skip both checks and create the file as shown below. Only a file that is present is checked for valid JSON:
-
-```bash
-test -f <work>/<default>/harness.json                                 # fails: absent, create it (below)
-jq -e 'type == "object"' <work>/<default>/harness.json > /dev/null   # fails: not valid JSON, this step stops
-jq -e '.["project-conductor"] == {"maxParallel": 2, "reviewRounds": 5, "reconcileMinutes": 30, "maxAttempts": 2}' \
-  <work>/<default>/harness.json                                       # true: the key is reused
-```
-
-The planned file, keeping the other keys, their order and the file's indentation:
-
-```bash
-indent=$(grep -m1 -o '^ \+' <work>/<default>/harness.json | awk '{print length}')   # empty when the file is not indented
-jq --indent "${indent:-2}" \
-  '.["project-conductor"] = {"maxParallel": 2, "reviewRounds": 5, "reconcileMinutes": 30, "maxAttempts": 2}' \
-  <work>/<default>/harness.json > <work>/planned/harness.json
-```
-
-If the file is indented with tabs, use `jq --tab` instead of `--indent`. When the file is absent, create it with 2 spaces:
-
-```bash
-jq -n --indent 2 '{"project-conductor": {"maxParallel": 2, "reviewRounds": 5, "reconcileMinutes": 30, "maxAttempts": 2}}' \
-  > <work>/planned/harness.json
-```
-
-`jq` keeps every key and value, but writes nested values in its own layout. Show the diff in the plan.
-
-### References to the old roster
-
-Clone the repository into the scratchpad. A clone is local and allowed in a dry run.
-
-```bash
-gh repo clone <repo> <work>/clone -- --quiet
-git -C <work>/clone grep -n 'repo-review-models' -- ':!.agents/hooked-rules/repo-review-models.md'
-```
-
-Any hit is a reference outside the file. Without the person's agreement in the plan, the roster migration is deferred: `repo-run-models.md` is not proposed, the old file stays, and each hit (`<path>:<line>: <text>`) is reported as an owner step: "Point these references at `.agents/hooked-rules/repo-run-models.md`, then run the onboarding again". With the agreement, edit each reference in the clone to name `repo-run-models.md`, show the diff in the plan, and make it part of the same commit.
-
-### Expected changes
-
-From the approved plan, against `<default>`:
-
-| Path | Status |
+| Gaps | Plan |
 |---|---|
-| `.agents/harness.json` | `modified` when it exists on `<default>`, `added` when not. Left out when the key is reused |
-| `.agents/hooked-rules/repo-run-models.md` | `added`, or `modified` when the person chose to change an existing file. Left out when reused or deferred |
-| `.agents/hooked-rules/repo-review-models.md` | `removed`, when it is replaced. Left out when deferred or absent |
-| each agreed reference edit | `modified` |
+| none, and the planned readme below equals `readme.survey` | reuse |
+| `missing-marker` | create: the marker and the block are added after the readme's text |
+| none, or only `missing-conductor` | change: the planned block, shown as a diff |
+| any other gap: `two-markers`, `missing-block`, `unknown-key`, `repeated-key`, `not-a-positive-integer`, `out-of-range` | cannot do: the block is not rewritten. The owner step is the gap's step in [Settings block](run-github.md#settings-block), and the report shows the planned block for the owner to compare |
 
-With "proceed without asking", a model file, roster removal or reference edit that this run would leave out only because it needs the person's choice stays in the list when the onboarding branch already holds it (see "Unattended carry-over" in SKILL.md). Build its planned content from the branch: the model ids of the branch's `repo-run-models.md`, and the same path replacement in each referring file. A run that left it out would otherwise call the earlier run's approved work a conflict.
+Build two objects of `<key>: <value>`:
 
-The roster swap is one unit: `repo-run-models.md` `added` and `repo-review-models.md` `removed` are both in the list or both out.
+- **`set`**, the lines onboarding writes over what is there: `conductor` = `<conductor id>`, and each `model.<role>` for which the owner gave, in the plan, a cell other than the block's.
+- **`add`**, the values of keys the block lacks: `maxParallel` 2, `reviewRounds` 5, `reconcileMinutes` 30, `maxAttempts` 2, and the confirmed cell of each role, `<providerInstanceId>/<model id>#<effort>`. Leave out `model.implement` when its model is not confirmed: neither given by the owner nor in the block.
 
-When the list is empty, everything is on the default branch: reuse, no branch and no pull request. If an open onboarding pull request is left over, report it for the owner to close.
+Every line of the block that `set` does not name is kept as written, in its place, with its value: `reconcileMinutes: 2` stays 2. A model line in the block counts as confirmed and stays unless the owner gives another cell in the plan. Missing keys are added after the existing lines, in the order `conductor`, `maxParallel`, `reviewRounds`, `reconcileMinutes`, `maxAttempts`, `model.plan`, `model.review`, `model.implement`. Text before the marker and after the block is kept byte for byte.
 
-### Compare with the branch and its pull request
+````bash
+cat > <work>/readme-new.jq <<'EOF'
+def strip: gsub("^\\s+|\\s+$"; "");
+def keyof: (rtrimstr("\r") | strip + " ") as $l | ($l | index(": ")) as $i | if $i == null then ($l | strip) else ($l[:$i] | strip) end;
+def order: ["conductor", "maxParallel", "reviewRounds", "reconcileMinutes", "maxAttempts", "model.plan", "model.review", "model.implement"];
+def missing($have): [order[] | select(IN($have[]) | not) | . as $k | ($set[0][$k] // $add[0][$k]) | select(. != null) | "\($k): \(.)"];
+(.readme // "") as $r | ($r | split("\n")) as $lines
+| [range(0; $lines | length) | select($lines[.] | rtrimstr("\r") | strip == "<!-- project-conductor -->")] as $marks
+| if ($marks | length) == 0 then
+    (["<!-- project-conductor -->", "```text"] + missing([]) + ["```"] | join("\n")) as $b
+    | if $r == "" then $b + "\n" elif ($r | endswith("\n")) then $r + "\n" + $b + "\n" else $r + "\n\n" + $b + "\n" end
+  else
+    $marks[0] as $m
+    | first(range($m + 1; $lines | length) | select($lines[.] | rtrimstr("\r") | strip | startswith("```"))) as $open
+    | first(range($open + 1; $lines | length) | select($lines[.] | rtrimstr("\r") | strip == "```")) as $close
+    | $lines[$open + 1:$close] as $body
+    | [$body[] | select(rtrimstr("\r") | strip != "") | keyof] as $have
+    | ($body | map(if (rtrimstr("\r") | strip) != "" and (keyof as $k | $set[0] | has($k))
+                   then keyof as $k | "\($k): \($set[0][$k])" else . end)) as $kept
+    | $lines[:$open + 1] + $kept + missing($have) + $lines[$close:] | join("\n")
+  end
+EOF
+jq -n --arg me <conductor id> '{conductor: $me} + <the owner'"'"'s other cells, such as {"model.plan": "…"}>' > <work>/set.json
+jq -n '{maxParallel: 2, reviewRounds: 5, reconcileMinutes: 30, maxAttempts: 2,
+        "model.plan": "<plan cell>", "model.review": "<review cell>"} + <{"model.implement": "<implement cell>"} when confirmed, else {}>' > <work>/add.json
+jq -j --slurpfile set <work>/set.json --slurpfile add <work>/add.json -f <work>/readme-new.jq <work>/readme.json > <work>/readme.new
+cmp -s <work>/readme.survey <work>/readme.new && echo reuse || diff <work>/readme.survey <work>/readme.new
+````
 
-Before writing to an existing branch or reusing a pull request, list every open pull request from the branch, without a base filter:
+Run this only when the gaps allow a rewrite (the table above). Show the diff, or for a create the whole block, in the plan. Then check the planned block with the parser: put `readme.new` into `{readme}`, run `settings.jq` on it, and expect no gap and `conductor` equal to `<conductor id>`; any gap means the plan is wrong, so do not write.
 
-```bash
-gh pr list --repo <repo> --head chore/project-conductor-onboarding --state open \
-  --json number,url,baseRefName,headRefOid,isCrossRepository,headRepository
-```
+**Models.** Resolve each model line of the planned block as [Models](run-github.md#models) does, read-only. A line that does not resolve is still written as planned, because the owner chose it, and the report names it with the Models owner step. In a dry run outside the conductor thread, the block's `conductor` is this thread's id and the report says it becomes the id of the thread that runs the onboarding.
 
-A pull request with a `baseRefName` other than `<default>`, or with `isCrossRepository` true, is a conflict: report it and stop this step.
+### Write the block
 
-Take one head SHA: the pull request's `headRefOid`, or the branch's SHA when no pull request is open. Use that SHA for every read below.
-
-```bash
-gh api "repos/<repo>/compare/<default>...<sha>" \
-  --jq '.files[] | "\(.status) \(.filename) \(.previous_filename // "")"'
-```
-
-GitHub may report the roster swap as one `renamed` entry. Read it as `removed <previous_filename>` plus `added <filename>`. Then read every expected path at `ref=<sha>` with the read command above: an added or modified path must be present with exactly the planned bytes (`cmp <work>/planned/<file> <work>/<sha>/<file>`), a removed path must be absent.
-
-| What the branch holds | Then |
-|---|---|
-| exactly the expected set of (status, path), each with its planned content | reuse as is |
-| a strict subset of the expected set, each present file equal to its planned content, holding both halves of the roster swap or neither | partial work of an earlier run: complete it with one commit |
-| only one half of the roster swap: `added repo-run-models.md` without `removed repo-review-models.md`, or the other way round | conflict: the spec requires both in one commit. Report it, do not push |
-| anything else: another path, another status, other content | conflict: report it, do not push |
-
-Before reusing as is, check that the head has not moved:
-
-```bash
-gh pr view <number> --repo <repo> --json headRefOid --jq .headRefOid   # still <sha>
-```
-
-When the branch is reused and no pull request is open, open one as below.
-
-When an open pull request is reused as is, compare its body with the planned one (`pr-body.md`, below, built from the whole expected set):
+Look first: read the readme again and compare it with the survey. A difference means someone edited it: do not write, report it.
 
 ```bash
 set -o pipefail
-gh api "repos/<repo>/pulls/<number>" | jq -j '.body // ""' > <work>/pr-body.now.md
-cmp <work>/pr-body.md <work>/pr-body.now.md    # prints nothing when the body is current
+gh project view <n> --owner <board owner> --format json | jq -j '.readme // ""' > <work>/readme.now
+cmp <work>/readme.survey <work>/readme.now          # must print nothing
+gh project edit <n> --owner <board owner> --readme "$(cat <work>/readme.new)"
 ```
 
-A different body, such as one an earlier run wrote before it completed a partial branch, is planned as **change**: the pull request body, shown as a diff. Write it with `gh pr edit <number> --repo <repo> --body-file <work>/pr-body.md`, then read it back the same way; `cmp` must print nothing. An equal body is reused.
-
-### Write
-
-Work in the clone. Never force-push.
-
-A commit needs a git name and email. Set whichever is missing to the agent account, in the clone only:
+Read it back. `$(…)` strips the newlines at the end of the file, so compare without them; everything else, the text outside the block included, must be equal byte for byte:
 
 ```bash
-git -C <work>/clone config user.name > /dev/null || git -C <work>/clone config user.name "<agent>"
-git -C <work>/clone config user.email > /dev/null ||
-  git -C <work>/clone config user.email "$(gh api user --jq .id)+<agent>@users.noreply.github.com"
+gh project view <n> --owner <board owner> --format json | jq -j '.readme // ""' > <work>/readme.after
+jq -n --rawfile a <work>/readme.after --rawfile b <work>/readme.new \
+  '($a | sub("\n+$"; "")) == ($b | sub("\n+$"; ""))'                   # must print true
 ```
 
-No branch yet:
+`false` is reported with both files: "The board readme reads back differently from what was written." A refused write, or a failed read, is not tried another way. The owner step shows the block to paste:
 
-```bash
-git -C <work>/clone switch -q -c chore/project-conductor-onboarding origin/<default>
-mkdir -p <work>/clone/.agents/hooked-rules
-cp <work>/planned/harness.json <work>/clone/.agents/harness.json
-cp <work>/planned/repo-run-models.md <work>/clone/.agents/hooked-rules/repo-run-models.md
-git -C <work>/clone rm -q .agents/hooked-rules/repo-review-models.md      # only when it is replaced
-git -C <work>/clone add .agents/harness.json .agents/hooked-rules/repo-run-models.md <agreed reference edits>
-git -C <work>/clone commit -q -m "chore: onboard project-conductor settings"
-git -C <work>/clone push origin HEAD:refs/heads/chore/project-conductor-onboarding
+````text
+Board readme (owner step): open <board URL>/settings, and in the README put these lines after the readme's text, or in place of the existing block after <!-- project-conductor -->:
+
+<!-- project-conductor -->
+```text
+<the planned block's lines>
 ```
-
-Copy and add only the planned files. If the push is rejected, the branch appeared meanwhile: report the conflict.
-
-Completing a partial branch, on the SHA you compared:
-
-```bash
-git -C <work>/clone fetch -q origin <sha>
-git -C <work>/clone switch -q --detach <sha>
-# copy, remove and add only the expected changes the branch does not hold yet
-git -C <work>/clone commit -q -m "chore: onboard project-conductor settings"
-git -C <work>/clone push origin HEAD:refs/heads/chore/project-conductor-onboarding   # HEAD is the new commit
-gh pr edit <number> --repo <repo> --body-file <work>/pr-body.md
-```
-
-The push is not forced, so it is rejected if the remote head moved after the compare. Then report the conflict and push nothing else, and leave the body as it is. After the push, replace the pull request's body: `pr-body.md` (below) lists the pull request's current changes, the whole expected set, not only the commit just added.
-
-The pull request, when none is open:
-
-```bash
-gh pr create --repo <repo> --base <default> --head chore/project-conductor-onboarding \
-  --title "chore: onboard project-conductor settings" --body-file <work>/pr-body.md
-```
-
-The body:
-
-```markdown
-Settings for the project-conductor loop on <board URL>, written by the onboarding procedure.
-
-- `.agents/harness.json`: key `project-conductor` with maxParallel 2, reviewRounds 5, reconcileMinutes 30, maxAttempts 2. Other keys unchanged.
-- `.agents/hooked-rules/repo-run-models.md`: models for plan, review and implement<, with the reviewer presets moved unchanged from `repo-review-models.md`, which this PR removes>.
-<- References to the old roster updated: <paths>.>
-
-Nothing reads these settings until the loop exists.
-```
-
-Read the pull request's files back with the compare command, at its new head, and its body with the `cmp` above.
-
-## The model file
-
-`.agents/hooked-rules/repo-run-models.md`. Fill in the confirmed models and efforts.
-
-The `skills:` and `commands:` triggers below are veles's (`raidenyn/veles-android`, `.agents/hooked-rules/repo-review-models.md`). When the file replaces a `repo-review-models.md`, copy that file's `skills:` and `commands:` lists instead, unchanged, so the rule still loads where it loaded before. When a `repo-run-models.md` already exists and the old file is gone, take its triggers and its models from it, so a later run builds the same file.
-
-````markdown
----
-pointer: "Run models, reviewer models and presets live only in this file; never substitute a model; read this file before any run phase or review."
-skills:
-  - "openspec-ff-change"
-  - "opsx:ff"
-  - "openspec-propose"
-  - "opsx:propose"
-  - "openspec-new-change"
-  - "opsx:new"
-  - "openspec-continue-change"
-  - "opsx:continue"
-  - "openspec-archive-change"
-  - "opsx:archive"
-commands:
-  - "\\bopenspec\\s+new\\s+change\\b"
-  - "\\bopenspec\\s+instructions\\s+(brainstorm|proposal|design|specs|tasks|plan)\\b"
----
-
-# Run models
-
-The model for each role of a task's run. This is the only workflow file that names a model.
-
-| Role | Model | Effort |
-| --- | --- | --- |
-| plan | <plan model> | <effort> |
-| review | <review model> | <effort> |
-| implement | <implement model id> | <effort> |
-
-A model cannot be started: stop and tell the user; never substitute another model.
-
-## Reviewer presets
-
-<copied unchanged when replacing: see below>
 ````
 
-**Reviewer presets.** When the file replaces `repo-review-models.md`, everything in the old file after its `# ` title line is copied below the heading `## Reviewer presets`, byte for byte: the reviewer table, the presets and the rules under them. Nothing is reworded. When nothing is replaced and no earlier `repo-run-models.md` exists, leave the section out.
+## Repositories
 
-The source of the reviewer rows and presets is the old file while it exists. Once it is gone, it is the text below `## Reviewer presets` in the existing `repo-run-models.md`, to the end of the file. So a run after the merge builds the same file and proposes nothing.
+The board's issues may belong to several repositories. Read each repository of an **open** board issue as [Repositories](run-github.md#repositories) does, into `<work>/repos.json`: default branch, `admin`, `push`, owner and its T3 project. Build `<work>/repos.txt` from the open issues of the [board read](#read-the-boards-issues) in place of that section's first command, then run the rest of it as written; the T3 project list of [Every T3 project](#every-t3-project) is the same list, so it need not be read twice. (Spec: Repositories of the board.) Anchor: `#repositories`.
 
-For veles, the section reads:
-
-```markdown
-## Reviewer presets
-
-The reviewers the superspec review gate can use and the presets over them. This is the only workflow
-file that names a model: the other rules, the schemas, the config, the specs and the procedure refer to
-the roster's presets and to the first and second reviewer of a preset.
-
-| Label | Model | Effort |
-| --- | --- | --- |
-| Sol | GPT-6.2-Sol | medium |
-| Opus | Opus-5.5 | medium |
-
-Presets, each an ordered list of labels:
-
-- `sol` = [Sol]
-- `opus` = [Opus]
-- `both` = [Sol, Opus] (first, then second)
-
-A reviewer is a read-only subagent on the named model at the named effort, the model resolved to the
-agent tool's own id.
-
-- **A model cannot be started:** stop and tell the user; never substitute another model.
-- **A two-reviewer preset with one reviewer unavailable:** stop and ask; run the other reviewer alone
-  only if the user says so.
-
-Change a model by editing this table only.
+```bash
+jq -r '.repo' <work>/items.jsonl | sort -u > <work>/repos.txt
 ```
 
+Each repository then gets its own findings. None of them stops the other repositories:
+
+| `<work>/repos.json` | Plan, owner step |
+|---|---|
+| `owner` is null: the repository could not be read | cannot do: "Give the agent account read access to `<repo>`." Its keys and approval rule are not checked |
+| `projectIds` is empty | cannot do: "Add a T3 project for a checkout of `<repo>`." |
+| `projectIds` has more than one id | cannot do: "`<repo>` has several T3 projects: <ids>. Keep one." |
+| `push` is not `true` | cannot do: its keys. "Give the agent account write access to `<repo>`." |
+| `admin` is not `true` | its classic branch protection cannot be read (approval rule), and its webhook is an owner step |
+
+The keys and the approval rule below run once per repository, with that repository's `<repo>`, `<owner>` and `<default>`.
+
 ## Keys
+
+Keys are allocated and checked per repository: each repository has its own numbers, and a duplicate key in one repository stops only that repository's keying. (Spec: Missing task keys are added; Which board items are keyed.) Anchor: `#keys`.
+
+The board read and the board's RFC slug are shared. Everything else runs once for each repository of [Repositories](#repositories) that can be read and has `push`, in its own folder: below, `<work>/items.jsonl` and `<work>/readme.json` are the run's, and every other `<work>/…` path stands for `<work>/<owner>-<name>/…` (`mkdir -p <work>/<owner>-<name>/keys` first). "The keying step" is that repository's: when it stops, the other repositories go on. The trust owner `<owner>` is that repository's owner.
 
 ### Markers
 
@@ -424,7 +292,7 @@ The first line is the body up to the first `\n`, with one `\r` at its end remove
 
 ### Read the board's issues
 
-Every item, page by page, until `hasNextPage` is false. `--paginate` follows `endCursor`. If it fails, stop the keying step: the list would be incomplete.
+Every item, page by page, until `hasNextPage` is false. `--paginate` follows `endCursor`. If it fails, stop the keying step of every repository: the list would be incomplete. This read also gives the repositories of [Repositories](#repositories).
 
 ```bash
 gh api graphql --paginate -f query='
@@ -436,15 +304,14 @@ query($project: ID!, $endCursor: String) {
         ... on Issue { number state repository { nameWithOwner } body } } }
     } } }
 }' -f project=<project id> --jq '.data.node.items.nodes[]
-  | select(.content.__typename == "Issue" and .content.state == "OPEN"
-           and .content.repository.nameWithOwner == "<repo>")
-  | .content | {number, body}' > <work>/items.jsonl
+  | select(.content.__typename == "Issue" and .content.state == "OPEN")
+  | .content | {repo: .repository.nameWithOwner, number, body}' > <work>/items.jsonl
 ```
 
-Pull requests, draft items and issues of other repositories drop out here. Sort each issue by its first line:
+Pull requests and draft items drop out here. Each issue is keyed only against its own repository's keys. Sort the issues of one repository by their first line:
 
 ```bash
-jq -r '((.body // "") | (split("\n")[0] // "") | rtrimstr("\r")) as $l
+jq -r --arg repo <repo> 'select(.repo == $repo) | ((.body // "") | (split("\n")[0] // "") | rtrimstr("\r")) as $l
   | (if ($l | test("^<!-- task: [a-z0-9-]+/[a-z0-9-]+/[0-9]+ -->$")) or ($l | test("^<!-- plan: [a-z0-9-]+/[a-z0-9-]+ -->$")) then "identified"
      elif ($l | test("^\\s*<!--\\s*(task|plan):")) then "malformed"
      else "keyless" end) as $class
@@ -471,9 +338,8 @@ If the command fails, stop the keying step. The highest number under a prefix is
 ### Slugs
 
 ```bash
-# the board's RFC slug: exactly one, else no issue gets a key
-gh project view <n> --owner <board owner> --format json \
-  --jq '[.readme // "" | match("<!-- rfc: ([a-z0-9-]+) -->"; "g") | .captures[0].string] | unique'
+# the board's RFC slug, once for the run: exactly one, else no issue gets a key
+jq -c '[.readme // "" | match("<!-- rfc: ([a-z0-9-]+) -->"; "g") | .captures[0].string] | unique' <work>/readme.json
 
 # each milestone's marker: exactly one per milestone, else its issues get no key
 gh api --paginate "repos/<repo>/milestones?state=all&per_page=100" \
@@ -556,7 +422,7 @@ grep "^<milestone number>"$'\t' <work>/milestones.now.tsv    # must print the sa
 
 Any difference: skip the issue, and list it under Pending as "changed during the run".
 
-Then read every key in the repository again, with the command above, into `keys.now.tsv`. A duplicate now stops the keying step. If another issue holds the planned key, skip this issue and report it as "key `<key>` was taken by #<other> during the run". Do not give it another number in this run.
+Then read every key in the repository again, with the command above, into `keys.now.tsv`. A duplicate now stops the keying step. If another issue holds the planned key, skip this issue and report it as "key `<key>` was taken by <repo>#<other> during the run". Do not give it another number in this run.
 
 Write the key line, a newline, then the body exactly as read:
 
@@ -574,6 +440,8 @@ A difference after the write is reported with both files, and the keying step st
 
 ## Approval rule
 
+Read once for each repository of [Repositories](#repositories) that can be read, with its `<default>` and its `admin` from `<work>/repos.json`. Each repository gets its own answer. A push permission is not needed: the step only reads. Anchor: `#approval-rule`.
+
 Rulesets that apply to the default branch. A writer can read them, as checked on `line-mcp`:
 
 ```bash
@@ -588,7 +456,7 @@ if out=$(gh api "repos/<repo>/branches/<default>/protection" \
            --jq '.required_pull_request_reviews.required_approving_review_count // 0' 2>&1); then
   echo "read: $out"                                    # the required count
 elif printf '%s' "$out" | grep -q 'Branch not protected'; then
-  echo "read: 0"                                       # counts as read only when .permissions.admin is true
+  echo "read: 0"                                       # counts as read only when admin is true
 else
   echo "not read: $out"
 fi
@@ -601,7 +469,7 @@ How to read them:
 | Source | Read, requires an approval | Read, requires none | Not read |
 |---|---|---|---|
 | Rulesets | a number of 1 or more | 0 | the command failed |
-| Classic | a number of 1 or more | 0, or a 404 with the message "Branch not protected" while `.permissions.admin` is true | any other error. Without admin the endpoint answers 404 "Not Found", as on `line-mcp`, which says nothing |
+| Classic | a number of 1 or more | 0, or a 404 with the message "Branch not protected" while `admin` is true | any other error. Without admin the endpoint answers 404 "Not Found", as on `line-mcp`, which says nothing |
 
 - **yes:** either source requires an approval.
 - **no:** both were read and neither requires one. Owner step: "Require a pull request with at least 1 approving review on `<default>`: add a branch ruleset at https://github.com/<repo>/settings/rules".
@@ -609,8 +477,78 @@ How to read them:
 
 ## Webhook
 
-No command. Never create a webhook in this procedure. List this line under Pending on every run, verbatim:
+The secret, the two triggers and each repository's GitHub webhook. The trigger objects, the compare, Register the webhook and the owner steps are in [triggers-github.md](triggers-github.md); this section says what onboarding runs of them. Everything here needs the conductor thread: the triggers bind to the thread that creates them. (Spec: Webhook secret from the owner; Two triggers bound to the conductor; Register the webhook for one repository.) Anchor: `#webhook`.
+
+`<reconcile>` is `reconcileMinutes` of the **planned** block: run the parser on `readme.new` into `<work>/settings.json` before the compare, so `reconcileMinutes: 2` gives the timer `everyMs` 120000.
+
+### Survey the triggers
+
+Run steps 1 to 3 of [Steps of the check](triggers-github.md#steps-of-the-check): list this thread's scheduled tasks with `list_scheduled_tasks` and `projectId` `<conductor project>`, select them by `boundThreadId` `<conductor id>` and the two titles, and compare each with its object of [Triggers](triggers-github.md#triggers).
+
+| Found, per title | Plan |
+|---|---|
+| one task, no difference, enabled | reuse |
+| one task that differs, or is disabled | change: update it in place by `scheduledTaskId`, only the differing fields, or `enabled: true`, as step 4 of the check says. The webhook trigger keeps its URL and its secret: no `request_secret` |
+| several tasks with the title | cannot do: the owner step of step 2 of the check |
+| no task: the timer | create, with the timer object |
+| no task: the webhook trigger | create, with the webhook object and a new secret (below), then Register the webhook for every repository |
+
+A failed `list_scheduled_tasks` is cannot do for both triggers, with the error; nothing is created, since a second trigger could be made beside an existing one.
+
+In a dry run outside the conductor thread, no trigger is bound to this thread, so the list says nothing about the conductor. Plan both triggers as "in the conductor thread" and say so.
+
+### The secret and the webhook trigger
+
+Only when the webhook trigger is created in this run, and only after the plan was agreed:
+
+1. Call `request_secret` with `label` "GitHub webhook secret", `reason` "A new secret for the project-conductor webhook trigger. Keep it: every repository's GitHub webhook needs it." and `delivery` `"secretRef"`. Create the webhook trigger with `schedule_task` and that `secretRef` in `schedule.signature.secretRef`. Keep its `webhookUrl` as `<url>`, and print it in the report: only this call returns it.
+2. When at least one repository of `<work>/repos.json` has `admin` true, call `request_secret` again with the same label, `reason` "The same secret again, to add it to the repositories' GitHub webhooks." and `delivery` `"file"`. That path is the `<secret file>` of Register the webhook. Without an admin repository, ask nothing more.
+
+The secret is never generated, printed or stored. A refused or cancelled `request_secret` leaves the webhook trigger uncreated: cannot do, owner step "run: check the triggers" in this thread, which creates it on the owner's command.
+
+Read each trigger back with `list_scheduled_tasks` and the compare: no difference and `enabled` true.
+
+### Register the webhook for each repository
+
+When the webhook trigger was created in this run, run [Register the webhook](triggers-github.md#register-the-webhook) for each repository of `<work>/repos.txt`, in that order, with `<url>` and the `<secret file>`. Its step 1 decides by `admin`: a repository without it is an owner step and needs no secret. Print the [owner steps](triggers-github.md#owner-steps) block of each such repository, with `<url>`.
+
+In the survey, the URL is not known yet. The plan lists each repository as "register after the trigger is created" when its `admin` is true, and as an owner step otherwise.
+
+### A run that reuses the webhook trigger
+
+The trigger exists, so its URL is not known in this run: only its creation returned it. Ask for no secret and register no hook. The `Webhook owner steps:` list is carried instead.
+
+Read this thread's own messages, newest first, as [The backward scan](triggers-github.md#the-backward-scan) does (`t3_thread_read` with `view` `"activity"`), every page to the start of the thread, into `<work>/scan-<k>.json`. Then:
+
+```bash
+jq -s 'add | unique_by(.position)' <work>/scan-*.json | jq -r --rawfile repos <work>/repos.txt '
+  def trim: gsub("^\\s+|\\s+$"; "");
+  def lines: (.text // "") | split("\n") | map(rtrimstr("\r") | trim);
+  def names($r): (.text // "") | ascii_downcase
+    | test("(^|[^a-z0-9._-])" + ($r | ascii_downcase | gsub("\\."; "\\.")) + "($|[^a-z0-9._-])");
+  [ .[] | select(.type == "assistant_message" and (lines | any(startswith("Webhook owner steps:")))) ]
+  | sort_by(.position) as $reports
+  | (if ($reports | length) == 0 then []
+     else $reports[-1] | lines | map(select(startswith("Webhook owner steps:"))) | last
+       | ltrimstr("Webhook owner steps:") | trim
+       | if . == "none" or . == "" then [] else split(",") | map(trim) end end) as $carried
+  | [$repos | split("\n")[] | select(. != "") | . as $r | select([$reports[] | names($r)] | any | not)] as $new
+  | ($carried + $new) | unique_by(ascii_downcase) | sort_by(ascii_downcase)
+  | "Webhook owner steps: " + (if length == 0 then "none" else join(", ") end)'
+```
+
+- **Carried:** the list of the newest report of this thread that holds a `Webhook owner steps:` line, an onboarding, trigger check or register report, unchanged.
+- **Added:** every repository of the board that none of those reports names. No report ever registered its hook, so it is an owner step, with the owner steps block whose URL is `the URL of the trigger "project-conductor webhook" in T3's Settings`.
+- No report at all: every repository of the board is an owner step.
+
+The owner can then run "register the webhook for `<repo>`" with the URL pasted from T3's Settings.
+
+### The report line
+
+Every onboarding report ends its Triggers section with the full list, as [Webhook owner steps](triggers-github.md#webhook-owner-steps) defines it:
 
 ```text
-Webhook: pending. Created by the task "Repair claims, settle merged work and wake on events".
+Webhook owner steps: <repo>, <repo>
 ```
+
+When the webhook trigger was created in this run, the list is every repository whose result is `owner step`, compared without case and sorted. When it was reused, it is the carried list above. `none` when empty. In a dry run, it is the list the run would leave: the repositories without `admin`, or the carried list.

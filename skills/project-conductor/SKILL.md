@@ -1,30 +1,31 @@
 ---
 name: project-conductor
-description: "Use when a GitHub Project board and its repository must be prepared for unattended task runs, for example \"onboard this board\", \"set up the conductor for this repo\" or \"check that the board is ready for the loop\", or when a message asks to run one wake of the conductor: a webhook or timer trigger (Trigger: webhook. or Trigger: timer.), a phase report from a task thread, or a manual wake, for example \"Run one wake of the project-conductor skill for this board.\" Onboarding sets PROJECT_URL, creates the Run phase, Attempt and Run thread fields, proposes the conductor settings and model file, keys the board's open issues and checks the approval rule, with a dry-run form. A wake repairs half-made claims, settles the threads of merged work, answers phase reports and switches a planned thread to the implement model, then claims Ready tasks and launches their threads on the plan model. Also \"check the triggers\" and \"register the webhook for owner/name\". Not for publishing tasks."
+description: "Use when a GitHub Project board and its repositories must be prepared for unattended task runs, for example \"/project-conductor\" with a board URL, \"onboard this board\", \"set up the conductor for this board\" or \"check that the board is ready for the loop\", or when a message asks to run one wake of the conductor: a webhook or timer trigger (Trigger: webhook. or Trigger: timer.), a phase report from a task thread, or a manual wake, for example \"Run one wake of the project-conductor skill for this board.\" Onboarding makes its thread the conductor, creates the run fields, writes the settings block into the board readme, keys open issues, checks each repository and creates the triggers, with a dry-run form. A wake repairs half-made claims, settles the threads of merged work, answers phase reports and switches a planned thread to the implement model, then claims Ready tasks and launches their threads on the plan model. Also \"check the triggers\" and \"register the webhook for owner/name\". Not for publishing tasks."
 ---
 
 # Project conductor
 
-The conductor runs the tasks of a GitHub Project board unattended, from Ready to merged. Before it can run a board, the board and the one repository it serves must be prepared.
+The conductor runs the tasks of a GitHub Project board unattended, from Ready to merged. Before it can run a board, the board and the repositories of its issues must be prepared, from the thread that becomes the board's conductor.
 
-This skill holds four procedures: **Onboard a board** prepares the board and the repository, **Run one wake** repairs half-made claims, settles merged work, answers phase reports, switches a task thread's model and starts Ready tasks, **Check the triggers** keeps the conductor's webhook trigger and timer as they should be, and **Register the webhook** adds the webhook trigger's URL to one repository. The names below are frozen: the wake reads them.
+This skill holds four procedures: **Onboard a board** prepares the board, its repositories and the conductor thread, **Run one wake** repairs half-made claims, settles merged work, answers phase reports, switches a task thread's model and starts Ready tasks, **Check the triggers** keeps the conductor's webhook trigger and timer as they should be, and **Register the webhook** adds the webhook trigger's URL to one repository. The names below are frozen: the wake reads them.
 
 The onboarding commands are in [references/onboarding-github.md](references/onboarding-github.md), the wake's commands are in [references/run-github.md](references/run-github.md), and the commands of the triggers, the webhooks and the end of the board are in [references/triggers-github.md](references/triggers-github.md). Every step below names the section that holds its commands and the requirement of the spec it meets.
 
 ## Onboarding inputs
 
+The owner types `/project-conductor <board URL>` in a new thread, in any T3 project or in "No project". Onboarding runs in that thread, and that thread becomes the board's conductor. (Spec: Skill and procedure exist.)
+
 | Input | Default | Notes |
 |---|---|---|
-| Board URL | none | `https://github.com/users/<owner>/projects/<n>` or `https://github.com/orgs/<owner>/projects/<n>`. A board named by URL or number is confirmed by that. |
-| Repository | none | `owner/name`, the one repository the board serves. |
-| Plan model | `Opus-5.5` | Shown in the plan for the person to confirm. |
-| Review model | `GPT-6.2-Sol` | Shown in the plan for the person to confirm. |
-| Implement model | DeepSeek | The exact model id must be confirmed by the person. Never guess it. An id already in an existing `repo-run-models.md`, on the default branch or on the onboarding branch, counts as confirmed unless the person changes it in the plan. |
-| Effort per role | `medium` | Shown in the plan for the person to confirm. |
+| Board URL | none | `https://github.com/users/<owner>/projects/<n>` or `https://github.com/orgs/<owner>/projects/<n>`. A board named by URL or number is confirmed by that. The repositories come from the board's issues. |
+| Plan model | `claudeAgent/claude-opus-5-5#medium` | A cell `<providerInstanceId>/<model id>#<effort>`. Shown in the plan for the person to confirm. |
+| Review model | `opencode/openai/gpt-6.2-sol#medium` | Shown in the plan for the person to confirm. |
+| Implement model | DeepSeek | The exact cell must be confirmed by the person. Never guess it. A `model.implement` line already in the board readme block counts as confirmed unless the person changes it in the plan. |
+| Effort per role | `medium` | The `#<effort>` of each cell. Shown in the plan for the person to confirm. |
 | Dry run | no | Yes: survey, show the plan and the report, write nothing. |
 | Proceed without asking | no | Yes: show the plan and write without waiting for agreement. |
 
-If the board URL or the repository is missing, ask for it before the survey.
+A model line already in the block is kept as written and shown as the one to confirm: the defaults fill only a missing line. If the board URL is missing, ask for it before the survey.
 
 ## Names this procedure writes
 
@@ -32,64 +33,56 @@ These are frozen. Write them verbatim.
 
 | What | Name and value |
 |---|---|
-| Repository variable | `PROJECT_URL`, holding the board's URL |
+| Conductor title | `project-conductor <board URL>`, this thread's title |
+| Settings block | the line `<!-- project-conductor -->` in the board readme, followed by one fenced `text` block with the keys `conductor`, `maxParallel` (2), `reviewRounds` (5), `reconcileMinutes` (30, from 1 to 1440), `maxAttempts` (2), `model.plan`, `model.review`, `model.implement` |
 | Board fields | "Run phase" (single select: `plan`, `implement`, `closeout`, `care`), "Attempt" (number), "Run thread" (text) |
-| Settings key | `"project-conductor"` in `.agents/harness.json`: `{"maxParallel": 2, "reviewRounds": 5, "reconcileMinutes": 30, "maxAttempts": 2}` |
-| Model file | `.agents/hooked-rules/repo-run-models.md`, roles `plan`, `review`, `implement`. Replaces `.agents/hooked-rules/repo-review-models.md` |
-| Settings branch | `chore/project-conductor-onboarding` |
-| Settings commit and PR title | `chore: onboard project-conductor settings` |
+| Triggers | `project-conductor webhook` and `project-conductor timer`, bound to this thread |
 | Task key | `<!-- task: <rfc-slug>/<milestone-slug>/<number> -->`, the first line of the issue body |
 
-A field is never renamed. A released name is never changed.
+A field is never renamed. A released name is never changed. Onboarding does not set `PROJECT_URL`, write `.agents/harness.json` or `repo-run-models.md`, or open a pull request: those steps are no longer used, and what an earlier onboarding left is not changed. (Spec: Settings block in the board readme.)
 
 ## Onboarding rules
 
-- **Survey first, then show the plan.** Every run first reads the current state of every step, and writes nothing while it does. Then it shows a plan that marks each item as **create**, **change** (a write over an existing value, such as a different `PROJECT_URL`), **reuse** or **cannot do**, with the reason and, for cannot do, the owner's exact step. Show every file and body that would change as its full content or a diff. (Spec: Survey before any write.)
-- **Wait for agreement.** Write only after the person agrees to the plan. When the person said to proceed without asking, show the plan and write at once, except for what needs their choice: an implement model id that is neither given nor in an existing `repo-run-models.md`, and edits to files that refer to the old roster. Those new choices are left out of this run and reported. What an earlier, approved run already put on the onboarding branch is not a new choice: it stays planned, so a repeated run reuses it instead of calling it a conflict. (Spec: Survey before any write.)
+- **Survey first, then show the plan.** Every run first reads the current state of every step, and writes nothing while it does. Then it shows a plan that marks each item as **create**, **change** (a write over an existing value, such as another title or a `conductor` naming an archived thread), **reuse** or **cannot do**, with the reason and, for cannot do, the owner's exact step. Show every readme and body that would change as its full content or a diff. (Spec: Survey before any write.)
+- **Wait for agreement.** Write only after the person agrees to the plan. When the person said to proceed without asking, show the plan and write at once, except for what needs their choice: an implement model that is neither given nor in the block is left out of the block and reported. (Spec: Survey before any write; Settings block in the board readme.)
 - **Agreeing to part of the plan.** The person may drop items from the plan. A dropped item is not written; list it under Pending as "<item>: dropped by the person". Write the rest as planned. (Spec: Survey before any write.)
-- **A dry run writes nothing.** It stops after the plan and prints the report, with every owner step and the exact commands. Nothing on GitHub changes: no variable, field, file, branch, pull request or issue. Reading into a local clone in the scratchpad is allowed. (Spec: Survey before any write.)
+- **A dry run writes nothing.** It stops after the plan and prints the report, with every owner step and the exact commands. Nothing changes: no title, field, readme, issue, trigger or webhook, and no `request_secret` card appears. A dry run may run in any thread. Run outside the conductor thread, its report says that steps 2, 6 and 7 (the rename, the secret, and the triggers and webhooks) need the conductor thread. (Spec: Survey before any write.)
 - **Look before every write.** Read the thing again just before writing it. If it changed since the survey, do not write it: report it. A step that already holds the planned value is reused. A run right after a completed run writes nothing. (Spec: Report and repeatability.)
-- **Change only what this procedure manages:** the variable `PROJECT_URL`, the three fields and the missing options of "Run phase", the two settings files, and the first line of keyless issue bodies. Keep every other key, option, field, file and byte.
-- **Delete nothing,** except `repo-review-models.md` when it is replaced. Delete that only when no other file refers to its path, or when the person agreed in the plan to edit those references in the same pull request. (Spec: Model file; References to the old roster.)
-- **Trusted input.** Key an issue only when its author and every editor of its body are the agent account or the repository owner. When the edit history cannot be read completely, has more pages, holds a deleted edit, or names an editor or author that cannot be identified, or the query returns an error, the issue is untrusted. When authorship cannot be read, the answer is no. (Spec: Only trusted bodies are keyed.)
-- **One onboarding per repository at a time.** Do not start a run for a repository while another run for it is in progress, in this session or another one you know of.
-- **A failed step does not stop the run.** Report the failure with the owner's step, and go on with the next step. One exception: the keying step stops whole, writing no further key, on a duplicate key or on a list that could not be read to its end. Steps already written stay written.
-- **Never retry a refused write another way.** When the agent cannot set the variable or create a field, print the owner's exact command. Do not try another API or account.
+- **Change only what this procedure manages:** this thread's title, the three fields and the missing options of "Run phase", the settings block in the board readme, the first line of keyless issue bodies, the two triggers bound to this thread, and the hooks with the webhook trigger's URL. Keep every other key, option, field, readme byte and hook.
+- **Delete nothing.** No field, option, trigger, hook or readme text is removed.
+- **Trusted input.** Key an issue only when its author and every editor of its body are the agent account or the owner of that issue's repository. When the edit history cannot be read completely, has more pages, holds a deleted edit, or names an editor or author that cannot be identified, or the query returns an error, the issue is untrusted. When authorship cannot be read, the answer is no. (Spec: Only trusted bodies are keyed.)
+- **One onboarding per board at a time.** Do not start a run for a board while another run for it is in progress, in this session or another one you know of.
+- **A failed step does not stop the run.** Report the failure with the owner's step, and go on with the next step. Exceptions: the one-conductor check stops the whole run before any write, and the keying step of a repository stops whole, writing no further key there, on a duplicate key or on a list that could not be read to its end. Steps already written stay written.
+- **Never retry a refused write another way.** When the agent cannot rename the thread, write the readme, create a field, a trigger or a hook, print the owner's exact step. Do not try another API or account.
+- **The secret stays the owner's.** It comes only through `request_secret`, and only when this run creates the webhook trigger or a hook. Never generate, print or store it. (Spec: Webhook secret from the owner.)
 - **English by default.** Write in another language only when the person explicitly asks.
 
 ## Onboard a board
 
-Run the seven steps in this order. Survey all of them first (each step's "Survey" part), show the plan, then write (each step's "Write" part) in the same order, and end with the report.
+Run the eight steps in this order. Survey all of them first (each step's "Survey" part), show the plan, then write (each step's "Write" part) in the same order, and end with the report.
 
 ### 1. Preflight
 
-Reference: [Preflight](references/onboarding-github.md#preflight). Spec: Skill and procedure exist; Survey before any write.
+Reference: [Preflight](references/onboarding-github.md#preflight) and [Conductor thread](references/onboarding-github.md#conductor-thread). Spec: Skill and procedure exist; Survey before any write; One conductor per board.
 
 Survey:
 
-- `gh` is logged in and the token has the `project` scope.
-- The agent's login, from the token. The repository owner's login, the default branch, and the agent's `admin` and `push` permissions on the repository.
-- The board can be read by its explicit number and owner, and its URL and id are known.
+- `gh` is logged in and the token has the `project` scope. The agent's login, from the token.
+- The board can be read by its explicit number and owner; its URL, id and readme are known.
+- This thread's id, title and T3 project.
+- **One conductor.** The block's `conductor`: when it names another thread that `t3_thread_read` shows as not archived, stop. Then every project of `t3_project_list`, "No project" included: search each for the conductor title and compare the titles exactly; a match that is not this thread stops the run. A search that fails or returns 50 matches stops it too.
 
-If `gh` is not logged in, the scope is missing, the repository cannot be read or the board cannot be read, stop the run and give the person the fix. Without `push`, the settings pull request and the keys are cannot do: say so in the plan. Without `admin`, the variable is an owner step (step 2).
+If `gh` is not logged in, the scope is missing, the board cannot be read or the one-conductor check stops, end the run with the report: nothing is written, and the report names the existing conductor or the fix.
 
 Preflight writes nothing.
 
-### 2. `PROJECT_URL`
+### 2. This thread is the conductor
 
-Reference: [Repository variable](references/onboarding-github.md#repository-variable). Spec: Repository variable; Survey before any write.
+Reference: [The rename](references/onboarding-github.md#the-rename). Spec: The onboarding thread becomes the conductor.
 
-Survey: read the repository's variables.
+Survey: this thread's title. Exactly `project-conductor <board URL>`: reuse. Another board's conductor title: stop, "Run the onboarding of this board in a new thread." Anything else: change.
 
-| Found | Plan |
-|---|---|
-| `PROJECT_URL` holds the board's URL | reuse |
-| absent, and the agent is admin | create |
-| a different value, and the agent is admin | change: show the old and the new value |
-| the agent is not admin | cannot do: owner step, the exact `gh variable set` command with the real board URL |
-| the variables cannot be read | the value is "unknown, owner checks". With admin, read again just before the write; a value read then decides create, change or reuse as above. If the second read fails too, or without admin: owner step as above, and no write |
-
-Write: only when the agent is admin. Read the variable again, then set it. If setting it fails, do not retry another way: print the exact command for the owner.
+Write: rename this thread with `t3_thread_update` `rename`, then read the title back. A refused rename is an owner step.
 
 ### 3. Fields
 
@@ -109,92 +102,95 @@ An option of "Run phase" whose name differs from a planned one only in case is a
 
 Write: read the fields again, then create each missing field and add missing options. Read them back.
 
-### 4. Settings pull request
+### 4. Settings block
 
-Reference: [Settings pull request](references/onboarding-github.md#settings-pull-request) and [The model file](references/onboarding-github.md#the-model-file). Spec: Settings key in harness.json; Model file; References to the old roster; Settings go through one pull request; Reuse of the onboarding pull request; Completing a partial onboarding pull request.
+Reference: [Settings block](references/onboarding-github.md#settings-block), with the format and parser of [Settings block](references/run-github.md#settings-block). Spec: Settings block in the board readme.
 
-Survey:
+Survey: parse the block in the board readme, then plan it:
 
-1. Read `.agents/harness.json`, `.agents/hooked-rules/repo-run-models.md` and `.agents/hooked-rules/repo-review-models.md` from the default branch, and the state of branch `chore/project-conductor-onboarding` and of every open pull request from it.
-2. **Harness key.** Parse `.agents/harness.json` as JSON. If it is not valid JSON, this step stops: report it as cannot do, and propose neither file. Plan the key `"project-conductor"` with the frozen value; keep every other key, their order and the file's indentation. A file that is absent is created with only that key. When the default branch already holds the key with that value, the key is reused.
-3. **Model file.** Build `repo-run-models.md` from the template in the reference, with the confirmed models.
-   - `repo-review-models.md` exists: search the repository for references to its path. A reference outside the file itself defers the roster migration: `repo-run-models.md` is not proposed, the old file stays, and the references are an owner step. The person can agree in the plan to edit those references in the same pull request; then the migration goes ahead and the edits are part of it. Without deferral, the new file carries the old file's reviewer table and presets unchanged, and the old file is removed in the same commit.
-   - Only `repo-run-models.md` exists: it is the source of its own triggers, reviewer presets and models. Show its models as the ones to confirm; confirmed, the planned content equals the file, so it is reused and nothing is proposed. The file changes only when the person picks other models in the plan.
-   - Neither exists: propose `repo-run-models.md` with the role table only.
-   - The implement model id is not confirmed: it is neither given by the person nor in an existing `repo-run-models.md` on the default branch or the onboarding branch. Then the model file is cannot do in this run. The harness key goes ahead.
-   - **Unattended carry-over.** When the person said to proceed without asking, a model file or reference edit that would be left out only because it needs their choice stays planned when the onboarding branch already holds it: the earlier run's approved plan made that choice. Plan it with the branch's model ids and the same reference edits, so the branch's content is the planned content.
-4. **Expected changes.** From the plan, list each planned path with its status against the default branch: `.agents/harness.json` modified or added, `repo-run-models.md` added (or modified), `repo-review-models.md` removed, each agreed reference edit modified.
-5. **Existing branch and pull request.** Compare what the branch holds with the expected changes, at one head commit, as the reference describes:
+- **No marker:** create. The marker and the block go after the readme's text, which stays byte for byte.
+- **A block without a gap, or one lacking only `conductor`:** keep every valid key as written, in its place. Add only the missing keys, with the defaults and the confirmed models, and set `conductor` to this thread's id. Change a model only when the owner gives another cell in the plan. A planned block equal to the readme's is reused.
+- **A block with another gap** (two markers, no fenced block, an unknown or repeated key, an invalid number): cannot do. The owner step is the gap's fix, and the report shows the planned block.
+- **The implement model** not confirmed: its line is left out, and the report names it under Could not do.
 
-| Found | Plan |
-|---|---|
-| nothing to change: the default branch holds the planned content | reuse, no branch or pull request. An open onboarding pull request left over is reported for the owner to close |
-| no branch | create: one commit and one pull request |
-| an open pull request from the branch to another base, or from a fork | cannot do: conflict, report it |
-| the branch's changes and contents equal the expected ones | reuse the branch, and its pull request (open one if none is open) |
-| the branch's changes are a strict subset of the expected ones, each equal to its planned content, and the roster swap is either whole or absent on it | change: one more commit on the same branch adding the rest |
-| anything else, such as a change to another file, other content, or only one half of the roster swap (the added `repo-run-models.md` without the removal of `repo-review-models.md`, or the other way round) | cannot do: conflict, report it, do not push. The add and the removal must be in one commit |
+Each model line of the planned block is resolved read-only, as a wake does; one that does not resolve is reported with its owner step.
 
-Write: as the reference describes, through a local clone in the scratchpad, never with force. Before reusing as is, check the pull request's head is still the commit you compared. The pull request's body lists its current changes: after completing a partial branch, replace the body; when reusing an open pull request whose body differs from the planned one, plan the body as change and replace it. Merging the pull request is the owner's step: report it.
+Write: read the readme again, write it with `gh project edit --readme`, and read it back: equal byte for byte, the trailing newline aside. A refused write is an owner step that shows the block to paste.
 
-### 5. Keys
+### 5. Repositories of the board
 
-Reference: [Keys](references/onboarding-github.md#keys). Spec: Missing task keys are added; Malformed markers; Which board items are keyed; Slugs and numbers of a new key; Only trusted bodies are keyed; Re-check before keying.
+Reference: [Repositories](references/onboarding-github.md#repositories), [Keys](references/onboarding-github.md#keys) and [Approval rule](references/onboarding-github.md#approval-rule). Spec: Repositories of the board; Missing task keys are added; Malformed markers; Which board items are keyed; Slugs and numbers of a new key; Only trusted bodies are keyed; Re-check before keying; Approval rule.
 
-Survey:
+Survey: read every item of the board, page by page, to the end. Each repository with an open issue on the board is checked on its own, and none of its findings stops another repository:
 
-1. Read every item of the board, page by page, to the end. If a page fails, stop the keying step. Keep only open issues of the repository. Pull requests, draft items and issues of other repositories are never keyed.
-2. Take each issue's first line, the whole line, a CR at its end tolerated:
-   - a full task key `<!-- task: <rfc-slug>/<milestone-slug>/<number> -->` or a full plan marker `<!-- plan: <rfc-slug>/<milestone-slug> -->`: **identified**, left unchanged;
-   - matches `^\s*<!--\s*(task|plan):` (leading spaces or no space allowed) but is not the exact marker form: **malformed**, reported, left unchanged;
-   - anything else: **keyless**.
-3. Read every task key in the repository, open and closed, on and off the board, every page. A key held by two issues stops the keying step: report both.
-4. For each keyless issue, find its slugs. `<rfc-slug>` comes from the board readme's marker `<!-- rfc: <rfc-slug> -->`. `<milestone-slug>` comes from the marker `<!-- rfc: <rfc-slug>/<milestone-slug> -->` in the description of the issue's milestone. No readme marker, no milestone, no marker in the milestone, or an RFC slug in the milestone that differs from the readme's: no key, reported with the reason.
-5. Check trust for each keyless issue (see [Onboarding rules](#onboarding-rules)). Untrusted: no key, reported with the reason.
-6. Allocate the numbers in one pass, in ascending issue number: for each prefix `<rfc-slug>/<milestone-slug>`, start from the highest number used under it in any issue of the repository, open or closed, and give each issue the next one. Numbers given in one run are distinct.
+1. **Its T3 project:** exactly one project whose `repositoryIdentity.canonicalKey` equals `github.com/<repo>`, compared without case. None, or several (named by id), is an owner step.
+2. **Push permission.** Without it, its keys are cannot do: "Give the agent account write access to `<repo>`."
+3. **Its keys**, allocated and checked against that repository's keys only:
+   1. Take each of its open issues' first line, the whole line, a CR at its end tolerated:
+      - a full task key `<!-- task: <rfc-slug>/<milestone-slug>/<number> -->` or a full plan marker `<!-- plan: <rfc-slug>/<milestone-slug> -->`: **identified**, left unchanged;
+      - matches `^\s*<!--\s*(task|plan):` (leading spaces or no space allowed) but is not the exact marker form: **malformed**, reported, left unchanged;
+      - anything else: **keyless**.
 
-The plan lists each proposed key with its issue, and every malformed, untrusted and unmarked issue with its reason.
+      Pull requests and draft items are never keyed. A failed page of the board stops the keying of every repository.
+   2. Read every task key in the repository, open and closed, on and off the board, every page. A key held by two issues stops that repository's keying step: report both.
+   3. For each keyless issue, find its slugs. `<rfc-slug>` comes from the board readme's marker `<!-- rfc: <rfc-slug> -->`. `<milestone-slug>` comes from the marker `<!-- rfc: <rfc-slug>/<milestone-slug> -->` in the description of the issue's milestone. No readme marker, no milestone, no marker in the milestone, or an RFC slug in the milestone that differs from the readme's: no key, reported with the reason.
+   4. Check trust for each keyless issue (see [Onboarding rules](#onboarding-rules)), against that repository's owner. Untrusted: no key, reported with the reason.
+   5. Allocate the numbers in one pass, in ascending issue number: for each prefix `<rfc-slug>/<milestone-slug>`, start from the highest number used under it in any issue of the repository, open or closed, and give each issue the next one. Numbers given in one run are distinct.
+4. **Its approval rule:** read the rulesets that apply to its default branch, and the branch's classic protection.
 
-Write, one issue at a time:
+   | Found | Answer |
+   |---|---|
+   | either source requires at least one approving review | yes |
+   | both sources were read and neither requires one | no: owner step to add a rule, with the repository's rules page |
+   | any other case, such as classic protection that cannot be read without admin | unknown: owner checks, with the rules page |
+
+   This only reads. It never writes a rule.
+
+The plan lists each repository's findings, each proposed key with its issue, and every malformed, untrusted and unmarked issue with its reason.
+
+Write the keys, one issue at a time:
 
 1. Read the issue again: its body, its edit ids and their update times, its state, whether it is still on the board, and its milestone. If any of them changed since the survey, skip it and report it.
-2. Read the repository's keys again, every page. If another issue now holds the planned key, skip and report it. Never renumber silently. A duplicate key now stops the keying step.
-3. Write the key line, a newline, then the body exactly as read in step 1. Read the body back and compare byte for byte. A difference is reported, and the keying step stops.
+2. Read the repository's keys again, every page. If another issue now holds the planned key, skip and report it. Never renumber silently. A duplicate key now stops that repository's keying step.
+3. Write the key line, a newline, then the body exactly as read in step 1. Read the body back and compare byte for byte. A difference is reported, and that repository's keying step stops.
 
 An existing key never changes.
 
-### 6. Approval rule
+### 6. Webhook secret
 
-Reference: [Approval rule](references/onboarding-github.md#approval-rule). Spec: Approval rule.
+Reference: [The secret and the webhook trigger](references/onboarding-github.md#the-secret-and-the-webhook-trigger). Spec: Webhook secret from the owner.
 
-Survey: read the rulesets that apply to the default branch, and the branch's classic protection.
+Survey: none of its own. Step 7's survey says whether the webhook trigger is created in this run.
 
-| Found | Answer |
-|---|---|
-| either source requires at least one approving review | yes |
-| both sources were read and neither requires one | no: owner step to add a rule, with the repository's rules page |
-| any other case, such as classic protection that cannot be read without admin | unknown: owner checks, with the rules page |
+Write, only when the webhook trigger is created: `request_secret` with a `secretRef`, for the trigger; and, when any repository of the board has `admin`, `request_secret` with `delivery: "file"`, for its hooks. A run that reuses the webhook trigger asks for nothing.
 
-This step only reads. It never writes a rule.
+### 7. Triggers and webhooks
 
-### 7. Webhook
+Reference: [Webhook](references/onboarding-github.md#webhook), [Triggers](references/triggers-github.md#triggers) and [Register the webhook](references/triggers-github.md#register-the-webhook). Spec: Two triggers bound to the conductor; Register the webhook for one repository; Webhook secret from the owner.
 
-Reference: [Webhook](references/onboarding-github.md#webhook). Spec: Webhook step pending.
+Survey: list this thread's triggers with `list_scheduled_tasks` by `projectId` of this thread, `boundThreadId` and title, and compare each with its object for the planned `reconcileMinutes`. Equal and enabled: reuse. Different or disabled: change, in place by `scheduledTaskId`. Missing: create. Several with one title: owner step.
 
-Do not create a webhook. On every run, list this line under Pending, verbatim:
+Write:
 
-```text
-Webhook: pending. Created by the task "Repair claims, settle merged work and wake on events".
-```
+1. The timer, then the webhook trigger, each read back. A created webhook trigger's `webhookUrl` is printed in the report.
+2. **When the webhook trigger was created in this run,** run [Register the webhook](#register-the-webhook) for each repository of the board with the new URL. A repository without `admin`, or a refused write, gets the owner steps block.
+3. **When it was reused,** register no hook. Carry the `Webhook owner steps:` list from the newest report in this thread that holds one, and add every repository of the board that none of those reports names.
+
+### 8. Skills
+
+Spec: Skills confirmed at account level.
+
+Nothing is read or written. The report asks the owner to confirm that `project-conductor` and `task-run` are installed at account level for every provider instance that the planned block's models name, such as `claudeAgent` and `opencode`.
 
 ## Onboarding report
 
 Every run ends with this report, a dry run included. (Spec: Report and repeatability.)
 
 ```markdown
-## Onboarding: <repo>, board <board URL>
+## Onboarding: board <board URL>
 
 Mode: <dry run | written after agreement | written without asking>
+Conductor: <this thread's id>, titled `project-conductor <board URL>`
 
 ### Created
 - <what, with its link or id>
@@ -206,22 +202,32 @@ Mode: <dry run | written after agreement | written without asking>
 - <what>
 
 ### Pending
-- Webhook: pending. Created by the task "Repair claims, settle merged work and wake on events".
 - <issues skipped because they changed during the run: keyed by the next run>
 
 ### Could not do (owner step)
 - <what, why, and the owner's exact command or page>
 
-Approval rule: <yes | no | unknown>
-Keys: <n> identified, <n> keyed in this run, <n> without a key (listed above with the reason)
+### Triggers
+- Timer: <created <scheduledTaskId> | updated <fields> | re-enabled | reused | several | failed <error>>
+- Webhook trigger: <created <scheduledTaskId>, URL <webhookUrl> | updated <fields> | re-enabled | reused | several | failed <error>>
+- Webhooks: <repo>: <registered <id> | reused <id> | owner step>; … or "not run: the trigger was reused"
+
+Webhook owner steps: <repo>, <repo>
+
+### Repositories
+- <repo>: T3 project <id | none | several: <ids>>, push <yes | no>, approval rule <yes | no | unknown>, keys <n> identified, <n> keyed in this run, <n> without a key
+
+### Skills to confirm
+- Confirm that `project-conductor` and `task-run` are installed at account level for <each provider instance of the models>.
 
 <Nothing changed.>
 ```
 
 - Every list is printed, with "none" when it is empty.
-- Under Created, Changed and Reused, name each item of steps 2 to 5: `PROJECT_URL`, each field and the options added, `.agents/harness.json`, `repo-run-models.md`, the removal of `repo-review-models.md`, the branch, the pull request with its link, and each key with its issue.
-- Pending and Could not do are listed on every run, also when nothing changed: the webhook, the unmerged settings pull request ("Merge <PR link>"), a deferred roster migration with each reference, the variable command, a case-only field collision, a field of the wrong type, the approval rule when it is not "yes", every plan item the person dropped, and every open issue without a key with its reason (malformed, untrusted, no marked milestone, RFC slugs differ, changed during the run, key taken meanwhile).
-- In a dry run, the plan's creates and changes are listed under Pending as "would create" and "would change".
+- Under Created, Changed and Reused, name each item of steps 2 to 7: the thread title, each field and the options added, the settings block (the keys added and the lines changed), each key with its issue, each trigger and each hook.
+- Pending and Could not do are listed on every run, also when nothing changed: a repository without a T3 project or with several, a repository without push, a case-only field collision, a field of the wrong type, a settings block with a gap, an implement model not confirmed, a model line that does not resolve, a refused readme write with the block to paste, the approval rule of each repository when it is not "yes", each repository's webhook owner steps block, every plan item the person dropped, and every open issue without a key with its reason (malformed, untrusted, no marked milestone, RFC slugs differ, changed during the run, key taken meanwhile).
+- The line `Webhook owner steps:` is a line of its own, with the full list or `none`: the wakes' automatic check reads the newest one, and finds this report by its heading `## Onboarding:`.
+- In a dry run, the plan's creates and changes are listed under Pending as "would create" and "would change". Run outside the conductor thread, Pending also says: "Steps 2, 6 and 7 (the rename, the secret, the triggers and webhooks) need the conductor thread: run the onboarding there without dry run."
 - End with the line `Nothing changed.` exactly when the run made no successful write. A dry run always ends with it. A run that wrote anything never does.
 
 ## Run one wake
