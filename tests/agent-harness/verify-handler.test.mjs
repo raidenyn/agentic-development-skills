@@ -953,3 +953,8 @@ test('a busy block ledger says so instead of claiming the limit was reached', as
   assert.match(result.context, /block counter was busy/);
   assert.doesNotMatch(result.context, /still failing after/);
 });
+
+test('the gate declares exactly the kinds it acts on', () => {
+  const meta = JSON.parse(readFileSync(join(ASSETS.verifyGate, 'tool.json'), 'utf8'));
+  assert.deepEqual(meta.tools, ['shell', 'edit']);
+});

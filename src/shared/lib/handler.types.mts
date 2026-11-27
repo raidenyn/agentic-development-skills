@@ -63,6 +63,9 @@ export interface Handler {
     extra?: { cleanupDeadline?: number },
   ): HandlerResult | null | undefined | Promise<HandlerResult | null | undefined>;
   proofs?: Record<string, ProofCheck>;
+  // The tool kinds this handler declared in tool.json; it applies only to tool.before and
+  // tool.after, so other events always reach the handler.
+  tools?: readonly ToolKind[];
   // Per-event budget in milliseconds.
   timeouts?: Partial<Record<HarnessEvent, number>>;
   // Text that replaces "Do this step by hand." in a failure notice.

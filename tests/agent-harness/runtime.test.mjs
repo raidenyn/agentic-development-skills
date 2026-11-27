@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { ASSETS, tempRepo } from './helpers.mjs';
 
 const lib = (f) => import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', f)).href);
-const { createRuntime, loadHandlers, EVENTS, RESULT_KINDS, failureNotice } = await lib('runtime.mjs');
+const { createRuntime, declaredKinds, loadHandlers, EVENTS, RESULT_KINDS, failureNotice } = await lib('runtime.mjs');
 const { installTool } = await lib('install.mjs');
 
 const repo = await tempRepo();
@@ -33,6 +33,15 @@ test('failureNotice uses the manual text or the default', () => {
   assert.equal(failureNotice('a', 'prompt', 'boom', 'Run x.'), 'hook a failed on prompt: boom. Run x.');
 });
 
+test('declaredKinds validates the tools key', () => {
+  assert.deepEqual(declaredKinds({ tools: ['shell', 'edit'] }), ['shell', 'edit']);
+  assert.equal(declaredKinds({}), null);
+  assert.equal(declaredKinds({ tools: 'edit' }), null);
+  assert.equal(declaredKinds({ tools: [] }), null);
+  assert.equal(declaredKinds({ tools: ['write'] }), null);
+  assert.equal(declaredKinds(null), null);
+});
+
 test('calls only subscribed handlers in name order', async () => {
   const calls = [];
   const h = (name, events) => ({
@@ -55,6 +64,91 @@ test('merges context texts in name order', async () => {
   const out = await rt([h('zz'), h('aa')]).dispatch({ type: 'tool.after' }, ids);
   assert.equal(out.context, 'from aa\n\nfrom zz');
   assert.deepEqual(out.outcomes, { aa: 'result', zz: 'result' });
+});
+
+test('a handler with tools is skipped for other kinds', async () => {
+  const r = rt([{ name: 'h', events: ['tool.after'], tools: ['shell', 'edit'], handle: () => ({ context: 'x' }) }]);
+  const read = await r.dispatch(
+    { type: 'tool.after', host: 'claude-code', tool: { name: 'Read', kind: 'read', input: {} } },
+    ids,
+  );
+  assert.equal(read.context, undefined);
+  assert.deepEqual(read.notices, []);
+  assert.equal(Object.hasOwn(read.outcomes, 'h'), false);
+  const edit = await r.dispatch(
+    { type: 'tool.after', host: 'claude-code', tool: { name: 'Edit', kind: 'edit', input: {} } },
+    ids,
+  );
+  assert.equal(edit.context, 'x');
+});
+
+test('a handler without tools gets every kind', async () => {
+  const calls = [];
+  const out = await rt([
+    {
+      name: 'h',
+      events: ['tool.after'],
+      handle: (ev) => {
+        calls.push(ev.tool.kind);
+        return { context: 'x' };
+      },
+    },
+  ]).dispatch({ type: 'tool.after', host: 'claude-code', tool: { name: 'Bash', kind: 'other', input: {} } }, ids);
+  assert.deepEqual(calls, ['other']);
+  assert.equal(out.context, 'x');
+});
+
+test('an invalid tools on an in-process handler means every kind', async () => {
+  const calls = [];
+  const h = (name, tools) => ({
+    name,
+    events: ['tool.after'],
+    tools,
+    handle: () => {
+      calls.push(name);
+      return null;
+    },
+  });
+  await rt([h('empty', []), h('unknown', ['write'])]).dispatch(
+    { type: 'tool.after', host: 'claude-code', tool: { name: 'Read', kind: 'read', input: {} } },
+    ids,
+  );
+  assert.deepEqual(calls, ['empty', 'unknown']);
+});
+
+test('tools does not filter non-tool events', async () => {
+  const calls = [];
+  await rt([
+    {
+      name: 'h',
+      events: ['prompt'],
+      tools: ['shell'],
+      handle: () => {
+        calls.push('prompt');
+        return null;
+      },
+    },
+  ]).dispatch({ type: 'prompt', host: 'claude-code', prompt: 'hi' }, ids);
+  assert.deepEqual(calls, ['prompt']);
+});
+
+test('a throwing tools getter is never read on non-tool events', async () => {
+  const calls = [];
+  const handler = {
+    name: 'h',
+    events: ['prompt'],
+    handle: () => {
+      calls.push('prompt');
+      return null;
+    },
+  };
+  Object.defineProperty(handler, 'tools', {
+    get() {
+      throw new Error('tools was read');
+    },
+  });
+  await rt([handler]).dispatch({ type: 'prompt', host: 'claude-code', prompt: 'hi' }, ids);
+  assert.deepEqual(calls, ['prompt']);
 });
 
 test('deny wins over context at tool.before', async () => {
@@ -249,6 +343,33 @@ test('loadHandlers loads an installed handler into a worker', async () => {
         ids,
       );
       assert.equal(out.context, 'main=false main');
+    } finally {
+      for (const h of handlers) await h.close();
+    }
+  } finally {
+    await r.cleanup();
+  }
+});
+
+test('loadHandlers carries tools from tool.json', async () => {
+  const r = await tempRepo();
+  try {
+    const src = join(r.dir, '..', `src-kinds-${Date.now()}-${Math.random()}`);
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, 'tool.json'),
+      JSON.stringify({ name: 'kinds', version: '0.1.0', handler: true, tools: ['edit'] }),
+    );
+    writeFileSync(
+      join(src, 'handler.mjs'),
+      "export default { name: 'kinds', events: ['tool.after'], handle: () => null };\n",
+    );
+    assert.equal(installTool({ sourceDir: src, repoRoot: r.dir }).code, 0);
+    const { handlers, problems } = await loadHandlers(r.dir);
+    assert.deepEqual(problems, []);
+    assert.equal(handlers.length, 1);
+    try {
+      assert.deepEqual(handlers[0].tools, ['edit']);
     } finally {
       for (const h of handlers) await h.close();
     }
