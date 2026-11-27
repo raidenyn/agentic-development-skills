@@ -219,3 +219,39 @@ test('an OpenCode handler that spawns with default settings gets 5 s of work', a
   assert.doesNotMatch(text, /timed out/);
   await p.close();
 });
+
+const fxClaude = (name, root) =>
+  readFileSync(new URL(`./fixtures/claude/${name}.json`, import.meta.url), 'utf8').replaceAll('/REPO', root);
+const fxOpencode = (name, root) =>
+  JSON.parse(
+    readFileSync(new URL(`./fixtures/opencode/${name}.json`, import.meta.url), 'utf8').replaceAll('/REPO', root),
+  );
+
+test("Claude Code: a passing edit run's output reaches additionalContext", async () => {
+  const r = await installed();
+  r.setOut('note from lint\n');
+  const run = (input) => runNode(CLAUDE_MJS, [], { cwd: r.dir, input, env: { CLAUDE_PROJECT_DIR: r.dir } });
+  await run(fxClaude('PreToolUse-Edit', r.dir));
+  writeFileSync(join(r.dir, 'README.md'), 'hello world\n');
+  const res = await run(fxClaude('PostToolUse-Edit', r.dir));
+  assert.equal(res.code, 0, res.stderr);
+  assert.equal(
+    JSON.parse(res.stdout).hookSpecificOutput.additionalContext,
+    `verify: sh ${r.script} passed after the edit of README.md:\n\nnote from lint\n`,
+  );
+});
+
+test("OpenCode: a passing edit run's output is appended to result.content", async () => {
+  const r = await installed();
+  const p = await opencode(r);
+  r.setOut('note from lint\n');
+  const before = { ...fxOpencode('execute.before-patch', r.dir), sessionID: ROOT };
+  const input = { ...fxOpencode('execute.after-patch-completed', r.dir), sessionID: ROOT };
+  await p.hooks['execute.before'](before);
+  writeFileSync(join(r.dir, 'README.md'), 'hello world\n');
+  await p.hooks['execute.after'](input);
+  assert.equal(
+    input.result.content.find((c) => String(c.text ?? '').startsWith('verify: '))?.text,
+    `verify: sh ${r.script} passed after the edit of README.md:\n\nnote from lint\n`,
+  );
+});

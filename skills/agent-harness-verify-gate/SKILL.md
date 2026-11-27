@@ -31,7 +31,7 @@ The hook runtime must be installed first. The gate's `install` refuses without i
 The changed list is the union of three sets: files that differ from `VERIFY_BASE` in the working tree, untracked files that are not ignored, and files whose bytes or stat data changed since the last full pass.
 
 - **Pass and fail.** Exit 0 is a pass; anything else is a failure. A signal, a timeout (`timeoutSeconds`) and a command that cannot start count as failures too.
-- **Output.** Output is capped at 1 MiB, and the last 60 lines go to the model.
+- **Output.** Output is capped at 1 MiB, and the last 60 lines of a failing run go to the model. On an edit pass the same tail goes to the model as `verify: <command> passed after the edit of <file>: ...`, which is how a command hands it a note. A command that prints nothing on a pass stays silent.
 - **Timeout.** On timeout the process group gets SIGTERM, then SIGKILL after 5 s.
 - **Leftovers.** Processes the command leaves behind in its group are killed too, so do not start daemons from it.
 
@@ -41,7 +41,7 @@ Run the same command by hand with `node .agents/harness/verify-gate/cli.mjs run`
 
 Every trigger that reaches the gate first compares the working-tree content key (a git tree id from a private index plus a stat digest, both under `<git dir>/agent-harness/verify-gate/`) and the config with the last full pass. If both are unchanged, nothing runs.
 
-- **Edit.** After an edit-kind tool call, the gate runs once per edited file with `VERIFY_TRIGGER=edit` and `VERIFY_FILE`. A failure is added to the tool result as `verify: <command> failed after the edit of <file>: ...`. An edit run never records or clears a pass. When `editFiles` is set, only edited files matching it run; an edit of any other file starts no verify process, returns before the content-key check and is traced as `edit-skipped`.
+- **Edit.** After an edit-kind tool call, the gate runs once per edited file with `VERIFY_TRIGGER=edit` and `VERIFY_FILE`. A failure is added to the tool result as `verify: <command> failed after the edit of <file>: ...`. An edit run never records or clears a pass. When `editFiles` is set, only edited files matching it run; an edit of any other file starts no verify process, returns before the content-key check and is traced as `edit-skipped`. A pass whose output is not blank is added the same way, as `verify: <command> passed after the edit of <file>: ...` with the last 60 lines. Task and turn-end passes add nothing, whatever they print.
 - **Ticked task.** A tick is a checkbox in a file matching `taskFiles` changing from `- [ ]` to `- [x]`. The gate catches ticks made by edits and by shell commands alike.
   - At each shell or edit `tool.before`, it counts the boxes per item text.
   - At the matching `tool.after`, it compares the counts, so moved and reordered items do not matter.
@@ -92,10 +92,20 @@ A small repo-owned script that branches on `VERIFY_TRIGGER` is the usual shape:
 #!/bin/sh
 set -e
 case "$VERIFY_TRIGGER" in
-  edit) npx eslint "$VERIFY_FILE" && npx vitest related --run "$VERIFY_FILE" ;;
-  *)    npx eslint . && npx vitest run ;;
+  edit)
+    [ -f "$VERIFY_FILE" ] || exit 0
+    before=$(git hash-object "$VERIFY_FILE")
+    status=0
+    out=$(npx eslint --fix "$VERIFY_FILE" 2>&1 && npx vitest related --run "$VERIFY_FILE" 2>&1) || status=$?
+    [ "$status" -eq 0 ] || printf '%s\n' "$out"
+    [ "$before" = "$(git hash-object "$VERIFY_FILE")" ] || echo "eslint --fix rewrote $VERIFY_FILE; re-read it before editing it again."
+    exit "$status"
+    ;;
+  *) npx eslint . && npx vitest run ;;
 esac
 ```
+
+The `edit` branch is silent on a clean pass and prints the note after a rewrite. It prints the output on a failure, and both when errors remain after a rewrite. It exits early when the edit deleted the file. Whatever an edit pass prints reaches the model, so keep passing checks quiet there.
 
 ## Config keys
 
@@ -127,7 +137,7 @@ The gate registers the proof `verify-pass`. Another handler calls `context.proof
 1. **Install the hook runtime first**, by its skill's Onboard.
 2. **Install the gate.** From the installed skill folder, run `node <skill>/assets/verify-gate/cli.mjs install --repo <repo>`. It copies the tool to `.agents/harness/verify-gate/`, writes its lock entry and adds `"verify-gate": {"command": []}`. It does not touch the host configs.
 3. **Set the config.** These values need judgement:
-   - **`command`.** Find what the repo already uses to say the work is done: its CI steps, `AGENTS.md`, the `Makefile` or the `package.json` scripts. Prefer a repo-owned script that branches on `VERIFY_TRIGGER`, and make it fast as described above.
+   - **`command`.** Find what the repo already uses to say the work is done: its CI steps, `AGENTS.md`, the `Makefile` or the `package.json` scripts. Prefer a repo-owned script that branches on `VERIFY_TRIGGER`, and make it fast as described above. Check that it prints nothing on a passing edit, unless it means to hand the model a note.
    - **`base`.** The default branch's remote ref.
    - **`taskFiles`.** Where the repo keeps its checkbox task lists.
    - **`editFiles`.** Optional speed-up: the globs of the files the edit command checks, so other edits start no verify process.
@@ -148,7 +158,7 @@ The gate registers the proof `verify-pass`. Another handler calls `context.proof
    - It replaces a copy whose files all match its lock, removes files the new version no longer has and rewrites the lock entry.
    - It refuses on an edited, missing or extra file, naming it. Restore the file with `git checkout -- .agents/harness/<tool>/<file>`, or delete the tool folder and its lock entry and install again. There is no override flag.
    - `install` refuses when a different version is installed, so use `update` for that.
-2. **Review** the diff of `.agents/`.
+2. **Review** the diff of `.agents/`. Since 0.2.2, output of a passing edit run reaches the model, so a command that printed a progress line now sends it there. Check that it prints nothing on a passing edit, unless it means to hand the model a note.
 3. **Check.** Run `node .agents/harness/verify-gate/cli.mjs check`.
 4. **Restart OpenCode sessions**, which load handlers once per process.
 

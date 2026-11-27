@@ -308,7 +308,12 @@ Accepted on 2026-11-25 by the repository owner (raidenyn), with no conditions. A
 
 ## Amendments
 
-None.
+- **2026-11-26, the conductor owns the board.** Decided by the owner, raidenyn. The reasoning is in [the change design](../../../changes/conductor-owns-the-board/design.md) (Decisions 2, 3, 4, 5 and 11a). The contract changes in five places:
+  - **Settings.** A fenced block in the board readme, after the marker `<!-- project-conductor -->`, replaces `PROJECT_URL`, the `harness.json` key and `repo-run-models.md`. It holds `conductor`, `maxParallel`, `reviewRounds`, `reconcileMinutes`, `maxAttempts` and the three `model.*` lines.
+  - **Model cell.** The cell is `<providerInstanceId>/<model id>#<effort>`, split at the first `/` and the last `#`. A cell with an empty part is a bare name.
+  - **Conductor identity.** The conductor serves a board from any thread. Its title is `project-conductor <board URL>` and the readme `conductor` key holds its thread id. A wake writes nothing unless both agree.
+  - **Onboarding.** It runs without `PROJECT_URL` and without a pull request. The conductor thread writes the readme block, the triggers and the webhook itself, and adds Repair and Settle to every wake.
+  - **Task rule.** 1 task = 1 issue = 1 PR. The pull request closes its issue, and work that does not fit becomes a follow-up issue on the board.
 
 ## Appendix
 
