@@ -276,6 +276,24 @@ test('install and check: a malformed hook-runtime version is refused instead of 
   }
 });
 
+test('install, update and check: a non-string hook-runtime version is refused', async () => {
+  const r = await withRuntime();
+  const lock = json(r, LOCK);
+  lock.tools['hook-runtime'].version = ['0.2.0'];
+  write(r, LOCK, `${JSON.stringify(lock, null, 2)}\n`);
+
+  for (const mode of ['install', 'update']) {
+    const out = await hr(r, mode);
+    assert.equal(out.code, 1, mode);
+    assert.match(out.stderr, /hooked-rules needs agent-harness-hook-runtime 0\.2\.0 or newer; update it first\./);
+    assert.equal(json(r, LOCK).tools['hooked-rules'], undefined, mode);
+  }
+
+  const check = await hr(r, 'check');
+  assert.equal(check.code, 1);
+  assert.match(check.stderr, /0\.2\.0 or newer/);
+});
+
 test('pointers: an undecodable AGENTS.md reports "cannot be read" and is left byte-identical', async () => {
   const r = await repo({ files: { '.agents/hooked-rules/a.md': rule('new') } });
   const valid = Buffer.from(
@@ -295,6 +313,7 @@ test('pointers: an undecodable AGENTS.md reports "cannot be read" and is left by
     const out = await hr(r, ...args);
     assert.equal(out.code, 1, args.join(' '));
     assert.match(out.stderr, /AGENTS\.md cannot be read/);
+    if (args.includes('--check')) assert.ok(out.stderr.includes(FIX), out.stderr);
     assert.ok(readFileSync(join(r.dir, 'AGENTS.md')).equals(bytes), 'the file is unchanged');
   }
 });

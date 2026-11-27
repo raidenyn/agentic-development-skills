@@ -52,13 +52,14 @@ function defaultRepo(): string {
 const VERSION_RE = /^(\d+)\.(\d+)\.(\d+)$/;
 const PARTS = 3;
 
-function versionParts(version: string): number[] | null {
+function versionParts(version: unknown): number[] | null {
+  if (typeof version !== 'string') return null;
   const match = VERSION_RE.exec(version);
   if (match === null) return null;
   return match.slice(1, 1 + PARTS).map((part) => Number(part));
 }
 
-function versionAtLeast(version: string, minimum: string): boolean {
+function versionAtLeast(version: unknown, minimum: string): boolean {
   const a = versionParts(version);
   const b = versionParts(minimum);
   if (a === null || b === null) return false;
@@ -153,7 +154,10 @@ function pointers(repoRoot: string, checkOnly: boolean, io: Io): number {
   try {
     current = utf8.decode(readFileSync(path));
   } catch (err) {
-    return io.fail([`${AGENTS} cannot be read: ${errText(err)}`]);
+    const lines = [`${AGENTS} cannot be read: ${errText(err)}`];
+    // An unreadable file has no block, so a check still names the fix.
+    if (checkOnly) lines.push(FIX);
+    return io.fail(lines);
   }
   if (checkOnly) {
     let location: ReturnType<typeof locateBlock>;
