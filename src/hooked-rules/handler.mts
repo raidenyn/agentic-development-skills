@@ -5,7 +5,7 @@
 import { decide } from './lib/deliver.mts';
 import { bump, withLedger } from './lib/ledger.mts';
 import { loadRules } from './lib/rules.mts';
-import type { DecisionResult } from './lib/deliver.types.mts';
+import type { DecisionResult, Ledger } from './lib/deliver.types.mts';
 import type { EventPayload, Handler, HandlerContext, HandlerResult, WorkerContext } from './lib/handler.types.mts';
 import type { RuleIssue, RuleLoad } from './lib/rules.types.mts';
 
@@ -14,6 +14,7 @@ type LoadRules = (repoRoot: string) => RuleLoad;
 
 const EVENTS: Handler['events'] = ['tool.before', 'tool.after', 'prompt', 'compact', 'session.start'];
 const MANUAL = 'Read the hooked rules listed in AGENTS.md (.agents/hooked-rules/) by hand at the moments they name.';
+const LOST = 'the ledger lock could not be won in time';
 
 const issueKey = (issue: RuleIssue) => `${issue.path}: ${issue.message}`;
 const expired = (ctx: Ctx) => ctx.signal.aborted || Date.now() >= ctx.deadline;
@@ -43,26 +44,41 @@ const resultOf = (value: DecisionResult): HandlerResult | null => {
   return 'deny' in value ? { deny: value.deny } : { context: value.context };
 };
 
-// Without the lock a deny is dropped, so a contended gate can never block the call.
-const withoutDeny = (value: DecisionResult): DecisionResult => (value !== null && 'deny' in value ? null : value);
-
 /** The hooked-rules handler; `loadRules` lets a test supply the rules it matches. */
 export function createHookedRulesHandler({ loadRules: load = loadRules }: { loadRules?: LoadRules } = {}): Handler {
   // A moment or a gate: decide on the ledger under its lock, then record what the call decided. The
   // deadline and abort check sits right before the write, so a result the runtime drops is not
   // recorded as delivered. A match or persistence failure rejects, so the runtime shows the manual
-  // notice and the host's call still passes.
-  const deliver = (stateDir: string, event: EventPayload, ctx: Ctx) =>
-    withLedger<DecisionResult>(
+  // notice and the host's call still passes. Most shell events match no rule: an unlocked read proves
+  // that and skips the lock, so a sibling shell call cannot contend for it.
+  const deliver = (stateDir: string, event: EventPayload, ctx: Ctx) => {
+    const check = (ledger: Ledger) => decide(loadChecked(load, ctx).rules, ledger, event);
+    return withLedger<DecisionResult>(
       stateDir,
       (ledger, locked) => {
-        const decision = decide(loadChecked(load, ctx).rules, ledger, event);
+        const decision = check(ledger);
+        if (!locked) {
+          // A lost lock must not swallow a gate: the runtime's failure notice names the manual. A
+          // moment still returns its context, which costs at most a second delivery in that event.
+          if (decision.result !== null && 'deny' in decision.result) throw new Error(LOST);
+          if (expired(ctx)) return null;
+          return { ledger, value: decision.result };
+        }
         if (expired(ctx)) return null;
-        if (!locked) return { ledger, value: withoutDeny(decision.result) };
         return { ledger: decision.ledger, value: decision.result };
       },
-      { live: () => !expired(ctx), lock: ctx.lock },
+      {
+        live: () => !expired(ctx),
+        lock: ctx.lock,
+        skip: (ledger, corrupt) => {
+          if (expired(ctx)) return true;
+          if (corrupt) return false;
+          const decision = check(ledger);
+          return decision.result === null && decision.ledger === ledger;
+        },
+      },
     ).then(resultOf);
+  };
 
   // The startup diagnostic is not a moment: it waits until its keys can be recorded, so a lock
   // timeout cannot show the same report at the next session start.

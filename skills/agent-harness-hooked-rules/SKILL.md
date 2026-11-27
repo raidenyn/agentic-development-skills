@@ -105,7 +105,8 @@ subagent keep their own.
   context, so rules deliver again. A subagent's compaction re-arms only the subagent.
 - When several rules match one event, their texts are joined in rule-name order with one blank line, up
   to 9000 UTF-8 bytes. A rule that does not fit is left out and the next is tried; only included rules
-  are recorded.
+  are recorded. A deny text uses the same cap, so a rule left out of a denial is not recorded as pending
+  and its gate does not deny that event; it applies again at the next matching command.
 
 ## Regex dialect
 

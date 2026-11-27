@@ -36,6 +36,12 @@ export interface LedgerOptions {
   live?: () => boolean;
   /** The worker's supervisor-owned lock; absent in process, where the local file lock is used. */
   lock?: LedgerRuntimeLock | null;
+  /**
+   * Read the ledger unlocked first: true skips the lock and writes nothing. Only the reader can prove
+   * that skipping is safe, so it must be false whenever the ledger is corrupt or the event would
+   * record something. The handler uses it to keep events that match no rule off the lock.
+   */
+  skip?: (ledger: Ledger, corrupt: boolean) => boolean;
 }
 
 // fn returns the next ledger and the value to hand back. It returns null to write nothing; returning

@@ -151,18 +151,27 @@ a new error is reported again. An entry whose
 rule or a compaction delivers again. An entry is updated as veles's `put` does: when the existing entry is live
 (same sha256, current generation), the new `patterns` and `triggers` are merged into it and `state` moves to
 `delivered` when either step delivers; otherwise the entry is replaced. So a moment keeps pending patterns, and a gate
-confirmation keeps earlier triggers. Writes are atomic (`writeJsonAtomic`) under a lock built on exclusive file
-creation (`ledger.lock`, retried every 20 ms for up to 1 s). `bump` writes even when the lock is not won, because a lost concurrent write
-only causes an extra delivery. A lock older than 10 s is taken over atomically: rename it to a unique name, unlink that, retry the create. When the lock is
-not won in time, the handler fails open: `tool.before` passes with no deny, and a moment returns its context
-without recording, so the error leans toward an extra delivery and never toward a block. The handler writes the
-ledger only after it has decided, just before it returns, and skips the write (returning nothing) when
-`context.signal` is aborted or `context.deadline` has passed, so a result the runtime would drop is not recorded as
-delivered. veles's `void` (un-recording after a lost result) has no counterpart; this check narrows that window.
+confirmation keeps earlier triggers. Writes are atomic (`writeJsonAtomic`).
 
-Subagent separation needs no code: the state folder is per agent context. A compaction is per agent context too:
-`compact` and `session.start` with `afterCompact` bump only the ledger of the context they arrive in. That differs
-from veles's `bump_all`, which was needed only because veles had no reliable agent id on a main compaction.
+In a hook worker the lock is the one the supervisor owns through `context.lock`: it is tracked per worker
+generation, released when that generation retires, and a busy lock is retried every 20 ms for up to 1 s or the
+handler deadline, whichever comes first. In process (tests) a pid-keyed `ledger.lock`, created exclusively with a
+complete owner record, provides the same wait. A lock not won fails open with no write: a gated command is not
+denied and the runtime shows its failure notice with the handler's manual, while a moment returns its context
+without recording. Before locking, the handler reads the ledger unlocked and decides; an event that would neither
+deliver nor record (most shell events) returns without the lock, so a sibling call rarely contends.
+
+A compaction is per agent context, not a rewrite of the ledger: `compact` and `session.start` with `afterCompact`
+append one timestamp line to `compactions.log`, whose line count is the effective generation. The log is
+append-only, so a late writer cannot lower the generation or revive an entry a compaction voided, and `bump`
+appends without the lock because a lost concurrent write only causes an extra delivery. `ledger.json`'s
+`generation` is kept for readability and ignored on read. veles's `bump_all`, needed only because veles had no
+reliable agent id on a main compaction, has no counterpart.
+
+The handler writes the ledger only after it has decided, just before it returns, and skips the write (returning
+nothing) when `context.signal` is aborted or `context.deadline` has passed, so a result the runtime would drop is
+not recorded as delivered. veles's `void` (un-recording after a lost result) has no counterpart; this check
+narrows that window.
 
 ### D6. Failure behavior
 
@@ -185,7 +194,8 @@ runtime default of 5 s; the handler does no process work.
 
 There is one line per rule, in name order. `pointers` refuses, exits 1 and writes nothing when any rule file is
 invalid, as veles's `_pointers` does. The heading and markers are veles's, so veles's `AGENTS.md` keeps
-its block byte for byte. A missing block is added at the end of the file under the heading. A block is replaced in
+its block byte for byte. A missing block is added under a `## Hook-delivered rules` heading already in the file,
+or at the end under a new heading if none exists. A block is replaced in
 place, keeping the file's line ending. The heading must be the line right before the begin marker:
 `pointers` writes it there when it is missing or separated by blank lines, and leaves a current block under its
 heading byte-identical. Duplicate or unpaired markers are an error. A missing or unreadable `AGENTS.md` makes `pointers` and `--check`

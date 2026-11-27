@@ -139,7 +139,7 @@ Tool kinds:
 | `skill` | `Skill` | `skill` |
 | `other` | everything else, `Agent` included | everything else, `subagent` included |
 
-A `Read` or `read` of a skill's `SKILL.md` stays kind `read` and carries `skill`/`skillVia: "read"`, so a handler that declares `read` sees it as before. Use `skill` in a handler's `tools` to receive skill calls, and also any such read.
+A `Read` or `read` of a skill's `SKILL.md` stays kind `read` and carries `skill`/`skillVia: "read"`, so a handler that declares `read` sees it as before. Use `skill` in a handler's `tools` to receive skill calls, and also any such read. A handler that declares only `other` no longer receives a Skill call, because a Skill call is now kind `skill`; declare `skill` (or no `tools` list) to keep seeing it.
 
 Host behaviour to know when you write a handler:
 - **Subagents run in the background on both hosts.** A root turn end can come while a subagent still edits, which is what `background` is for. Both hosts start a new root turn when the subagent finishes.

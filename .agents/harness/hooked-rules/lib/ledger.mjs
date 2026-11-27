@@ -2,7 +2,8 @@
 // The per-context delivery ledger (design D5): one JSON file per agent context, and a compaction log
 // whose line count is the effective generation. In a hook worker the write is guarded by the lock the
 // supervisor owns through `context.lock`; the supervisor tracks it per worker generation and releases
-// it when that generation retires, so a terminated worker cannot leave the ledger locked. In process
+// it when that generation retires, so a terminated worker cannot leave the ledger locked. A busy
+// supervisor lock is retried every 20 ms for up to 1 s or the caller's deadline. In process
 // (tests) one lock file, `ledger.lock`, guards the write instead. Its acquisition publishes the lock
 // atomically: the owner token is written to a temp file and hard-linked to `ledger.lock`, so a lock
 // never exists without its full owner record and a missing or unreadable owner can only be a crash
@@ -288,10 +289,28 @@ function withProcessLock(dir, fn) {
   return run;
 }
 
-async function withLedgerLocked(dir, fn, { live = () => true, lock: runtimeLock }) {
+async function acquireRuntimeLock(runtimeLock, dir, live) {
+  const end = Date.now() + WAIT_MS;
+  for (;;) {
+    const acquired = await runtimeLock.acquire(dir);
+    if (acquired !== null) return acquired;
+    if (Date.now() >= end || !live()) return null;
+    await sleep(RETRY_MS);
+  }
+}
+
+async function withLedgerLocked(dir, fn, { live = () => true, lock: runtimeLock, skip }) {
+  // A read before the lock lets the handler skip events that match no rule, which is most shell
+  // events. Only an intact ledger can prove that: a corrupt one is repaired under the lock.
+  if (skip !== undefined) {
+    const peek = readLedgerState(dir);
+    if (!peek.corrupt && skip(peek.ledger, peek.corrupt)) return null;
+  }
   // In a worker the lock is the supervisor's: it survives this call only while the generation does,
-  // and `retire()` releases it. In process the local file lock records the host pid.
-  const runtime = runtimeLock ? await runtimeLock.acquire(dir) : null;
+  // and `retire()` releases it. A busy supervisor lock is retried like the local file lock, for the
+  // same wait or until the caller is no longer live, so a sibling call cannot silently drop a gate.
+  // In process the local file lock records the host pid and retries on its own.
+  const runtime = runtimeLock ? await acquireRuntimeLock(runtimeLock, dir, live) : null;
   const lock = runtimeLock ? null : await acquireLedgerLock(dir);
   try {
     const owned = runtimeLock ? runtime !== null : (lock?.owned() ?? false);

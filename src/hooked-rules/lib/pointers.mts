@@ -77,17 +77,38 @@ export function locateBlock(text: string): BlockLocation | null {
   };
 }
 
+/** The first standalone `## Hook-delivered rules` line in text, as a span after its line ending, or null. */
+function headingAfter(text: string): number | null {
+  const pieces = text.split(LINE_BREAK_RE); // line, break, line, break, ..., line
+  let position = 0;
+  for (let index = 0; index < pieces.length; index += 2) {
+    const content = pieces[index] as string;
+    const brk = index + 1 < pieces.length ? (pieces[index + 1] as string) : '';
+    if (content === POINTER_HEADING) return position + content.length + brk.length;
+    position += content.length + brk.length;
+  }
+  return null;
+}
+
 /**
  * text with the block replaced between its markers, or appended under its heading. A block that is
  * already current right under its heading leaves the text untouched; blank lines between the heading
  * and the begin marker are removed, and a missing heading is written back in front of the begin
  * marker. When the heading already sits right above the marker, everything through the begin marker
- * line is kept byte for byte, so a mixed-line-ending file does not have its heading rewritten.
+ * line is kept byte for byte, so a mixed-line-ending file does not have its heading rewritten. A
+ * heading without markers keeps that single heading: the block is inserted right under it.
  */
 export function applyBlock(text: string, block: string): string {
   const location = locateBlock(text);
   const eol = lineEnding(text);
   if (location === null) {
+    const under = headingAfter(text);
+    if (under !== null) {
+      const head = under === text.length && !text.endsWith(eol) ? `${text}${eol}` : text.slice(0, under);
+      const tail = text.slice(under);
+      const after = tail === '' || tail.startsWith(eol) ? tail : eol + tail;
+      return `${head}${block.replace(/\n/g, eol)}${eol}${after}`;
+    }
     const separator = !text || text.endsWith(eol + eol) ? '' : text.endsWith(eol) ? eol : eol + eol;
     return `${text}${separator}${POINTER_HEADING}${eol}${block.replace(/\n/g, eol)}${eol}`;
   }

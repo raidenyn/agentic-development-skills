@@ -398,6 +398,32 @@ test('pointers: a missing heading fails check naming the heading, and pointers w
   );
 });
 
+test('pointers: a heading without markers keeps a single heading and puts the block under it', async () => {
+  const r = await repo({
+    files: {
+      'AGENTS.md': 'Intro\n\n## Hook-delivered rules\n\nSome text after.\n',
+      '.agents/hooked-rules/a.md': rule('first'),
+    },
+  });
+
+  const out = await hr(r, 'pointers');
+  assert.equal(out.code, 0, out.stderr);
+  const text = read(r, 'AGENTS.md');
+  assert.equal(text.match(/^## Hook-delivered rules$/gm)?.length, 1, 'one heading');
+  assert.ok(
+    text.includes(
+      '## Hook-delivered rules\n' +
+        '<!-- hooked-rules:begin -->\n' +
+        '- first \u2014 .agents/hooked-rules/a.md\n' +
+        '<!-- hooked-rules:end -->\n\n' +
+        'Some text after.\n',
+    ),
+    text,
+  );
+  const ok = await hr(r, 'pointers', '--check');
+  assert.equal(ok.code, 0, ok.stderr);
+});
+
 test('pointers: a heading separated by a blank line fails check and pointers removes the blank line', async () => {
   const r = await repo({
     files: {

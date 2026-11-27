@@ -26,6 +26,7 @@ const { decide, capped, promptSkill, CONTEXT_CAP } = await lib('deliver.mjs');
 const { acquireLedgerLock, withLedger, readLedger, bump, COMPACTIONS_FILE } = await lib('ledger.mjs');
 const { loadRules, parseRule, RULES_DIR } = await lib('rules.mjs');
 const { createRuntime } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'runtime.mjs')).href);
+const { sessionStateDir } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'state.mjs')).href);
 const { startWorker, terminateWorker } = await import(
   pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'supervisor.mjs')).href
 );
@@ -495,21 +496,62 @@ test('an aborted call or a passed deadline records nothing', async () => {
   assert.equal(readFileSync(ledgerPath(late), 'utf8'), JSON.stringify(empty()));
 });
 
-test('a held lock passes the gate and returns the moment without recording', async () => {
+test('a shell event that matches no rule skips the lock instead of waiting for it', async () => {
+  const r = await repo({ '.agents/hooked-rules/commit.md': RULE(`gates: ["${COMMIT_FILE}"]`, 'Commit types.\n') });
+  mkdirSync(stateDirOf(r), { recursive: true });
+  const held = holdLock(r);
+  try {
+    const started = Date.now();
+    assert.equal(await call(h, r, shellAfter('echo hi')), null);
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed < 500, `the unlocked decision skipped the held lock (${elapsed} ms)`);
+    assert.equal(existsSync(ledgerPath(r)), false, 'nothing is written');
+  } finally {
+    rmSync(held, { recursive: true, force: true });
+  }
+});
+
+test('a held lock returns a moment without recording', async () => {
   const r = await repo({
     '.agents/hooked-rules/apply.md': RULE('skills: ["s"]', 'Apply.\n'),
-    '.agents/hooked-rules/commit.md': RULE(`gates: ["${COMMIT_FILE}"]`, 'Commit types.\n'),
   });
   mkdirSync(stateDirOf(r), { recursive: true });
   const seeded = JSON.stringify(empty());
   writeFileSync(ledgerPath(r), seeded);
   const held = holdLock(r);
   try {
-    assert.equal(await call(h, r, shellBefore('git commit -m "x"')), null, 'the gate fails open');
     assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' });
     assert.equal(readFileSync(ledgerPath(r), 'utf8'), seeded, 'nothing is written');
   } finally {
     rmSync(held, { recursive: true, force: true });
+  }
+});
+
+test('a held lock fails a gated command open with the manual notice and records nothing', async () => {
+  const r = await repo({ '.agents/hooked-rules/commit.md': RULE(`gates: ["${COMMIT_FILE}"]`, 'Commit types.\n') });
+  // The runtime derives the state folder from the dispatch identity, not from the test context.
+  const dir = sessionStateDir({
+    repoRoot: r.dir,
+    tool: 'hooked-rules',
+    host: 'claude-code',
+    sessionId: 's1',
+    agentId: 'main',
+  });
+  const seeded = JSON.stringify(empty());
+  writeFileSync(join(dir, 'ledger.json'), seeded);
+  writeFileSync(join(dir, 'ledger.lock'), lockFile('held'));
+  try {
+    const out = await createRuntime({ repoRoot: r.dir, host: 'claude-code', handlers: [h] }).dispatch(
+      structuredClone(shellBefore('git commit -m "x"')),
+      { sessionId: 's1', agentId: 'main' },
+    );
+    assert.equal(out.deny, undefined, 'the host call is not denied');
+    assert.equal(out.outcomes['hooked-rules'], 'failed');
+    assert.match(out.notices[0], /ledger lock could not be won/);
+    assert.ok(out.notices[0].includes(h.manual), 'the notice names the hand-read manual');
+    assert.equal(readFileSync(join(dir, 'ledger.json'), 'utf8'), seeded, 'nothing is written');
+  } finally {
+    rmSync(join(dir, 'ledger.lock'), { force: true });
   }
 });
 
@@ -792,6 +834,64 @@ test('a retired worker releases its ledger lock so a replacement worker can writ
   } finally {
     await first.close();
     await held;
+  }
+});
+
+// A worker that holds the shared gate lock for a fixed time, so a real hooked-rules worker meets a
+// busy supervisor lock and must retry rather than drop the gate.
+const HOLDER = `
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { withLedger } from ${JSON.stringify(LOCKER_URL)};
+export default {
+  name: 'holder',
+  events: ['turn.end'],
+  async handle(event, ctx) {
+    await withLedger(ctx.stateDir, () => {
+      writeFileSync(join(ctx.stateDir, 'held'), 'held');
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, event.holdMs ?? 500);
+      return null;
+    }, { lock: ctx.lock });
+    return null;
+  },
+};
+`;
+
+test('a contended supervisor lock is retried so the gate still denies within the wait', async () => {
+  const r = await repo({ '.agents/hooked-rules/commit.md': RULE(`gates: ["${COMMIT_FILE}"]`, 'Commit types.\n') });
+  const stateDir = stateDirOf(r);
+  mkdirSync(stateDir, { recursive: true });
+  const toolDir = join(r.dir, '.agents', 'harness', 'holder');
+  mkdirSync(toolDir, { recursive: true });
+  writeFileSync(join(toolDir, 'handler.mjs'), HOLDER);
+
+  const holder = await startWorker(toolDir, { tool: 'holder' });
+  const rules = await startWorker(ASSETS.hookedRules, { tool: 'hooked-rules' });
+  try {
+    const held = holder.handle(
+      { type: 'turn.end', holdMs: 500 },
+      context(r, { stateDir, deadline: Date.now() + 10000 }),
+    );
+    await until(() => existsSync(join(stateDir, 'held')), 10000, 'the other worker holds the gate lock');
+    const started = Date.now();
+    const first = await rules.handle(
+      shellBefore('git commit -m "x"'),
+      context(r, { stateDir, deadline: Date.now() + 5000 }),
+    );
+    const elapsed = Date.now() - started;
+    assert.deepEqual(first, { deny: 'Commit types.' }, 'the gate is not skipped while the lock is busy');
+    assert.ok(elapsed >= 400 && elapsed < 3000, `the retry waits for the holder then denies (${elapsed} ms)`);
+    assert.equal(storedLedger(r).entries['commit.md'].state, 'pending', 'the denial is recorded under the lock');
+    await held;
+    const retry = await rules.handle(
+      shellBefore('git commit -m "y"'),
+      context(r, { stateDir, deadline: Date.now() + 5000 }),
+    );
+    assert.equal(retry, null, 'the retry passes');
+    assert.equal(storedLedger(r).entries['commit.md'].state, 'delivered');
+  } finally {
+    await rules.close();
+    await holder.close();
   }
 });
 
