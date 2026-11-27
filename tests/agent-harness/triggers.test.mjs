@@ -50,8 +50,8 @@ test('matchesPathGlob: segment by segment, like the task-file walker', () => {
 });
 
 test('matchesPathGlob: repeated globstars stay fast', () => {
-  const pattern = '**/x/'.repeat(12) + '**/target.ts';
-  const path = 'x/'.repeat(50) + 'other.ts';
+  const pattern = `${'**/x/'.repeat(12)}**/target.ts`;
+  const path = `${'x/'.repeat(50)}other.ts`;
   const t0 = performance.now();
   assert.equal(matchesPathGlob(pattern, path), false);
   const ms = performance.now() - t0;
