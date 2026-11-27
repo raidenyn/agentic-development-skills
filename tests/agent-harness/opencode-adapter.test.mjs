@@ -165,7 +165,7 @@ test('a handler that throws on execute.after with status error: the notice goes 
   assert.deepEqual(systemTexts(again), [], 'delivered once');
 });
 
-test('patch files come from metadata, edit and write files from input.filePath', async () => {
+test('patch files come from metadata, edit and write files from input.path or input.filePath', async () => {
   const { handler, seen } = recorder(['tool.after', 'tool.before']);
   const p = await plugin({ handlers: [handler] });
   await p.hooks['execute.after'](fx('execute.after-patch-completed', p.dir));
@@ -193,6 +193,18 @@ test('patch files come from metadata, edit and write files from input.filePath',
   assert.equal(seen[5].e.files, undefined);
   await p.hooks['execute.after'](fx('execute.after-subagent-completed', p.dir));
   assert.equal(seen[6].e.tool.kind, 'other');
+  // OpenCode 2.4.1's native `write` and `edit` name the file `path`, relative to the session directory.
+  await p.hooks['execute.after']({ ...base, tool: 'write', id: 'c3', input: { path: 'src/c.ts', content: 'x' } });
+  await p.hooks['execute.after']({
+    ...base,
+    tool: 'edit',
+    id: 'c4',
+    input: { path: join(p.dir, 'src', 'd.ts'), oldString: 'a', newString: 'b' },
+  });
+  await p.hooks['execute.before']({ ...base, tool: 'edit', id: 'c5', input: { path: '../outside.ts' } });
+  assert.deepEqual(seen[7].e.files, ['src/c.ts']);
+  assert.deepEqual(seen[8].e.files, ['src/d.ts']);
+  assert.deepEqual(seen[9].e.files, [], 'a path outside the repo is dropped');
 });
 
 test('a child session gets the child id as agentId', async () => {
