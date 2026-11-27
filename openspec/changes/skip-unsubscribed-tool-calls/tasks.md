@@ -7,8 +7,8 @@
 
 ## 2. Verify gate declaration
 
-- [ ] 2.1 Add `"tools": ["shell", "edit"]` to `src/verify-gate/tool.json`.
-- [ ] 2.2 Add a test in `tests/agent-harness/verify-handler.test.mjs` that the built gate's `tool.json` declares exactly `tools: ["shell", "edit"]`.
+- [x] 2.1 Add `"tools": ["shell", "edit"]` to `src/verify-gate/tool.json`.
+- [x] 2.2 Add a test in `tests/agent-harness/verify-handler.test.mjs` that the built gate's `tool.json` declares exactly `tools: ["shell", "edit"]`.
 
 ## 3. Claude Code launcher skip
 
