@@ -12,11 +12,11 @@
 
 ## 3. Claude Code launcher skip
 
-- [ ] 3.1 In `src/hook-runtime/claude.mts`, after the checkout is resolved and after the delegation branch (which returns for another worktree, so the skip runs inside the delegated `main`), and before `loadHandlers`: on `tool.before`/`tool.after`, read the lock and each locked tool's `tool.json`. Return empty output when no `"handler": true` tool can want the kind. Fall back to the full load on any read or parse error.
-- [ ] 3.2 Write the trace record `{event, processStart, receivedAt, settledAt, skipped: "no-subscriber", outcomes: {}}` for a skipped call.
-- [ ] 3.3 Add tests in `tests/agent-harness/verify-hosts.test.mjs`, which spawns `claude.mjs` with the real gate installed, for four cases: a `Read` with only the verify gate loads no handler and traces the skip; an `Edit` still loads; a handler without `tools` still loads on `Read`; an unreadable `tool.json` loads and reports.
+- [x] 3.1 In `src/hook-runtime/claude.mts`, after the checkout is resolved and after the delegation branch (which returns for another worktree, so the skip runs inside the delegated `main`), and before `loadHandlers`: on `tool.before`/`tool.after`, read the lock and each locked tool's `tool.json`. Return empty output when no `"handler": true` tool can want the kind. Fall back to the full load on any read or parse error.
+- [x] 3.2 Write the trace record `{event, processStart, receivedAt, settledAt, skipped: "no-subscriber", outcomes: {}}` for a skipped call.
+- [x] 3.3 Add tests in `tests/agent-harness/verify-hosts.test.mjs`, which spawns `claude.mjs` with the real gate installed, for four cases: a `Read` with only the verify gate loads no handler and traces the skip; an `Edit` still loads; a handler without `tools` still loads on `Read`; an unreadable `tool.json` loads and reports.
 
-- [ ] 3.4 Add tests in `verify-hosts.test.mjs` that prove the gate still gets its triggers through spawned `claude.mjs`: a `PostToolUse-Bash` that ticks a task in a configured task file runs the `task` trigger; `PostToolUse-Edit-tick`, preceded by a `PreToolUse` built from the same payload and `tool_use_id`, runs the `task` trigger; `PreToolUse-Bash` writes a before-image.
+- [x] 3.4 Add tests in `verify-hosts.test.mjs` that prove the gate still gets its triggers through spawned `claude.mjs`: a `PostToolUse-Bash` that ticks a task in a configured task file runs the `task` trigger; `PostToolUse-Edit-tick`, preceded by a `PreToolUse` built from the same payload and `tool_use_id`, runs the `task` trigger; `PreToolUse-Bash` writes a before-image.
 
 ## 4. Versions, build and docs
 
