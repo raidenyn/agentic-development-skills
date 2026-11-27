@@ -23,9 +23,9 @@
 
 ## 4. Pointer block and CLI
 
-- [ ] 4.1 Write `src/hooked-rules/lib/pointers.mts`, porting `render_pointer_block`, `_locate_block`, `_apply_block`, the line-ending handling and the `_pointers` check from veles, including the refusal on invalid rules and the heading check and rewrite.
-- [ ] 4.2 Write `src/hooked-rules/cli.mts` with `install`, `update`, `check`, `pointers` and `pointers --check`, each taking `[--repo DIR]`. Base it on `src/verify-gate/cli.mts`, adding the hook-runtime ≥ 0.2.0 refusal, the empty config section with unknown-key rejection, and creating `.agents/hooked-rules/` (design D8).
-- [ ] 4.3 Write `tests/agent-harness/hooked-rules-cli.test.mjs` against throwaway git repos: a fresh install, a repeated install, refusal with an old runtime, an edited copy, a foreign host config left unchanged, an added and then stale pointer block, duplicate markers, `pointers` refusing with an invalid rule, and a missing or misplaced heading.
+- [x] 4.1 Write `src/hooked-rules/lib/pointers.mts`, porting `render_pointer_block`, `_locate_block`, `_apply_block`, the line-ending handling and the `_pointers` check from veles, including the refusal on invalid rules and the heading check and rewrite.
+- [x] 4.2 Write `src/hooked-rules/cli.mts` with `install`, `update`, `check`, `pointers` and `pointers --check`, each taking `[--repo DIR]`. Base it on `src/verify-gate/cli.mts`, adding the hook-runtime ≥ 0.2.0 refusal, the empty config section with unknown-key rejection, and creating `.agents/hooked-rules/` (design D8).
+- [x] 4.3 Write `tests/agent-harness/hooked-rules-cli.test.mjs` against throwaway git repos: a fresh install, a repeated install, refusal with an old runtime, an edited copy, a foreign host config left unchanged, an added and then stale pointer block, duplicate markers, `pointers` refusing with an invalid rule, and a missing or misplaced heading.
 
 ## 5. Skill, versions and build
 
