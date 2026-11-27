@@ -41,7 +41,7 @@
 
 ## 7. Live checks and evidence
 
-- [ ] 7.1 For the live runs only, symlink the harness skills into `.claude/skills/` and `.opencode/skills/` (not committed). Run live on OpenCode 2.4.1 in this repo, first per Host order. Confirm the Skill tool's name and input field and that a `/<skill>` prompt reaches the `prompt` hook as text. Then confirm: a skill call, a `/<skill>` prompt and a successful `pnpm run build` each deliver `repo-harness-tools` (three triggers), a repeated skill call does not, and a first `git commit` is denied once and the retry passes. If the field differs, fix the adapter and its test.
-- [ ] 7.2 Run the same three moments live on Claude Code, and confirm a plain `Read` is still skipped (`AGENT_HARNESS_TRACE=1`, `skipped: "no-subscriber"`).
-- [ ] 7.3 Run `pnpm run check`, `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'`, `node .agents/harness/hooked-rules/cli.mjs check` and `pointers --check`.
-- [ ] 7.4 In the PR, report each goal of #16 with its evidence. State what is left to #17 (`requires`, `exempt`), #18 (`stops`, `opsx:`) and #23 (veles's rule cases).
+- [x] 7.1 For the live runs only, symlink the harness skills into `.claude/skills/` and `.opencode/skills/` (not committed). Run live on OpenCode 2.4.1 in this repo, first per Host order. Confirm the Skill tool's name and input field and that a `/<skill>` prompt reaches the `prompt` hook as text. Then confirm: a skill call, a `/<skill>` prompt and a successful `pnpm run build` each deliver `repo-harness-tools` (three triggers), a repeated skill call does not, and a first `git commit` is denied once and the retry passes. If the field differs, fix the adapter and its test.
+- [x] 7.2 Run the same three moments live on Claude Code, and confirm a plain `Read` is still skipped (`AGENT_HARNESS_TRACE=1`, `skipped: "no-subscriber"`).
+- [x] 7.3 Run `pnpm run check`, `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'`, `node .agents/harness/hooked-rules/cli.mjs check` and `pointers --check`.
+- [x] 7.4 In the PR, report each goal of #16 with its evidence. State what is left to #17 (`requires`, `exempt`), #18 (`stops`, `opsx:`) and #23 (veles's rule cases).
