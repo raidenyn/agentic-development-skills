@@ -710,8 +710,9 @@ test('a skill call takes its name from the tool arguments, never from the call i
   assert.equal(byId.skill, 'a');
   assert.equal(byId.skillVia, 'call');
   assert.equal(call({ name: 'b' }).skill, 'b');
-  assert.equal(call({}).skill, undefined);
-  assert.equal(call({}, 'call_9').skill, undefined);
+  const nameless = call({}, 'call_9');
+  assert.equal(nameless.skill, undefined);
+  assert.equal(nameless.skillVia, 'call');
 });
 
 test('a read of a SKILL.md carries the skill; grep and glob do not', async () => {

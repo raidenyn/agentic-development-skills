@@ -76,9 +76,9 @@ export function toEvent(payload, repoRoot) {
     event.tool = { name: toolName, kind, input, callId: payload.tool_use_id };
     if (kind === 'shell' && typeof input.command === 'string') event.command = input.command;
     if (kind === 'edit') event.files = editFiles(input, repoRoot, base);
-    if (kind === 'skill' && typeof input.skill === 'string' && input.skill) {
-      event.skill = input.skill;
+    if (kind === 'skill') {
       event.skillVia = 'call';
+      if (typeof input.skill === 'string' && input.skill) event.skill = input.skill;
     }
     // Only the Read tool can read a skill file: Glob and Grep share the kind but never resolve one.
     if (toolName === 'Read') {

@@ -104,11 +104,9 @@ export function toToolEvent(type: HarnessEvent, input: HostObject, repoRoot: str
     event.files = [...new Set(paths.map((p) => repoRelative(p, repoRoot)).filter((p) => p !== null))] as string[];
   }
   if (kind === 'skill') {
+    event.skillVia = 'call';
     const skill = isId(toolInput.id) ? toolInput.id : isId(toolInput.name) ? toolInput.name : null;
-    if (skill) {
-      event.skill = skill;
-      event.skillVia = 'call';
-    }
+    if (skill) event.skill = skill;
   }
   if (name === 'read') {
     const skill = skillFromPath(toolInput.path ?? toolInput.filePath, repoRoot);

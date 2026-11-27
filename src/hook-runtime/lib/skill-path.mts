@@ -9,10 +9,12 @@ const SKILL_FILE = /\/skills\/([^/]+)\/SKILL\.md$/;
 const slashes = (path: string): string => path.replace(/\\/g, '/');
 
 export function skillFromPath(path: unknown, base: string): string | null {
-  if (typeof path !== 'string' || !slashes(path).endsWith('SKILL.md')) return null;
+  if (typeof path !== 'string') return null;
+  const normalized = slashes(path);
+  if (!normalized.endsWith('SKILL.md')) return null;
   let real: string;
   try {
-    real = slashes(realpathSync(resolve(base, path)));
+    real = slashes(realpathSync(resolve(base, normalized)));
   } catch {
     return null;
   }

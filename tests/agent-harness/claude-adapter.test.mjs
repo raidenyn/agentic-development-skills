@@ -375,13 +375,16 @@ async function repoWithSkillFiles() {
   return r;
 }
 
-test('a Skill call is kind skill with skillVia call, and carries no ok', () => {
+test('a Skill call is kind skill with skillVia call, also without a name, and carries no ok', () => {
   const p = { ...fixture('PreToolUse-Read'), tool_name: 'Skill', tool_input: { skill: 'openspec-apply-change' } };
   const r = toEvent(p, REPO);
   assert.equal(r.event.tool.kind, 'skill');
   assert.equal(r.event.skill, 'openspec-apply-change');
   assert.equal(r.event.skillVia, 'call');
   assert.equal(Object.hasOwn(r.event, 'ok'), false);
+  const nameless = toEvent({ ...p, tool_input: {} }, REPO);
+  assert.equal(nameless.event.skill, undefined);
+  assert.equal(nameless.event.skillVia, 'call');
 });
 
 test('a Read of a SKILL.md carries the skill, through a symlink too; lookalikes and other read tools do not', async () => {
@@ -394,6 +397,8 @@ test('a Read of a SKILL.md carries the skill, through a symlink too; lookalikes 
   assert.equal(direct.skill, 'x');
   assert.equal(direct.skillVia, 'read');
   assert.equal(read('Read', '.claude/skills/x/SKILL.md').skill, 'x');
+  // Backslashes are read as slashes before the path is resolved (a Linux realpath regression).
+  assert.equal(read('Read', 'skills\\x\\SKILL.md').skill, 'x');
   for (const [tool, path] of [
     ['Grep', 'skills/x/SKILL.md'],
     ['Read', 'docs/skills/x/SKILL.md.bak'],
