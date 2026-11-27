@@ -17,7 +17,7 @@
 ## Commits
 
 - **Range**: `1b0db00..HEAD` (HEAD is the receipt commit)
-- **Count**: `25` (including the change scaffold, the unrelated test-margin fix `157ebeb`, and the final fix wave)
+- **Count**: `31` (including the change scaffold, the unrelated test-margin fix `157ebeb`, the final fix wave, and the post-review gate fix)
 
 ---
 
