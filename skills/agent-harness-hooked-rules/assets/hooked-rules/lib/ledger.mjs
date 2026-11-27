@@ -1,26 +1,38 @@
 // Generated from src/hooked-rules/lib/ledger.mts by scripts/build.mts. Do not edit.
 // The per-context delivery ledger (design D5): one JSON file per agent context, and a compaction log
-// whose line count is the effective generation. One lock directory, `ledger.lock`, guards the
-// ledger write; it is created with mkdir(2) and carries an owner token. A lock is taken over only
-// when its recorded pid is not alive (a crashed holder), never by age alone, so a slow live holder
-// keeps it and other calls fail open. Ownership is re-checked immediately before every write and on
-// release, so a dispatch whose lock a takeover replaced writes nothing.
+// whose line count is the effective generation. One lock file, `ledger.lock`, guards the ledger
+// write. Acquisition publishes the lock atomically: the owner token is written to a temp file and
+// hard-linked to `ledger.lock`, so a lock never exists without its full owner record and a missing or
+// unreadable owner can only be a crash artifact. A dead holder (its pid is gone) is taken over by
+// renaming the lock to a unique name and verifying the moved token is the dead one we checked; a
+// fresh lock displaced by a delayed contender is put back instead of being claimed. Ownership is
+// re-read from the canonical path immediately before every write and on release, so a dispatch whose
+// lock a takeover replaced writes nothing.
 //
 // `compactions.log` is append-only: a compaction appends one small line and never rewrites the
 // ledger, so no writer, however late, can lower the effective generation or revive an entry a
 // compaction voided. `ledger.json`'s `generation` is kept for readability and ignored on read.
-import { appendFileSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { writeJsonAtomic } from './state.mjs';
 
 export const LEDGER_FILE = 'ledger.json';
 export const LOCK_FILE = 'ledger.lock';
 export const COMPACTIONS_FILE = 'compactions.log';
-const OWNER_FILE = 'owner';
 const WAIT_MS = 1000; // how long to wait for the lock
 const RETRY_MS = 20; // the retry interval
 
-/** A test seam: awaited after a dead owner was seen and before the lock is renamed away. */
+/** Test seams at the three points where a takeover or an acquisition can race. */
 
 // fn returns the next ledger and the value to hand back. It returns null to write nothing; returning
 // the ledger it was given also writes nothing.
@@ -29,19 +41,20 @@ const emptyLedger = () => ({ version: 1, generation: 0, entries: {}, reported: [
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-let tokenCounter = 0;
-const newToken = () => `${process.pid}-${Date.now()}-${tokenCounter++}-${Math.random().toString(36).slice(2)}`;
+let nameCounter = 0;
+const uniqueName = (prefix) => `${prefix}.${process.pid}-${nameCounter++}-${Math.random().toString(36).slice(2)}`;
+const newToken = () => uniqueName('lock');
 
-const ownerPath = (lock) => join(lock, OWNER_FILE);
-
-// The lock's owner file, or null when it is gone, unreadable or not a lock directory.
-function readOwner(lock) {
+// The lock file's owner record, or null when it is gone, unreadable or not this version's JSON. A
+// present lock always carries a complete record, so null is a crash artifact, never a half-created
+// lock a contender could race.
+function readOwner(path) {
   let value;
   try {
-    value = JSON.parse(readFileSync(ownerPath(lock), 'utf8'));
+    value = JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
     const code = error.code;
-    if (code === 'ENOENT' || code === 'ENOTDIR' || error instanceof SyntaxError) return null;
+    if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'EISDIR' || error instanceof SyntaxError) return null;
     throw error;
   }
   return value !== null && typeof value === 'object' ? value : null;
@@ -57,55 +70,82 @@ function pidAlive(pid) {
   }
 }
 
-// A lock is stale only when its recorded owner is dead. A lock directory without an owner is a crash
-// between mkdir and the token write, and a path that is not a directory is not a lock this version
-// wrote; both are taken over as dead. A live pid keeps the lock, however old it is.
-function isDeadOwner(path) {
-  let stats;
+// A lock is stale only when its recorded owner is dead, or the path is not a lock file this version
+// wrote (a legacy directory or a stray path). A live pid keeps the lock, however old it is. An
+// absent path is not a lock at all.
+function lockState(path) {
+  let info;
   try {
-    stats = statSync(path);
+    info = lstatSync(path);
   } catch (error) {
-    if (error.code === 'ENOENT') return true;
+    if (error.code === 'ENOENT') return { kind: 'absent' };
     throw error;
   }
-  if (!stats.isDirectory()) return true;
+  if (!info.isFile()) return { kind: 'dead', token: null };
   const owner = readOwner(path);
-  return owner === null || !pidAlive(owner.pid);
+  if (owner === null || !pidAlive(owner.pid)) {
+    return { kind: 'dead', token: typeof owner?.token === 'string' ? owner.token : null };
+  }
+  return { kind: 'live' };
 }
 
-// Create the lock directory and write its owner token. A failure after the create removes only the
-// still-ownerless directory this create made, so a rejected acquisition never leaves a lock behind.
-function create(path, token) {
-  try {
-    mkdirSync(path);
-  } catch (error) {
-    if (error.code === 'EEXIST') return false;
-    throw error;
-  }
-  try {
-    writeFileSync(ownerPath(path), JSON.stringify({ token, pid: process.pid, at: Date.now() }));
-  } catch (error) {
-    if (readOwner(path) === null) rmSync(path, { recursive: true, force: true });
-    throw error;
-  }
-  return true;
+function makeLock(path, token) {
+  const owned = () => {
+    try {
+      const owner = readOwner(path); // the canonical path, never a copy inside a moved handle
+      return owner !== null && owner.token === token;
+    } catch {
+      return false; // an unreadable owner proves no ownership; the call fails open
+    }
+  };
+  return {
+    path,
+    token,
+    owned,
+    release() {
+      try {
+        if (owned()) unlinkSync(path);
+      } catch {}
+    },
+  };
 }
 
-// Rename a dead holder's lock to a unique name and remove it; the rename is atomic, and a rename that
-// fails with ENOENT means another contender got there first.
-function takeOver(path) {
-  const stale = `${path}.${newToken()}`;
+// Rename a dead holder's lock to a unique name, verify it is the dead lock we checked and remove it.
+// A delayed contender can rename a fresh lock after the re-check; the token comparison detects that
+// and puts the fresh lock back instead of claiming it. A rename that fails with ENOENT means another
+// contender got there first, so the caller simply retries the acquire.
+function takeOver(path, deadToken) {
+  const claimed = uniqueName(`${path}.stale`);
   try {
-    renameSync(path, stale);
+    renameSync(path, claimed);
   } catch (error) {
     if (error.code === 'ENOENT') return;
     throw error;
   }
-  rmSync(stale, { recursive: true, force: true });
+  let moved = null;
+  try {
+    moved = readOwner(claimed);
+  } catch {}
+  const movedToken = typeof moved?.token === 'string' ? moved.token : null;
+  if (movedToken !== deadToken) {
+    // We displaced a lock that is not the one we checked: restore it when the path is still free.
+    let restored = false;
+    try {
+      linkSync(claimed, path);
+      restored = true;
+    } catch {}
+    try {
+      if (restored) unlinkSync(claimed);
+      else rmSync(claimed, { recursive: true, force: true });
+    } catch {}
+    return;
+  }
+  rmSync(claimed, { recursive: true, force: true });
 }
 
 /**
- * The context's ledger lock, or null after the wait. A dead holder's lock is renamed away and
+ * The context's ledger lock, or null after the wait. Acquisition links a complete owner record into
+ * place, so no contender can observe an ownerless lock. A dead holder's lock is renamed away and
  * re-created; a live holder keeps it and the call fails open once the wait expires.
  */
 export async function acquireLedgerLock(dir, hooks = {}) {
@@ -114,32 +154,34 @@ export async function acquireLedgerLock(dir, hooks = {}) {
   const end = Date.now() + WAIT_MS;
   for (;;) {
     const token = newToken();
-    if (create(path, token)) {
-      const lock = {
-        path,
-        token,
-        owned() {
-          try {
-            const owner = readOwner(path);
-            return owner !== null && owner.token === token;
-          } catch {
-            return false; // an unreadable owner proves no ownership; the call fails open
-          }
-        },
-        release() {
-          try {
-            if (lock.owned()) rmSync(path, { recursive: true, force: true });
-          } catch {}
-        },
-      };
-      return lock;
+    const tmp = uniqueName(join(dir, '.ledger-lock'));
+    let created = false;
+    try {
+      writeFileSync(tmp, JSON.stringify({ token, pid: process.pid, at: Date.now() }));
+      await hooks.beforeLink?.();
+      try {
+        linkSync(tmp, path);
+        created = true;
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+      }
+    } finally {
+      try {
+        unlinkSync(tmp);
+      } catch {}
     }
+    if (created) return makeLock(path, token);
     if (Date.now() >= end) return null;
-    if (isDeadOwner(path)) {
+    const state = lockState(path);
+    if (state.kind === 'dead') {
       await hooks.beforeTakeOver?.();
-      // Re-check at the rename point: a paused contender must not displace a lock a takeover created.
-      if (!isDeadOwner(path)) continue;
-      takeOver(path);
+      const recheck = lockState(path);
+      // A paused contender must not displace a lock another takeover created meanwhile.
+      if (recheck.kind !== 'dead' || recheck.token !== state.token) continue;
+      await hooks.beforeRename?.();
+      // The rename is verified against the token we saw, so even a contender that was not paused
+      // here cannot displace a fresh holder: a mismatched token is put back, not claimed.
+      takeOver(path, state.token);
       continue;
     }
     await sleep(RETRY_MS);
@@ -227,10 +269,11 @@ export function readLedger(dir) {
  * Run fn on the context's ledger under its lock, and write the ledger fn returns.
  *
  * Without the lock fn still runs, with `locked: false`, and nothing is written. A broken ledger file
- * is replaced by the next locked, live write, even when the event records nothing. The write happens
- * only after a final read while this dispatch still owns the lock and `live()` holds; otherwise
- * nothing is written and the call fails open. Read, match and write failures reject, so the runtime
- * shows its manual notice and the host's call still passes.
+ * is replaced by the next locked, live write, even when the event records nothing. The payload is
+ * built before the final read; the write then happens only while this dispatch still owns the
+ * canonical lock and `live()` holds. Otherwise nothing is written and the call fails open. Read,
+ * match and write failures reject, so the runtime shows its manual notice and the host's call still
+ * passes.
  */
 export async function withLedger(dir, fn, { live = () => true } = {}) {
   const lock = await acquireLedgerLock(dir);
@@ -244,13 +287,9 @@ export async function withLedger(dir, fn, { live = () => true } = {}) {
     // The last read before the write, then ownership and liveness at that same point: a dispatch
     // whose lock a takeover replaced, or whose call has expired, records nothing and fails open.
     const generation = Math.max(result.ledger.generation, effectiveGeneration(dir));
+    const next = { version: 1, generation, entries: result.ledger.entries, reported: result.ledger.reported };
     if (lock === null || !lock.owned() || !live()) return null;
-    writeJsonAtomic(join(dir, LEDGER_FILE), {
-      version: 1,
-      generation,
-      entries: result.ledger.entries,
-      reported: result.ledger.reported,
-    });
+    writeJsonAtomic(join(dir, LEDGER_FILE), next);
     return result.value;
   } finally {
     lock?.release();
@@ -260,12 +299,14 @@ export async function withLedger(dir, fn, { live = () => true } = {}) {
 /**
  * Append one compaction to the log. The log is append-only, so a completed compaction can never be
  * rolled back by a dispatch holding a stale ledger, and each appended line raises the effective
- * generation that makes earlier entries not live. The liveness check sits immediately before the
- * append, after any directory creation.
+ * generation that makes earlier entries not live. The timestamp written is sampled before the final
+ * check and reused, so no time-dependent payload is read after the deadline has passed; the check is
+ * the last thing before the append.
  */
 export async function bump(dir, { signal, deadline } = {}) {
   if (signal?.aborted || (deadline !== undefined && Date.now() >= deadline)) return;
   mkdirSync(dir, { recursive: true });
-  if (signal?.aborted || (deadline !== undefined && Date.now() >= deadline)) return;
-  appendFileSync(join(dir, COMPACTIONS_FILE), `${Date.now()}\n`);
+  const at = Date.now();
+  if (signal?.aborted || (deadline !== undefined && at >= deadline)) return;
+  appendFileSync(join(dir, COMPACTIONS_FILE), `${at}\n`);
 }
