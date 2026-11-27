@@ -23,6 +23,9 @@ const NO_RUNTIME =
   'hook-runtime is not installed in this repo (no entry in .agents/harness/lock.json); install agent-harness-hook-runtime first.';
 const AGENTS = 'AGENTS.md';
 const FIX = 'run: node .agents/harness/hooked-rules/cli.mjs pointers';
+// Decode AGENTS.md fatally so invalid bytes are refused instead of being replaced on a rewrite;
+// ignoreBOM keeps a leading BOM so the untouched bytes round-trip.
+const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 const errText = (err) => (err instanceof Error ? err.message : String(err));
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -43,14 +46,24 @@ function defaultRepo() {
   return git(['rev-parse', '--show-toplevel'], process.cwd()) || process.cwd();
 }
 
-// Numerical major.minor.patch comparison: a missing part is zero and a non-number is below.
+// A locked version must be a complete major.minor.patch number before anything is compared, so a
+// partial or malformed entry can never satisfy the 0.2.0 prerequisite.
+const VERSION_RE = /^(\d+)\.(\d+)\.(\d+)$/;
+const PARTS = 3;
+
+function versionParts(version) {
+  const match = VERSION_RE.exec(version);
+  if (match === null) return null;
+  return match.slice(1, 1 + PARTS).map((part) => Number(part));
+}
+
 function versionAtLeast(version, minimum) {
-  const a = version.split('.').map((part) => Number.parseInt(part, 10));
-  const b = minimum.split('.').map((part) => Number.parseInt(part, 10));
-  for (let index = 0; index < 3; index += 1) {
-    const x = a[index] ?? 0;
-    const y = b[index] ?? 0;
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const a = versionParts(version);
+  const b = versionParts(minimum);
+  if (a === null || b === null) return false;
+  for (let index = 0; index < PARTS; index += 1) {
+    const x = a[index];
+    const y = b[index];
     if (x !== y) return x > y;
   }
   return true;
@@ -122,7 +135,12 @@ function check(repoRoot, io) {
 
 function pointers(repoRoot, checkOnly, io) {
   const { rules, errors } = loadRules(repoRoot);
-  if (errors.length) return io.fail(errors.map((issue) => `${issue.path}: ${issue.message}`));
+  if (errors.length) {
+    const lines = errors.map((issue) => `${issue.path}: ${issue.message}`);
+    // A check must still name the fix, even when the rules themselves are invalid.
+    if (checkOnly) lines.push(FIX);
+    return io.fail(lines);
+  }
   let block;
   try {
     block = renderBlock(rules);
@@ -132,7 +150,7 @@ function pointers(repoRoot, checkOnly, io) {
   const path = join(repoRoot, AGENTS);
   let current;
   try {
-    current = readFileSync(path, 'utf8');
+    current = utf8.decode(readFileSync(path));
   } catch (err) {
     return io.fail([`${AGENTS} cannot be read: ${errText(err)}`]);
   }

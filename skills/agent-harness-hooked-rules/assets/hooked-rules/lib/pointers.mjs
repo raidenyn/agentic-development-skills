@@ -14,6 +14,10 @@ const LINE_BREAK_RE = /(\r\n|\r|\n)/;
 export function renderBlock(rules) {
   const lines = [POINTER_BEGIN];
   for (const rule of [...rules].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+    if (rule.name.includes('\n') || rule.name.includes('\r'))
+      throw new RuleError(
+        `the rule file name ${JSON.stringify(`${RULES_DIR}/${rule.name}`)} contains a line break, which the pointer block cannot represent`,
+      );
     lines.push(`- ${rule.pointer} \u2014 ${RULES_DIR}/${rule.name}`);
   }
   lines.push(POINTER_END);

@@ -250,6 +250,14 @@ export function loadRules(repoRoot) {
   for (const name of names) {
     if (!name.endsWith('.md')) continue;
     const relative = `${RULES_DIR}/${name}`;
+    // A name with a line break cannot be one pointer-block line; reject it like any invalid rule.
+    if (name.includes('\n') || name.includes('\r')) {
+      errors.push({
+        path: relative,
+        message: 'its file name contains a line break, which the AGENTS.md pointer block cannot represent',
+      });
+      continue;
+    }
     try {
       const raw = readRuleFile(join(directory, name));
       let text;

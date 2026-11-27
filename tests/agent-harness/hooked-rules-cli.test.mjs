@@ -238,7 +238,7 @@ test('pointers: duplicate markers fail and leave AGENTS.md unchanged; check fail
   }
 });
 
-test('pointers: an invalid rule file exits 1, names the file and leaves AGENTS.md unchanged', async () => {
+test('pointers: an invalid rule file exits 1 and names the file in write and check mode', async () => {
   const r = await repo({
     files: {
       'AGENTS.md': 'keep\n',
@@ -251,6 +251,76 @@ test('pointers: an invalid rule file exits 1, names the file and leaves AGENTS.m
   assert.match(out.stderr, /\.agents\/hooked-rules\/bad\.md/);
   assert.match(out.stderr, /when/);
   assert.equal(read(r, 'AGENTS.md'), 'keep\n');
+
+  const check = await hr(r, 'pointers', '--check');
+  assert.equal(check.code, 1);
+  assert.match(check.stderr, /\.agents\/hooked-rules\/bad\.md/);
+  assert.match(check.stderr, /when/);
+  assert.ok(check.stderr.includes(FIX), check.stderr);
+  assert.equal(read(r, 'AGENTS.md'), 'keep\n');
+});
+
+test('install and check: a malformed hook-runtime version is refused instead of compared partially', async () => {
+  for (const version of ['0.2junk.0', '0.3.invalid', '0.2']) {
+    const r = await withRuntime();
+    setLockVersion(r, 'hook-runtime', version);
+
+    const out = await hr(r, 'install');
+    assert.equal(out.code, 1, version);
+    assert.match(out.stderr, /hooked-rules needs agent-harness-hook-runtime 0\.2\.0 or newer; update it first\./);
+    assert.equal(json(r, LOCK).tools['hooked-rules'], undefined, version);
+
+    const check = await hr(r, 'check');
+    assert.equal(check.code, 1, version);
+    assert.match(check.stderr, /0\.2\.0 or newer/, version);
+  }
+});
+
+test('pointers: an undecodable AGENTS.md reports "cannot be read" and is left byte-identical', async () => {
+  const r = await repo({ files: { '.agents/hooked-rules/a.md': rule('new') } });
+  const valid = Buffer.from(
+    'Intro\r\n\r\n' +
+      '## Hook-delivered rules\r\n' +
+      '<!-- hooked-rules:begin -->\r\n' +
+      '- old \u2014 .agents/hooked-rules/a.md\r\n' +
+      '<!-- hooked-rules:end -->\r\n\r\n' +
+      'After\r\n',
+    'utf8',
+  );
+  // 0xff is never valid UTF-8 and sits outside the block; a rewrite must not replace it.
+  const bytes = Buffer.concat([valid, Buffer.from([0xff]), Buffer.from('tail\r\n')]);
+  writeFileSync(join(r.dir, 'AGENTS.md'), bytes);
+
+  for (const args of [['pointers'], ['pointers', '--check']]) {
+    const out = await hr(r, ...args);
+    assert.equal(out.code, 1, args.join(' '));
+    assert.match(out.stderr, /AGENTS\.md cannot be read/);
+    assert.ok(readFileSync(join(r.dir, 'AGENTS.md')).equals(bytes), 'the file is unchanged');
+  }
+});
+
+test('check and pointers reject a rule file name containing a line break', async () => {
+  const name = 'bad\nname.md';
+  const r = await repo({
+    files: {
+      'AGENTS.md': 'keep\n',
+      [`${RULES}/${name}`]: rule('p'),
+    },
+  });
+
+  const check = await hr(r, 'check');
+  assert.equal(check.code, 1);
+  assert.match(check.stderr, /line break/);
+  assert.match(check.stderr, /\.agents\/hooked-rules\/bad/);
+
+  for (const args of [['pointers'], ['pointers', '--check']]) {
+    const out = await hr(r, ...args);
+    assert.equal(out.code, 1, args.join(' '));
+    assert.match(out.stderr, /line break/);
+    assert.match(out.stderr, /\.agents\/hooked-rules\/bad/);
+    if (args.includes('--check')) assert.ok(out.stderr.includes(FIX), out.stderr);
+    assert.equal(read(r, 'AGENTS.md'), 'keep\n');
+  }
 });
 
 test('pointers: a missing heading fails check naming the heading, and pointers writes it right before the marker', async () => {
