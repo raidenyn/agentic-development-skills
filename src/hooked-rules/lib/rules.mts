@@ -1,0 +1,266 @@
+// The hooked-rule grammar (design D3, ported line by line from veles's scripts/agent_rules.py):
+// `---` frontmatter with a double-quoted `pointer` and the lists `skills`, `commands`, `gates`,
+// `stops`, `requires` and `exempt`, then a body.
+import { createHash } from 'node:crypto';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import type { Pattern, Rule, RuleIssue, RuleLoad } from './rules.types.mts';
+
+export const RULES_DIR = '.agents/hooked-rules';
+export const BODY_LIMIT = 4096;
+// The most bytes read from one rule file; a larger file is an error. A valid rule is far smaller
+// (the body cap plus its frontmatter), so the cap only bounds what a damaged file can cost.
+export const RULE_FILE_LIMIT = 65536;
+
+export class RuleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RuleError';
+  }
+}
+
+const SCALAR_KEYS: readonly string[] = ['pointer'];
+const LIST_KEYS: readonly string[] = ['skills', 'commands', 'gates', 'stops', 'requires', 'exempt'];
+const RULE_KEYS = new Set([...SCALAR_KEYS, ...LIST_KEYS]);
+// The scope rejections for this version; #17 and #18 replace them with veles's checks.
+const UNSUPPORTED_KEYS: readonly string[] = ['requires', 'exempt', 'stops'];
+
+const FRONTMATTER_KEY_RE = /^([A-Za-z][A-Za-z0-9_-]*):(?: (.*))?$/;
+const FRONTMATTER_ITEM = '"(?:[^"\\\\]|\\\\.)*"';
+const FRONTMATTER_QUOTED_RE = new RegExp(`^${FRONTMATTER_ITEM}$`);
+const FRONTMATTER_FLOW_RE = new RegExp(`^\\[(${FRONTMATTER_ITEM}(?:, ${FRONTMATTER_ITEM})*)\\]$`);
+const FRONTMATTER_BLOCK_RE = new RegExp(`^  - (${FRONTMATTER_ITEM})$`);
+const FRONTMATTER_ITEM_RE = new RegExp(FRONTMATTER_ITEM, 'g');
+
+const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+// Decode one double-quoted string, accepting only the \" and \\ escapes.
+function quoted(item: string): string {
+  const body = item.slice(1, -1);
+  let decoded = '';
+  for (let index = 0; index < body.length; index += 1) {
+    const character = body[index] as string;
+    if (character === '\\') {
+      const escaped = body[index + 1];
+      if (escaped !== '"' && escaped !== '\\') throw new RuleError(`unsupported escape sequence \\${escaped}`);
+      decoded += escaped;
+      index += 1;
+    } else {
+      decoded += character;
+    }
+  }
+  return decoded;
+}
+
+// A one-line list of double-quoted strings, for example ["a", "b"].
+function flow(value: string): string[] {
+  if (value === '[]') throw new RuleError('a list must hold at least one item');
+  const match = FRONTMATTER_FLOW_RE.exec(value);
+  if (match === null)
+    throw new RuleError(`a list must be written as double-quoted strings, got ${JSON.stringify(value)}`);
+  return [...(match[1] as string).matchAll(FRONTMATTER_ITEM_RE)].map((item) => quoted(item[0]));
+}
+
+// A double-quoted scalar; plain scalars are outside the hooked-rule grammar.
+function scalar(key: string, value: string | null): string {
+  if (value === null || !FRONTMATTER_QUOTED_RE.test(value))
+    throw new RuleError(
+      `\`${key}\` must be a double-quoted string, got ${value === null ? 'nothing' : JSON.stringify(value)}`,
+    );
+  return quoted(value);
+}
+
+// The text may use CRLF or a lone CR and start with a UTF-8 BOM. The body is everything after the
+// closing `---` line with LF line endings; originalBody is the same text before normalisation, which
+// is what the size cap counts.
+function split(text: string): { values: Map<string, string | string[]>; body: string; originalBody: string } {
+  if (text.startsWith('\uFEFF')) text = text.slice(1);
+  const pieces = text.split(/(\r\n|\r|\n)/); // line, terminator, line, terminator, ..., line
+  const lines = pieces.filter((_, index) => index % 2 === 0);
+  let start: number | null = null;
+  for (const [index, line] of lines.entries()) {
+    if (line.trimEnd() !== '') {
+      start = index;
+      break;
+    }
+  }
+  if (start === null || (lines[start] as string).trimEnd() !== '---')
+    throw new RuleError('frontmatter must start with a `---` line');
+
+  const values = new Map<string, string | string[]>();
+  let blockKey: string | null = null;
+  let block: string[] | null = null;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = (lines[index] as string).trimEnd();
+    if (line === '---') {
+      if (blockKey !== null && block !== null && block.length === 0)
+        throw new RuleError(`\`${blockKey}\` has no list items`);
+      return {
+        values,
+        body: lines.slice(index + 1).join('\n'),
+        originalBody: pieces.slice(2 * index + 2).join(''),
+      };
+    }
+    if (blockKey !== null && block !== null) {
+      const item = FRONTMATTER_BLOCK_RE.exec(line);
+      if (item !== null) {
+        block.push(quoted(item[1] as string));
+        continue;
+      }
+      if (block.length === 0) throw new RuleError(`\`${blockKey}\` has no list items`);
+      blockKey = null;
+      block = null;
+    }
+    if (line === '') continue;
+    if (line.includes('\t')) throw new RuleError(`tabs are not allowed in frontmatter: ${JSON.stringify(line)}`);
+    if (line.startsWith(' '))
+      throw new RuleError(`nested mappings and indentation are not supported: ${JSON.stringify(line)}`);
+    const match = FRONTMATTER_KEY_RE.exec(line);
+    if (match === null)
+      throw new RuleError(`expected \`key: value\` or \`key:\` in frontmatter: ${JSON.stringify(line)}`);
+    const key = match[1] as string;
+    const value = match[2] ?? null;
+    if (!RULE_KEYS.has(key)) throw new RuleError(`unsupported frontmatter key ${JSON.stringify(key)}`);
+    if (values.has(key)) throw new RuleError(`duplicate frontmatter key ${JSON.stringify(key)}`);
+    if (SCALAR_KEYS.includes(key)) {
+      values.set(key, scalar(key, value));
+    } else if (value === null) {
+      block = [];
+      blockKey = key;
+      values.set(key, block);
+    } else if (value.startsWith('[')) {
+      values.set(key, flow(value));
+    } else {
+      throw new RuleError(`\`${key}\` must be a list of double-quoted strings, got ${JSON.stringify(value)}`);
+    }
+  }
+  throw new RuleError('frontmatter is missing its closing `---` line');
+}
+
+function patterns(key: string, sources: string[]): Pattern[] {
+  return sources.map((source) => {
+    try {
+      return { source, regex: new RegExp(source, 'u') };
+    } catch (error) {
+      throw new RuleError(
+        `\`${key}\` holds an invalid regex ${JSON.stringify(source.slice(0, 80))}: ${messageOf(error)}`,
+      );
+    }
+  });
+}
+
+const listValue = (values: Map<string, string | string[]>, key: string): string[] => {
+  const value = values.get(key);
+  return Array.isArray(value) ? value : [];
+};
+
+/** Parse one hooked rule file's text into a Rule, or throw RuleError. */
+export function parseRule(name: string, text: string): Rule {
+  const { values, body, originalBody } = split(text);
+  const pointer = values.get('pointer');
+  if (pointer === undefined) throw new RuleError('`pointer` is required');
+  if (!(pointer as string).trim()) throw new RuleError('`pointer` must not be empty');
+  for (const key of UNSUPPORTED_KEYS) {
+    if (values.has(key)) throw new RuleError(`\`${key}\` is not supported by hooked-rules 0.1.0`);
+  }
+  const skills = listValue(values, 'skills');
+  const commands = patterns('commands', listValue(values, 'commands'));
+  const gates = patterns('gates', listValue(values, 'gates'));
+  if (skills.length === 0 && commands.length === 0 && gates.length === 0) {
+    throw new RuleError('a rule needs at least one entry in `skills`, `commands`, `gates` or `stops`');
+  }
+  const size = Buffer.byteLength(originalBody, 'utf8');
+  if (size > BODY_LIMIT) throw new RuleError(`the body is ${size} bytes, over the ${BODY_LIMIT} byte limit`);
+  if (!ruleText(body)) throw new RuleError('the body is empty; a rule needs text to show at its moments and gates');
+  return {
+    name,
+    sha256: createHash('sha256').update(Buffer.from(text, 'utf8')).digest('hex'),
+    pointer: pointer as string,
+    skills,
+    commands,
+    gates,
+    body,
+  };
+}
+
+/** The rule's text: its body without leading or trailing blank lines. */
+export function ruleText(body: string): string {
+  const lines = body.split('\n');
+  while (lines.length > 0 && (lines[0] as string).trim() === '') lines.shift();
+  while (lines.length > 0 && (lines[lines.length - 1] as string).trim() === '') lines.pop();
+  return lines.join('\n');
+}
+
+// The bytes of the regular file at path, read without following a symlink; RuleError otherwise.
+function readRuleFile(path: string): Buffer {
+  let stats: ReturnType<typeof lstatSync>;
+  try {
+    stats = lstatSync(path);
+  } catch (error) {
+    throw new RuleError(`cannot be read: ${messageOf(error)}`);
+  }
+  if (stats.isSymbolicLink()) throw new RuleError('is a symlink; hooked rules are regular files');
+  if (!stats.isFile()) throw new RuleError('is not a regular file; hooked rules are regular files');
+  const flags = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
+  let fd: number;
+  try {
+    fd = openSync(path, flags);
+  } catch (error) {
+    throw new RuleError(`cannot be read: ${messageOf(error)}`);
+  }
+  try {
+    if (!fstatSync(fd).isFile()) throw new RuleError('is not a regular file; hooked rules are regular files');
+    const chunks: Buffer[] = [];
+    const buffer = Buffer.alloc(RULE_FILE_LIMIT + 1);
+    let size = 0;
+    while (size <= RULE_FILE_LIMIT) {
+      const read = readSync(fd, buffer, 0, RULE_FILE_LIMIT + 1 - size, null);
+      if (read === 0) break;
+      chunks.push(Buffer.from(buffer.subarray(0, read)));
+      size += read;
+    }
+    if (size > RULE_FILE_LIMIT) throw new RuleError(`is larger than ${RULE_FILE_LIMIT} bytes`);
+    return Buffer.concat(chunks);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** The rules of repoRoot's hooked-rules folder, sorted by name, with one error per invalid file. */
+export function loadRules(repoRoot: string): RuleLoad {
+  const directory = join(repoRoot, RULES_DIR);
+  const rules: Rule[] = [];
+  const errors: RuleIssue[] = [];
+  let names: string[];
+  try {
+    if (!statSync(directory).isDirectory()) return { rules, errors };
+    names = readdirSync(directory);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return { rules, errors };
+    errors.push({ path: RULES_DIR, message: `cannot be read: ${messageOf(error)}` });
+    return { rules, errors };
+  }
+  names.sort();
+  for (const name of names) {
+    if (!name.endsWith('.md')) continue;
+    const relative = `${RULES_DIR}/${name}`;
+    try {
+      const raw = readRuleFile(join(directory, name));
+      let text: string;
+      try {
+        text = decoder.decode(raw);
+      } catch (error) {
+        errors.push({ path: relative, message: `is not valid UTF-8: ${messageOf(error)}` });
+        continue;
+      }
+      rules.push(parseRule(name, text));
+    } catch (error) {
+      if (error instanceof RuleError) errors.push({ path: relative, message: error.message });
+      else errors.push({ path: relative, message: `cannot be read: ${messageOf(error)}` });
+    }
+  }
+  return { rules, errors };
+}

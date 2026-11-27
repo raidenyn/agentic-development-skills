@@ -12,6 +12,12 @@
       "category": "development"
     },
     {
+      "name": "agent-harness-hooked-rules",
+      "source": "./skills/agent-harness-hooked-rules",
+      "description": "Use when writing, reviewing or onboarding hook-delivered rules in .agents/hooked-rules/, or when a rule file is invalid and the frontmatter grammar, pointer block or supported keys need explaining.",
+      "category": "development"
+    },
+    {
       "name": "agent-harness-verify-gate",
       "source": "./skills/agent-harness-verify-gate",
       "description": "Use when running a repo's verify command on edit, on a ticked task and at turn end, or when onboarding or updating the verify gate in a repo.",

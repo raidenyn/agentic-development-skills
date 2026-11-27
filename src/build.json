@@ -4,6 +4,10 @@
       "skill": "agent-harness-hook-runtime",
       "shared": ["lib/config.mts", "lib/state.mts", "lib/install.mts"]
     },
+    "hooked-rules": {
+      "skill": "agent-harness-hooked-rules",
+      "shared": ["lib/config.mts", "lib/state.mts", "lib/install.mts"]
+    },
     "verify-gate": {
       "skill": "agent-harness-verify-gate",
       "shared": ["lib/config.mts", "lib/state.mts", "lib/install.mts"]
