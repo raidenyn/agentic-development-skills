@@ -4,9 +4,11 @@
 // hard-linked to `ledger.lock`, so a lock never exists without its full owner record and a missing or
 // unreadable owner can only be a crash artifact. A dead holder (its pid is gone) is taken over by
 // renaming the lock to a unique name and verifying the moved token is the dead one we checked; a
-// fresh lock displaced by a delayed contender is put back instead of being claimed. Ownership is
-// re-read from the canonical path immediately before every write and on release, so a dispatch whose
-// lock a takeover replaced writes nothing.
+// displaced artifact is discarded, never put back, so a restored spent lock can never block later
+// calls. Ownership is re-read from the canonical path immediately before every write and on release,
+// so a dispatch whose lock a takeover replaced writes nothing. Only regular files are ever read as
+// owner records, so a stray FIFO cannot block the event loop. Calls in one process are serialized per
+// state directory before the file lock is even tried; the file lock orders separate processes.
 //
 // `compactions.log` is append-only: a compaction appends one small line and never rewrites the
 // ledger, so no writer, however late, can lower the effective generation or revive an entry a
@@ -22,7 +24,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { writeJsonAtomic } from './state.mts';
 import type { Entry, Ledger } from './deliver.types.mts';
 
@@ -76,16 +78,26 @@ const uniqueName = (prefix: string) =>
   `${prefix}.${process.pid}-${nameCounter++}-${Math.random().toString(36).slice(2)}`;
 const newToken = () => uniqueName('lock');
 
-// The lock file's owner record, or null when it is gone, unreadable or not this version's JSON. A
-// present lock always carries a complete record, so null is a crash artifact, never a half-created
-// lock a contender could race.
+// The lock file's owner record, or null when it is gone, not a regular file, unreadable or not this
+// version's JSON. A present lock always carries a complete record, so null is a crash artifact,
+// never a half-created lock a contender could race. A non-regular artifact is never read: reading a
+// writerless FIFO would block the event loop.
 function readOwner(path: string): Owner | null {
+  let info: ReturnType<typeof lstatSync>;
+  try {
+    info = lstatSync(path);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return null;
+    throw error;
+  }
+  if (!info.isFile()) return null;
   let value: unknown;
   try {
     value = JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'EISDIR' || error instanceof SyntaxError) return null;
+    if (code === 'ENOENT' || code === 'ENOTDIR' || error instanceof SyntaxError) return null;
     throw error;
   }
   return value !== null && typeof value === 'object' ? (value as Owner) : null;
@@ -143,43 +155,36 @@ function makeLock(path: string, token: string): LedgerLock {
   };
 }
 
-// Rename a dead holder's lock to a unique name, verify it is the dead lock we checked and remove it.
-// A delayed contender can rename a fresh lock after the re-check; the token comparison detects that
-// and puts the fresh lock back instead of claiming it. A rename that fails with ENOENT means another
-// contender got there first, so the caller simply retries the acquire.
-function takeOver(path: string, deadToken: string | null): void {
+// Rename whatever holds the canonical path to a unique name and inspect only that artifact. A
+// regular file carrying the dead token we checked is removed and the acquisition retries. Anything
+// else — a lock another dispatch published meanwhile, or a non-file crash artifact — is discarded
+// with an unlink, never restored, and this dispatch gives up writing nothing. Restoring a displaced
+// lock can resurrect a lock its holder has already released; discarding cannot.
+type TakeOver = 'retry' | 'give-up';
+
+function takeOver(path: string, deadToken: string | null): TakeOver {
   const claimed = uniqueName(`${path}.stale`);
   try {
     renameSync(path, claimed);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'retry';
     throw error;
   }
   let moved: Owner | null = null;
   try {
-    moved = readOwner(claimed);
-  } catch {}
-  const movedToken = typeof moved?.token === 'string' ? moved.token : null;
-  if (movedToken !== deadToken) {
-    // We displaced a lock that is not the one we checked: restore it when the path is still free.
-    let restored = false;
-    try {
-      linkSync(claimed, path);
-      restored = true;
-    } catch {}
-    try {
-      if (restored) unlinkSync(claimed);
-      else rmSync(claimed, { recursive: true, force: true });
-    } catch {}
-    return;
+    moved = readOwner(claimed); // lstat first: a stray FIFO is never read
+  } finally {
+    rmSync(claimed, { recursive: true, force: true });
   }
-  rmSync(claimed, { recursive: true, force: true });
+  const movedToken = typeof moved?.token === 'string' ? moved.token : null;
+  return movedToken === deadToken ? 'retry' : 'give-up';
 }
 
 /**
  * The context's ledger lock, or null after the wait. Acquisition links a complete owner record into
  * place, so no contender can observe an ownerless lock. A dead holder's lock is renamed away and
- * re-created; a live holder keeps it and the call fails open once the wait expires.
+ * re-created; a live holder keeps it and the call fails open once the wait expires. A takeover that
+ * displaced a lock it did not check discards it and gives up rather than restore it.
  */
 export async function acquireLedgerLock(dir: string, hooks: LedgerLockHooks = {}): Promise<LedgerLock | null> {
   mkdirSync(dir, { recursive: true });
@@ -213,8 +218,9 @@ export async function acquireLedgerLock(dir: string, hooks: LedgerLockHooks = {}
       if (recheck.kind !== 'dead' || recheck.token !== state.token) continue;
       await hooks.beforeRename?.();
       // The rename is verified against the token we saw, so even a contender that was not paused
-      // here cannot displace a fresh holder: a mismatched token is put back, not claimed.
-      takeOver(path, state.token);
+      // here cannot become a second writer: a mismatched artifact is discarded and this dispatch
+      // gives up instead of claiming it.
+      if (takeOver(path, state.token) === 'give-up') return null;
       continue;
     }
     await sleep(RETRY_MS);
@@ -301,20 +307,31 @@ export function readLedger(dir: string): Ledger {
   return readLedgerState(dir).ledger;
 }
 
-/**
- * Run fn on the context's ledger under its lock, and write the ledger fn returns.
- *
- * Without the lock fn still runs, with `locked: false`, and nothing is written. A broken ledger file
- * is replaced by the next locked, live write, even when the event records nothing. The payload is
- * built before the final read; the write then happens only while this dispatch still owns the
- * canonical lock and `live()` holds. Otherwise nothing is written and the call fails open. Read,
- * match and write failures reject, so the runtime shows its manual notice and the host's call still
- * passes.
- */
-export async function withLedger<T>(
+// In-process serialization per state directory. Concurrent calls in one process run one at a time,
+// so an exactly-once guarantee never depends on the timing of the cross-process file lock. Every
+// ledger operation goes through this queue; acquireLedgerLock itself stays open because a paused
+// acquisition is how a takeover race is observed.
+const processLocks = new Map<string, Promise<void>>();
+
+function withProcessLock<T>(dir: string, fn: () => Promise<T>): Promise<T> {
+  const key = resolve(dir);
+  const previous = processLocks.get(key) ?? Promise.resolve();
+  const run = previous.then(() => fn());
+  const tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  processLocks.set(key, tail);
+  void tail.then(() => {
+    if (processLocks.get(key) === tail) processLocks.delete(key);
+  });
+  return run;
+}
+
+async function withLedgerLocked<T>(
   dir: string,
   fn: LedgerOperation<T>,
-  { live = () => true }: LedgerOptions = {},
+  { live = () => true }: LedgerOptions,
 ): Promise<T | null> {
   const lock = await acquireLedgerLock(dir);
   try {
@@ -337,19 +354,35 @@ export async function withLedger<T>(
 }
 
 /**
+ * Run fn on the context's ledger under its lock, and write the ledger fn returns.
+ *
+ * Callers in one process are serialized per state directory before the file lock is tried. Without
+ * the lock fn still runs, with `locked: false`, and nothing is written. A broken ledger file is
+ * replaced by the next locked, live write, even when the event records nothing. The payload is built
+ * before the final read; the write then happens only while this dispatch still owns the canonical
+ * lock and `live()` holds. Otherwise nothing is written and the call fails open. Read, match and
+ * write failures reject, so the runtime shows its manual notice and the host's call still passes.
+ */
+export function withLedger<T>(dir: string, fn: LedgerOperation<T>, options: LedgerOptions = {}): Promise<T | null> {
+  return withProcessLock(dir, () => withLedgerLocked(dir, fn, options));
+}
+
+/**
  * Append one compaction to the log. The log is append-only, so a completed compaction can never be
  * rolled back by a dispatch holding a stale ledger, and each appended line raises the effective
  * generation that makes earlier entries not live. The timestamp written is sampled before the final
  * check and reused, so no time-dependent payload is read after the deadline has passed; the check is
- * the last thing before the append.
+ * the last thing before the append. In one process it is ordered with the ledger operations too.
  */
 export async function bump(
   dir: string,
   { signal, deadline }: { signal?: AbortSignal; deadline?: number } = {},
 ): Promise<void> {
   if (signal?.aborted || (deadline !== undefined && Date.now() >= deadline)) return;
-  mkdirSync(dir, { recursive: true });
-  const at = Date.now();
-  if (signal?.aborted || (deadline !== undefined && at >= deadline)) return;
-  appendFileSync(join(dir, COMPACTIONS_FILE), `${at}\n`);
+  await withProcessLock(dir, async () => {
+    mkdirSync(dir, { recursive: true });
+    const at = Date.now();
+    if (signal?.aborted || (deadline !== undefined && at >= deadline)) return;
+    appendFileSync(join(dir, COMPACTIONS_FILE), `${at}\n`);
+  });
 }

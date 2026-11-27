@@ -3,12 +3,14 @@
 // The pure cases call decide directly; the handler cases call the built handler in process with one
 // state folder per agent, as the runtime gives it.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import {
   appendFileSync,
   chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   unlinkSync,
@@ -69,8 +71,8 @@ function holdLock(r, agent = 'main') {
 }
 
 // Seed a lock file with a complete owner record, as acquisition publishes it.
-function lockFile(token, pid = process.pid) {
-  return JSON.stringify({ token, pid, at: Date.now() });
+function lockFile(token, pid = process.pid, at = Date.now()) {
+  return JSON.stringify({ token, pid, at });
 }
 
 /** @typedef {{ agentId?: string, stateDir?: string, deadline?: number, signal?: AbortSignal }} ContextOptions */
@@ -535,13 +537,12 @@ test('a contender paused after the dead-owner check does not displace a takeover
   assert.equal(existsSync(path), false);
 });
 
-test('a contender paused after the final dead-owner check never claims a fresh lock', async () => {
+test('a delayed contender discards a displaced fresh lock instead of restoring it', async () => {
   const r = await repo();
   const dir = stateDirOf(r);
   mkdirSync(dir, { recursive: true });
   const path = lockPath(r);
-  const dead = lockFile('dead', 999999999);
-  writeFileSync(path, dead);
+  writeFileSync(path, lockFile('dead', 999999999));
   let checked;
   const atCheck = new Promise((resolve) => (checked = resolve));
   let resume;
@@ -556,12 +557,22 @@ test('a contender paused after the final dead-owner check never claims a fresh l
   await atCheck;
   const winner = await acquireLedgerLock(dir); // takes the dead lock over and publishes a fresh one
   assert.ok(winner);
-  const winnerToken = JSON.parse(readFileSync(path, 'utf8')).token;
-  resume(); // the delayed contender now renames the winner's lock, must detect it and put it back
+  resume(); // the delayed contender now renames the winner's lock
   assert.equal(await delayed, null, 'the delayed contender does not claim the fresh lock');
-  assert.equal(winner.owned(), true, 'the winner still holds the canonical lock');
-  assert.equal(JSON.parse(readFileSync(path, 'utf8')).token, winnerToken, 'the fresh lock was restored intact');
-  winner.release();
+  assert.equal(existsSync(path), false, 'the displaced fresh lock is discarded, never restored');
+  assert.deepEqual(
+    readdirSync(dir).filter((name) => name.startsWith('ledger.lock.')),
+    [],
+    'the removed artifact is unlinked, not left behind',
+  );
+  assert.equal(winner.owned(), false, 'the winner no longer owns the canonical path');
+  winner.release(); // releasing without a matching token does nothing
+  assert.equal(existsSync(path), false, 'a release cannot resurrect a spent lock');
+  // No spent lock waits on the path, so a later dispatch acquires at once instead of timing out.
+  const next = await acquireLedgerLock(dir);
+  assert.ok(next);
+  assert.equal(JSON.parse(readFileSync(path, 'utf8')).token, next.token);
+  next.release();
   assert.equal(existsSync(path), false);
 });
 
@@ -591,13 +602,46 @@ test('a dispatch paused before its lock is linked never exposes an ownerless loc
   second.release();
 });
 
+test('a stray FIFO on the lock path is taken over without being read', async (t) => {
+  const r = await repo();
+  const dir = stateDirOf(r);
+  mkdirSync(dir, { recursive: true });
+  try {
+    execFileSync('mkfifo', [lockPath(r)], { stdio: 'ignore' });
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      t.skip('mkfifo is unavailable');
+      return;
+    }
+    throw error;
+  }
+  // A writerless FIFO blocks a synchronous owner-record read forever. The child is killed by the
+  // timeout, so a regression fails this test instead of hanging the runner.
+  const url = pathToFileURL(join(ASSETS.hookedRules, 'lib', 'ledger.mjs')).href;
+  const script = `
+    import { existsSync } from 'node:fs';
+    const { acquireLedgerLock } = await import(${JSON.stringify(url)});
+    const dir = ${JSON.stringify(dir)};
+    const lock = await acquireLedgerLock(dir);
+    if (lock === null) process.exit(2);
+    lock.release();
+    if (existsSync(dir + '/ledger.lock')) process.exit(3);
+  `;
+  execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    timeout: 10000,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.equal(existsSync(lockPath(r)), false, 'the stray artifact is unlinked, not left behind');
+});
+
 test('a dead holder is taken over at once and a live one is never taken over by age', async () => {
   const r = await repo();
   const dir = stateDirOf(r);
   mkdirSync(dir, { recursive: true });
   const path = lockPath(r);
-  // A slow live holder keeps its lock however old the owner record is.
-  writeFileSync(path, lockFile('slow'));
+  // A slow live holder keeps its lock however old the owner record is: an hour-old timestamp would
+  // be long past any age-based takeover, so reintroducing one fails this test.
+  writeFileSync(path, lockFile('slow', process.pid, Date.now() - 3600_000));
   assert.equal(await acquireLedgerLock(dir), null, 'a live holder is waited for, not taken over');
   assert.equal(JSON.parse(readFileSync(path, 'utf8')).token, 'slow');
   unlinkSync(path);
