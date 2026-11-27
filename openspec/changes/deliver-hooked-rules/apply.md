@@ -17,7 +17,7 @@
 ## Commits
 
 - **Range**: `1b0db00..HEAD` (HEAD is the receipt commit)
-- **Count**: `31` (including the change scaffold, the unrelated test-margin fix `157ebeb`, the final fix wave, and the post-review gate fix)
+- **Count**: `32` (including the change scaffold, the unrelated test-margin fix `157ebeb`, the final fix wave, and the post-review gate fix)
 
 ---
 
@@ -91,8 +91,12 @@ The `/agent-harness-verify-gate` prompt reached the `prompt` hook on both hosts 
 - **Write before the unlock acknowledgement** — the ledger is written after the abort/deadline
   check but before the supervisor confirms the unlock; a retirement in that window can record a
   delivery the host never showed.
-- **Worker contention fails open immediately** — a briefly held worker lock no longer retries for
-  up to a second as design D5 describes; the call passes and records nothing.
+
+Worker contention no longer fails open at once: after the final whole-branch review, `f2bc786`
+restored a 20 ms retry up to 1 s or the deadline, skips the lock entirely for events that would
+neither deliver nor record, and raises the runtime's manual notice when a gated command loses the
+lock. Live runs on both hosts confirmed the gate denies with parallel sibling hooks, and the
+held-lock run waited 1179 ms before the notice. That finding is fixed, not residual.
 
 ---
 

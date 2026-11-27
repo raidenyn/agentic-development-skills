@@ -1,7 +1,7 @@
 # Verification Report
 
 **Change**: `deliver-hooked-rules`
-**Verified at**: `2026-11-27 14:10`
+**Verified at**: `2026-11-27 15:40` (refreshed after `f2bc786`)
 **Iteration**: `1`
 **Verifier**: `subagent-driven-development` controller (final whole-branch review + fix wave evidence)
 
@@ -67,14 +67,13 @@ implementation verdict.
 | D7 pointer block | markers, heading, one line per rule, refusal on invalid rules, EOL preserved | "Pointer block", "Pointer check" | none |
 | D8 install/update/check | lock, empty config section, rules folder, runtime >= 0.2.0 | "Install, update and check", "Install check", "Config section and rules folder" | none |
 | D9 this repository | two rules, pointer block, checks in `verify.mts` and CI | "This repository delivers hooked rules" | none |
-| D5 ledger mechanism | one `ledger.json` under an exclusive-create lock retried 20 ms for 1 s, stale takeover after 10 s | "Rules handler fails open", "No record of a dropped result" | **Drift**: the shipped code takes the lock through the supervisor's worker-scoped lock (released on worker retirement), keeps the pid-keyed file lock only as the in-process fallback, fails open immediately under worker contention instead of retrying for 1 s, and derives the generation from an append-only `compactions.log`. |
+| D5 ledger mechanism | worker-scoped supervisor lock with a 20 ms retry up to 1 s or the deadline, in-process pid-keyed fallback, fail-open with the manual notice on a gate, append-only `compactions.log` generation | "Rules handler fails open", "No record of a dropped result" | none after `f2bc786` (the fix also updated `design.md` D5 to match) |
 
 **Drift warnings** (non-blocking):
 
-- `design.md` D5 still describes the pre-implementation lock and generation mechanism. The behavior
-  the spec requires (fail open, no deny, no record of a dropped result, re-delivery after
-  compaction) is implemented and tested; the design text should be updated to match in a follow-up
-  documentation change, or at archive time.
+- None. The earlier D5 drift was resolved: `design.md` D5 now describes the shipped worker-scoped
+  lock, the retry, the fail-open notice and the append-only generation, and `f2bc786` made the
+  code follow it.
 
 ---
 
@@ -83,9 +82,14 @@ implementation verdict.
 - [x] No unstaged files in the worktree
 - [ ] All related commits pushed
 
-**Commit range** (if known): `1b0db00..4acdebf` (25 commits; includes the change scaffold,
-the unrelated test-margin fix `157ebeb`, the implementation, the tick commits, the apply receipt,
-and the final fix wave `47d6360`, `8d607f6`).
+**Commit range** (if known): `1b0db00..HEAD` (32 commits at this revision; includes the change
+scaffold, the unrelated test-margin fix `157ebeb`, the implementation, the tick commits, the apply
+receipt, the final fix wave `47d6360`/`8d607f6`, the post-review gate fix `f2bc786` and the
+refreshed live evidence `866eb20`).
+
+This verification was refreshed after `f2bc786`: the full verify run is 568/568, the agent suite
+504/504, and the post-fix live runs confirm the gate under parallel sibling hooks and the manual
+notice when the lock is held past the wait.
 
 The branch is not pushed yet; the finalize artifact owns that step.
 
@@ -93,16 +97,18 @@ The branch is not pushed yet; the finalize artifact owns that step.
 
 ## Overall Decision
 
-- [ ] ✅ PASS
-- [x] ⚠️ PASS WITH WARNINGS — the implementation is complete and coherent; the D5 design text
-      drifted from the shipped lock mechanism, and the delta specs await archive sync.
+- [x] ✅ PASS — every check that applies passed; the delta specs await archive sync, which is
+      the expected pre-archive state rather than an issue.
+- [ ] ⚠️ PASS WITH WARNINGS
 - [ ] ❌ FAIL
 
 **Next step**:
 
 Proceed via `/opsx:continue` to the finalize artifact, which merges the worktree into
-`feat/openspec-ff-change-issue-16`, pushes the branch and updates or opens the PR. Record the
-accepted residuals listed in `apply.md` in the PR description, then `/opsx:archive`.
+`feat/openspec-ff-change-issue-16`, pushes the branch and updates or opens the PR. In the PR
+description, list only the residuals that remain in `apply.md` (failed unlock, contended
+`session.start`, write before the unlock acknowledgement); the worker-contention one is fixed by
+`f2bc786`. Then `/opsx:archive`.
 
 > **Convergence loop reminder**:
 > - PASS / PASS_WITH_WARNINGS → `/opsx:continue` advances to the finalize

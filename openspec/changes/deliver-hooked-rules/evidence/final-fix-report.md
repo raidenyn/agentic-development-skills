@@ -47,8 +47,8 @@ node scripts/verify.mts      # after the receipt commit: tests 564, pass 564, fa
 
 ## Concerns
 
-- The `apply.md` range is written as `1b0db00..HEAD` so it stays exact when HEAD is the receipt commit; the count `25` was computed for that final state.
-- The in-process fallback still uses the host-pid `ledger.lock`, as intended for tests; only worker execution uses the supervisor lock.
-- Under contention the supervisor lock returns `null` immediately rather than waiting up to 1 s, so a worker fails open at once. That matches the spec's fail-open semantics (the old 1 s wait was a local-file-lock detail).
+- The `apply.md` range is written as `1b0db00..HEAD` so it stays exact when HEAD is the receipt commit; the count was computed for that final state.
+- The in-process fallback still uses the host-pid `ledger.lock`, as intended for tests; only worker execution uses the supervisor lock. (This report predates `f2bc786`, which added the 20 ms retry up to 1 s, the no-match skip and the manual notice; that supersedes the next line.)
+- ~~Under contention the supervisor lock returns `null` immediately rather than waiting up to 1 s…~~ Superseded by `f2bc786`.
 - No tool version bump was needed: `hooked-rules` already carries this pull request's `0.1.0` bump; `harness:update` refreshed its lock hashes.
-- `.superpowers/sdd/` is git-ignored, so this report (like `task-6-report.md`) is not committed.
+- This report was written under `.superpowers/sdd/` and is now kept with the change as `evidence/final-fix-report.md`.
