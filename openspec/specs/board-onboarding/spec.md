@@ -139,7 +139,7 @@ A run that writes SHALL rename its own thread to `<board title> Conductor`, such
 ### Requirement: One conductor per board
 Before any write, the procedure SHALL check two places for another conductor:
 - **The settings block's `conductor`.** When it names another thread that is not archived, the run MUST stop and name that thread.
-- **Every T3 project from `t3_project_list`, "No project" included.** The procedure MUST search each for the conductor title `<board title> Conductor` and the old title `project-conductor <board URL>`, and compare titles exactly. A match that is not this thread MUST stop the run when its launch line names this board or cannot be read; a match whose launch line names another board MUST NOT.
+- **Every T3 project from `t3_project_list`, "No project" included.** The procedure MUST search each for the conductor title `<board title> Conductor` and the old title `project-conductor <board URL>`, and compare titles exactly. A match that is not this thread MUST stop the run when its launch line names this board, is missing, or cannot be read; a match whose launch line names another board MUST NOT.
 
 #### Scenario: Conductor already exists in another project
 - **WHEN** a thread in project A titled `<board title> Conductor`, whose launch line names this board, exists and the owner runs the command in project B
