@@ -864,3 +864,463 @@ Raw artifacts kept outside the repo:
 - Did not run task 7.3's check commands or write `apply.md`; the dispatched Task 6 instruction
   scoped this agent to the live runs, the report, and an adapter fix only if a host field differed.
 - Did not touch #17 (`requires`, `exempt`), #18 (`stops`, `opsx:`) or #23 (veles's rule cases).
+
+## Post-fix rerun — 2026-11-27, after `f2bc786`
+
+This section supersedes every live run above. Commit
+`f2bc7862a12b871c5ca1676ac603c1b507c3cb5e` ("fix: keep the hooked-rules gate under lock
+contention") changed the ledger lock behaviour, so the earlier evidence no longer describes the
+code under test. All runs below were made from the worktree at `f2bc786` with
+`AGENT_HARNESS_TRACE=1` and with the temporary skill links in `.claude/skills/` and
+`.opencode/skills/`.
+
+Baseline and final HEAD: `f2bc7862a12b871c5ca1676ac603c1b507c3cb5e`. No code or rule file was
+changed; the only commit made by this rerun is this evidence file.
+
+Environment:
+
+```
+node --version            v26.13.1
+pnpm --version            12.18.0
+opencode --version        opencode v2.4.1
+claude --version          2.1.332 (Claude Code)
+git rev-parse --absolute-git-dir
+  /home/dev/repos/agentic-development-skills/.git/worktrees/t3-ebb73c1f-4bfeaeef6834c54f
+```
+
+Trace and ledger locations are the same as above:
+
+```
+<git dir>/agent-harness/hook-runtime/trace.jsonl
+<git dir>/agent-harness/hooked-rules/sessions/<host>-<session>/main/ledger.json
+```
+
+The trace had 139 lines before this rerun; the new runs append lines 140-259. They are quoted with
+the trace file's own line numbers.
+
+### A1. OpenCode 2.4.1: one session, four messages
+
+Session `ses_de270de3dffeTWBQadBxe1jEkV`. Each message was a fresh `opencode run --standalone`
+process (the plugin reloads) but the same host session via `--session`.
+
+```bash
+# 1. skill call
+AGENT_HARNESS_TRACE=1 timeout 300 opencode run --standalone --auto --format json \
+  --title "post-fix hooked-rules sequence" \
+  'Call the Skill tool exactly once for the skill `agent-harness-hooked-rules`. Report the tool name you used and any extra context the call returned. Do not edit any file.'
+# -> sessionID ses_de270de3dffeTWBQadBxe1jEkV, exit 0, 15:10:10-15:11:10Z
+
+# 2. the slash prompt
+AGENT_HARNESS_TRACE=1 timeout 300 opencode run --standalone --auto --format json \
+  --session ses_de270de3dffeTWBQadBxe1jEkV --title "post-fix hooked-rules sequence" \
+  '/agent-harness-verify-gate'
+# -> same sessionID, exit 0, 15:11:11-15:11:41Z
+
+# 3. build, then commit and the identical retry (prompt read from a file)
+AGENT_HARNESS_TRACE=1 timeout 300 opencode run --standalone --auto --format json \
+  --session ses_de270de3dffeTWBQadBxe1jEkV --title "post-fix hooked-rules sequence" \
+  "$(cat /tmp/opencode/pf-seq-3-prompt.txt)"
+# -> same sessionID, exit 0, 15:11:46-15:13:34Z
+
+# 4. second skill call
+AGENT_HARNESS_TRACE=1 timeout 300 opencode run --standalone --auto --format json \
+  --session ses_de270de3dffeTWBQadBxe1jEkV --title "post-fix hooked-rules sequence" \
+  "$(cat /tmp/opencode/pf-seq-4-prompt.txt)"
+# -> same sessionID, exit 0, 15:13:35-15:14:15Z
+```
+
+Ordered trace excerpt, lines 140-164 (verbatim):
+
+```json
+{"event":"session.start","processStart":1795792247873.2673,"receivedAt":1795792253561,"handlersLoadedAt":1795792252244,"settledAt":1795792253765,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"prompt","processStart":1795792247873.2673,"receivedAt":1795792253779,"handlersLoadedAt":1795792252244,"settledAt":1795792253796,"outcomes":{"hooked-rules":"null"}}
+{"event":"tool.before","processStart":1795792247873.2673,"receivedAt":1795792261307,"handlersLoadedAt":1795792252244,"settledAt":1795792261316,"outcomes":{"hooked-rules":"null"}}
+{"event":"tool.after","processStart":1795792247873.2673,"receivedAt":1795792261332,"handlersLoadedAt":1795792252244,"settledAt":1795792261342,"outcomes":{"hooked-rules":"result"}}
+{"event":"turn.end","processStart":1795792247873.2673,"receivedAt":1795792269993,"handlersLoadedAt":1795792252244,"settledAt":1795792270296,"outcomes":{"verify-gate":"failed"},"hostCreatedAt":1795792269983}
+{"event":"session.start","processStart":1795792272705.841,"receivedAt":1795792277548,"handlersLoadedAt":1795792276411,"settledAt":1795792277669,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"prompt","processStart":1795792272705.841,"receivedAt":1795792277684,"handlersLoadedAt":1795792276411,"settledAt":1795792277805,"outcomes":{"hooked-rules":"result"}}
+{"event":"tool.before","processStart":1795792272705.841,"receivedAt":1795792284783,"handlersLoadedAt":1795792276411,"settledAt":1795792284788,"outcomes":{"hooked-rules":"null"}}
+{"event":"tool.after","processStart":1795792272705.841,"receivedAt":1795792284809,"handlersLoadedAt":1795792276411,"settledAt":1795792284816,"outcomes":{"hooked-rules":"null"}}
+{"event":"turn.end","processStart":1795792272705.841,"receivedAt":1795792300935,"handlersLoadedAt":1795792276411,"settledAt":1795792301168,"outcomes":{"verify-gate":"failed"},"hostCreatedAt":1795792300926}
+{"event":"session.start","processStart":1795792312824.688,"receivedAt":1795792318639,"handlersLoadedAt":1795792317515,"settledAt":1795792318750,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"prompt","processStart":1795792312824.688,"receivedAt":1795792318758,"handlersLoadedAt":1795792317515,"settledAt":1795792318814,"outcomes":{"hooked-rules":"null"}}
+{"event":"tool.before","processStart":1795792312824.688,"receivedAt":1795792343155,"handlersLoadedAt":1795792317515,"settledAt":1795792343166,"outcomes":{"hooked-rules":"null"}}
+{"event":"tool.after","processStart":1795792312824.688,"receivedAt":1795792343207,"handlersLoadedAt":1795792317515,"settledAt":1795792343218,"outcomes":{"hooked-rules":"null"}}
+{"event":"tool.before","processStart":1795792312824.688,"receivedAt":1795792346116,"handlersLoadedAt":1795792317515,"settledAt":1795792346141,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"tool.after","processStart":1795792312824.688,"receivedAt":1795792355330,"handlersLoadedAt":1795792317515,"settledAt":1795792355362,"outcomes":{"hooked-rules":"result","verify-gate":"null"}}
+{"event":"tool.before","processStart":1795792312824.688,"receivedAt":1795792365742,"handlersLoadedAt":1795792317515,"settledAt":1795792365763,"outcomes":{"hooked-rules":"result","verify-gate":"null"}}
+{"event":"tool.before","processStart":1795792312824.688,"receivedAt":1795792372979,"handlersLoadedAt":1795792317515,"settledAt":1795792372997,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"tool.after","processStart":1795792312824.688,"receivedAt":1795792373184,"handlersLoadedAt":1795792317515,"settledAt":1795792373195,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"turn.end","processStart":1795792312824.688,"receivedAt":1795792413609,"handlersLoadedAt":1795792317515,"settledAt":1795792414015,"outcomes":{"verify-gate":"failed"},"hostCreatedAt":1795792413591}
+{"event":"session.start","processStart":1795792416129.2778,"receivedAt":1795792421381,"handlersLoadedAt":1795792420111,"settledAt":1795792421551,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"prompt","processStart":1795792416129.2778,"receivedAt":1795792421555,"handlersLoadedAt":1795792420111,"settledAt":1795792421568,"outcomes":{"hooked-rules":"null"}}
+{"event":"tool.before","processStart":1795792416129.2778,"receivedAt":1795792444331,"handlersLoadedAt":1795792420111,"settledAt":1795792444338,"outcomes":{"hooked-rules":"null"}}
+{"event":"tool.after","processStart":1795792416129.2778,"receivedAt":1795792444352,"handlersLoadedAt":1795792420111,"settledAt":1795792444359,"outcomes":{"hooked-rules":"null"}}
+{"event":"turn.end","processStart":1795792416129.2778,"receivedAt":1795792454862,"handlersLoadedAt":1795792420111,"settledAt":1795792455142,"outcomes":{"verify-gate":"failed"},"hostCreatedAt":1795792454850}
+```
+
+Mapping (same session throughout):
+
+| Trace lines | Message | Events | Outcome |
+| --- | --- | --- | --- |
+| 140-144 | 1, skill call | session.start, prompt, skill before/after, turn.end | `tool.after` = `result` (repo-harness-tools delivered) |
+| 145-149 | 2, `/agent-harness-verify-gate` | session.start, **prompt**, tool before/after, turn.end | **`prompt` = `result`**; tool pair = `null` (same trigger already recorded) |
+| 150-159 | 3, build + commit | session.start, prompt, an unrelated `verification-before-completion` skill pair, build before/after, commit before, retry before/after, turn.end | build `tool.after` = `result`; first commit `tool.before` = `result` (deny); retry `null`/`null` |
+| 160-164 | 4, second skill call | session.start, prompt, skill before/after, turn.end | `tool.before` and `tool.after` = `null` |
+
+The unrelated skill call in message 3 is the model choosing to load `verification-before-completion`
+before running the build; it matches no rule and delivery is `null`/`null`. It does not affect the
+sequence.
+
+Authoritative OpenCode ledger (verbatim) — one ledger for the session, all three
+`repo-harness-tools` triggers in one entry:
+
+```json
+{"version":1,"generation":0,"entries":{"repo-harness-tools.md":{"sha256":"037a22248342a6823942b6d983c92e0e06564e75ec00523cc3dc675e7633d9ab","generation":0,"state":"delivered","patterns":[],"triggers":["command:\\bpnpm\\s+(run\\s+)?(build|harness:update)(?=\\s|$)","skill:agent-harness-hooked-rules","skill:agent-harness-verify-gate"]},"repo-commit-types.md":{"sha256":"30516ed9c41b0f13fa7c76440caa695e1b136468420666de7f90077c42e9809c","generation":0,"state":"delivered","patterns":["\\bgit\\b[^;&|\\n]*?\\scommit\\b"],"triggers":[]}},"reported":[]}
+```
+
+The denial and the retry in message 3 (verbatim from `pf-oc-seq-3.json`):
+
+```text
+#3 tool="shell" status="error"
+   input: {"command":"git commit --allow-empty -m \"test: live gate\"",...}
+   error: "Commits and PR titles follow Conventional Commits: `type(optional scope): summary`.\n\n- Allowed types: `feat`, `fix`, `perf`, `docs`, `chore`, `ci`, `build`, `refactor`, `test`, `style`, `revert`.\n- `feat` bumps the minor version; `!` after the type or a `BREAKING CHANGE:` line bumps the major version; anything else bumps the patch version.\n- A PR title is at most 92 characters. GitHub squashes with the PR title as the commit subject, so the title picks the bump, and the parser matches `BREAKING CHANGE:` even inside a code fence."
+#4 tool="shell" status="completed"
+   input: {"command":"git commit --allow-empty -m \"test: live gate\"",...}
+   output: "[feat/openspec-ff-change-issue-16 72ebad0] test: live gate\n"
+```
+
+Model-context evidence (OpenCode `metadata.content` blocks):
+
+```text
+message 1, skill:        blocks = 2; lengths 12897, 645  -> block 1 is the repo-harness-tools rule
+message 3, build:        blocks = 2; lengths 61, 645    -> block 1 is the repo-harness-tools rule
+message 3, first commit: blocks = 0 (status error, denied)
+message 4, second skill: blocks = 1; length 12897      -> no rule block
+```
+
+The repeat added nothing: the ledger's mtime is `2026-11-27 15:12:52.986` (the retry commit in
+message 3), while message 4 ran to `15:14:15Z`; the file was never rewritten. Trace lines 162/163
+are `null`/`null`, and the message-4 skill block has exactly the same length as the message-1 skill
+block with no 645-byte tail. The ledger above is the same before and after message 4.
+
+**OpenCode slash prompt remains handler-level.** The trace `prompt` event (line 146) returned
+`result` and the ledger records `skill:agent-harness-verify-gate`. As in the earlier evidence, the
+injected text could not be captured as a model-visible message in `opencode session export`; that
+export contains the rule only in the skill/build turns. The OpenCode slash-prompt evidence is
+therefore handler-level, not model-level.
+
+### A2. Claude Code 2.1.332: one conversation, four `claude -p` messages
+
+Conversation `71de436c-bfe7-4d14-bec1-917b961137d0`. Messages 2-4 used `--continue`; every output
+repeats the same `session_id`.
+
+```bash
+# 1. skill call
+AGENT_HARNESS_TRACE=1 timeout 600 claude -p \
+  'Call the Skill tool exactly once for the skill `agent-harness-hooked-rules`. Report the tool name you used and any extra context the call returned. Do not edit any file.' \
+  --permission-mode bypassPermissions --output-format json \
+  --name "post-fix hooked-rules claude seq" \
+  --debug hooks --debug-file /tmp/opencode/pf-claude-seq-1-debug.log
+# -> session 71de436c-bfe7-4d14-bec1-917b961137d0, exit 0, 15:14:40-15:14:51Z
+
+# 2. the slash prompt
+AGENT_HARNESS_TRACE=1 timeout 600 claude -p --continue '/agent-harness-verify-gate' \
+  --permission-mode bypassPermissions --output-format json \
+  --debug hooks --debug-file /tmp/opencode/pf-claude-seq-2-debug.log
+# -> same session, exit 0, 15:14:51-15:15:10Z
+
+# 3. build, then commit and the identical retry (prompt read from a file)
+AGENT_HARNESS_TRACE=1 timeout 900 claude -p --continue "$(cat /tmp/opencode/pf-seq-3-prompt.txt)" \
+  --permission-mode bypassPermissions --output-format json \
+  --debug hooks --debug-file /tmp/opencode/pf-claude-seq-3-debug.log
+# -> same session, exit 0, 15:15:10-15:15:38Z
+
+# 4. second skill call
+AGENT_HARNESS_TRACE=1 timeout 600 claude -p --continue "$(cat /tmp/opencode/pf-seq-4-prompt.txt)" \
+  --permission-mode bypassPermissions --output-format json \
+  --debug hooks --debug-file /tmp/opencode/pf-claude-seq-4-debug.log
+# -> same session, exit 0, 15:15:38-15:15:50Z
+```
+
+Ordered trace excerpt, lines 165-189 (verbatim):
+
+```json
+{"event":"session.start","processStart":1795792480076.289,"receivedAt":1795792480230,"handlersLoadedAt":1795792480359,"settledAt":1795792480423,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"prompt","processStart":1795792482764.712,"receivedAt":1795792482873,"handlersLoadedAt":1795792482997,"settledAt":1795792483023,"outcomes":{"hooked-rules":"null"}}
+{"event":"tool.before","processStart":1795792484388.837,"receivedAt":1795792484489,"handlersLoadedAt":1795792484583,"settledAt":1795792484598,"outcomes":{"hooked-rules":"null"}}
+{"event":"tool.after","processStart":1795792484701.399,"receivedAt":1795792484791,"handlersLoadedAt":1795792484899,"settledAt":1795792484936,"outcomes":{"hooked-rules":"result"}}
+{"event":"turn.end","processStart":1795792490141.214,"receivedAt":1795792490236,"handlersLoadedAt":1795792490372,"settledAt":1795792490507,"outcomes":{"verify-gate":"no-change"}}
+{"event":"session.start","processStart":1795792494676.628,"receivedAt":1795792494828,"handlersLoadedAt":1795792494985,"settledAt":1795792495142,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"prompt","processStart":1795792497651.159,"receivedAt":1795792497810,"handlersLoadedAt":1795792497963,"settledAt":1795792498044,"outcomes":{"hooked-rules":"result"}}
+{"event":"tool.before","processStart":1795792504004.452,"receivedAt":1795792504242,"handlersLoadedAt":1795792504435,"settledAt":1795792504500,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"tool.after","processStart":1795792505178.367,"receivedAt":1795792505347,"handlersLoadedAt":1795792505492,"settledAt":1795792505539,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"turn.end","processStart":1795792509813.817,"receivedAt":1795792509909,"handlersLoadedAt":1795792510074,"settledAt":1795792510241,"outcomes":{"verify-gate":"no-change"}}
+{"event":"session.start","processStart":1795792515330.065,"receivedAt":1795792515503,"handlersLoadedAt":1795792515867,"settledAt":1795792516017,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"prompt","processStart":1795792518574.648,"receivedAt":1795792518739,"handlersLoadedAt":1795792518941,"settledAt":1795792519016,"outcomes":{"hooked-rules":"null"}}
+{"event":"tool.before","processStart":1795792520573.556,"receivedAt":1795792520713,"handlersLoadedAt":1795792520830,"settledAt":1795792520875,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"tool.after","processStart":1795792526961.325,"receivedAt":1795792527062,"handlersLoadedAt":1795792527161,"settledAt":1795792527212,"outcomes":{"hooked-rules":"result","verify-gate":"null"}}
+{"event":"tool.before","processStart":1795792528721.843,"receivedAt":1795792528833,"handlersLoadedAt":1795792528928,"settledAt":1795792528975,"outcomes":{"hooked-rules":"result","verify-gate":"null"}}
+{"event":"tool.before","processStart":1795792531227.401,"receivedAt":1795792531335,"handlersLoadedAt":1795792531440,"settledAt":1795792531505,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"tool.after","processStart":1795792531871.024,"receivedAt":1795792531998,"handlersLoadedAt":1795792532107,"settledAt":1795792532155,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"tool.before","processStart":1795792532222.777,"receivedAt":1795792532357,"handlersLoadedAt":1795792532472,"settledAt":1795792532516,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"tool.after","processStart":1795792532598.499,"receivedAt":1795792532716,"handlersLoadedAt":1795792532828,"settledAt":1795792532867,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"turn.end","processStart":1795792536823.891,"receivedAt":1795792536935,"handlersLoadedAt":1795792537049,"settledAt":1795792537188,"outcomes":{"verify-gate":"no-change"}}
+{"event":"session.start","processStart":1795792541544.59,"receivedAt":1795792541680,"handlersLoadedAt":1795792541817,"settledAt":1795792541869,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"prompt","processStart":1795792544190.082,"receivedAt":1795792544280,"handlersLoadedAt":1795792544373,"settledAt":1795792544400,"outcomes":{"hooked-rules":"null"}}
+{"event":"tool.before","processStart":1795792546199.454,"receivedAt":1795792546315,"handlersLoadedAt":1795792546417,"settledAt":1795792546439,"outcomes":{"hooked-rules":"null"}}
+{"event":"tool.after","processStart":1795792546618.425,"receivedAt":1795792546746,"handlersLoadedAt":1795792546865,"settledAt":1795792546890,"outcomes":{"hooked-rules":"null"}}
+{"event":"turn.end","processStart":1795792549762.008,"receivedAt":1795792549869,"handlersLoadedAt":1795792549998,"settledAt":1795792550152,"outcomes":{"verify-gate":"no-change"}}
+```
+
+Mapping:
+
+| Trace lines | Message | Events | Outcome |
+| --- | --- | --- | --- |
+| 165-169 | 1, skill call | session.start, prompt, Skill before/after, turn.end | `tool.after` = `result` |
+| 170-174 | 2, `/agent-harness-verify-gate` | session.start, **prompt**, Bash before/after, turn.end | **`prompt` = `result`**; Bash `null`/`null` |
+| 175-184 | 3, build + commit | session.start, prompt, build before/after, commit before, retry before/after, `git log` before/after, turn.end | build `tool.after` = `result`; first commit `tool.before` = `result`; retry `null`/`null` |
+| 185-189 | 4, second skill call | session.start, prompt, Skill before/after, turn.end | both `null` |
+
+Authoritative Claude Code ledger (verbatim) — one ledger for the conversation, all three triggers:
+
+```json
+{"version":1,"generation":0,"entries":{"repo-harness-tools.md":{"sha256":"037a22248342a6823942b6d983c92e0e06564e75ec00523cc3dc675e7633d9ab","generation":0,"state":"delivered","patterns":[],"triggers":["command:\\bpnpm\\s+(run\\s+)?(build|harness:update)(?=\\s|$)","skill:agent-harness-hooked-rules","skill:agent-harness-verify-gate"]},"repo-commit-types.md":{"sha256":"30516ed9c41b0f13fa7c76440caa695e1b136468420666de7f90077c42e9809c","generation":0,"state":"delivered","patterns":["\\bgit\\b[^;&|\\n]*?\\scommit\\b"],"triggers":[]}},"reported":[]}
+```
+
+Denial and retry (verbatim from `pf-claude-seq-3-debug.log` and the transcript):
+
+```text
+2026-11-27T15:15:29.001Z [DEBUG] "Hook PreToolUse (...) returned permissionDecision: deny (reason: Commits and PR titles follow Conventional Commits: `type(optional scope): summary`.
+
+- Allowed types: `feat`, `fix`, `perf`, `docs`, `chore`, `ci`, `build`, `refactor`, `test`, `style`, `revert`.
+- `feat` bumps the minor version; `!` after the type or a `BREAKING CHANGE:` line bumps the major version; anything else bumps the patch version.
+- A PR title is at most 92 characters. GitHub squashes with the PR title as the commit subject, so the title picks the bump, and the parser matches `BREAKING CHANGE:` even inside a code fence.)
+```
+
+The transcript's Bash result for the first attempt is
+`PreToolUse:Bash hook error: Commits and PR titles follow Conventional Commits: ...`, and the retry
+result is `[feat/openspec-ff-change-issue-16 3acac9e] test: live gate`.
+
+Model-context attachments in the transcript — exactly three `hook_additional_context` entries
+carry the 645-byte rule, and none follows the second skill call:
+
+```text
+2026-11-27T15:14:44.961Z  645 bytes  PostToolUse:Skill   (message 1)
+2026-11-27T15:14:58.100Z  645 bytes  UserPromptSubmit    (message 2, the slash prompt)
+2026-11-27T15:15:27.238Z  645 bytes  PostToolUse:Bash    (message 3, the build)
+```
+
+The ledger's mtime is `2026-11-27 15:15:31.473`; message 4 ran `15:15:38-15:15:50Z` and did not
+rewrite it. Trace lines 187/188 are `null`/`null`, and the debug log contains no
+`PostToolUse:Skill` output for message 4.
+
+Both test commits from A were removed with `git reset --hard f2bc786`: OpenCode `72ebad0`, Claude
+Code `3acac9e`.
+
+### B. C1 regression: gated commit as one of three parallel shell hooks
+
+Prompt used for every fresh Claude Code trial (first action, one assistant message):
+
+```text
+Make exactly these three Bash tool calls in ONE assistant message, in parallel, with no tool call before them and no other tool call in that message:
+
+1. `ls`
+2. `ls -la`
+3. `git commit --allow-empty -m "test: parallel gate"`
+
+Then report each call's outcome. Do not edit any file.
+```
+
+Each trial was a new `claude -p` (no `--continue`), then a second `claude -p --continue` retry:
+
+```bash
+AGENT_HARNESS_TRACE=1 timeout 600 claude -p "$(cat /tmp/opencode/pf-parallel-prompt.txt)" \
+  --permission-mode bypassPermissions --output-format json \
+  --debug hooks --debug-file /tmp/opencode/pf-claude-par-N-debug.log
+AGENT_HARNESS_TRACE=1 timeout 600 claude -p --continue "$(cat /tmp/opencode/pf-parallel-retry.txt)" \
+  --permission-mode bypassPermissions --output-format json \
+  --debug hooks --debug-file /tmp/opencode/pf-claude-par-Nb-debug.log
+```
+
+Outcomes:
+
+| Trial | Fresh session | One-message proof | First message | Retry |
+| --- | --- | --- | --- | --- |
+| 1 | `96b36714-4cf9-45f1-b3b9-48c6c27b7fc8` | all three tool_use blocks carry message id `msg_011ChTerLuQLHYQkqEwfe6pX`; the consolidated transcript record also lists 3 Bash calls | `denials=1`, HEAD still `f2bc786` (no commit) | commit `514576c`, then reset |
+| 2 | `949873e0-25f7-45c7-936b-0ded77b7d744` | message id `msg_011ChTethkbMaT`, 3 Bash calls | `denials=1`, HEAD still `f2bc786` | commit `871cbcf`, then reset |
+| 3 | `748f54a6-c2e4-4021-a3ab-233529a65c0d` | message id `msg_011ChTew3326Kg` on all three tool_use records (three records, one call each) | `denials=1`, HEAD still `f2bc786` | commit `e6ad849`, then reset |
+
+Every trial's `permission_denials` entry is the `git commit` tool call, and every denial reason in
+the debug logs is the repo-commit-types text (`Commits and PR titles follow Conventional Commits:
+...`). The trace for the three trials shows three near-simultaneous `tool.before` events, exactly
+one of which returns `result` (the commit), for example trial 1 at lines 192-196:
+
+```json
+{"event":"tool.before","processStart":1795792566132.543,"receivedAt":1795792570974,"handlersLoadedAt":1795792571056,"settledAt":1795792571095,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"tool.after","processStart":1795792566132.543,"receivedAt":1795792571364,"handlersLoadedAt":1795792571463,"settledAt":1795792571502,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"tool.before","processStart":1795792566132.543,"receivedAt":1795792571470,"handlersLoadedAt":1795792571572,"settledAt":1795792571611,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"tool.after","processStart":1795792566132.543,"receivedAt":1795792571848,"handlersLoadedAt":1795792571931,"settledAt":1795792571974,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+{"event":"tool.before","processStart":1795792566132.543,"receivedAt":1795792572109,"handlersLoadedAt":1795792572184,"settledAt":1795792572230,"outcomes":{"hooked-rules":"result","verify-gate":"null"}}
+```
+
+Trials 2 and 3 repeat the same shape at lines 205-209 (`result` on the third `tool.before`) and
+lines 218-222 (`result` on the third `tool.before`). That is the regression fixed by `f2bc786`: the
+gate waited for the sibling worker's lock instead of silently passing.
+
+OpenCode trial, same prompt translated to its `shell` tool:
+
+```bash
+AGENT_HARNESS_TRACE=1 timeout 300 opencode run --standalone --auto --format json \
+  --title "post-fix parallel gate" "$(cat /tmp/opencode/pf-parallel-oc-prompt.txt)"
+```
+
+Session `ses_de26a878bffe0yaKOmOFhqbUOc`; all three shell calls carry message id
+`msg_21d959937001oPBU6YCS20TOHw` and their `state.time.start` values are within 125 ms
+(`1795792715668`, `1795792715777`, `1795792715793`). The commit call is `status="error"` with the
+repo-commit-types text, and `ls`/`ls -la` are `completed`. No commit was created. The ledger is:
+
+```json
+{"version":1,"generation":0,"entries":{"repo-commit-types.md":{"sha256":"30516ed9c41b0f13fa7c76440caa695e1b136468420666de7f90077c42e9809c","generation":0,"state":"pending","patterns":["\\bgit\\b[^;&|\\n]*?\\scommit\\b"],"triggers":[]}},"reported":[]}
+```
+
+The requested second-message OpenCode retry did not run: the host answered that no tool calls were
+allowed for that message and nothing was executed. This is a host/agent behaviour, not a gate
+result; the Claude Code retries above and the OpenCode A sequence cover the passing retry.
+
+### C. Non-matching shell events do not need the lock
+
+`ls` alone was run in fresh contexts on both hosts, then again on Claude Code while a scratch
+process held the worker lock (the same staged lock used for D).
+
+| Run | Context | `ledger.json` | `tool.before` settle time |
+| --- | --- | --- | --- |
+| OpenCode `ls` only | `opencode-ses_de268980effetC7hEgEAZuEGQj` | absent (state folder has only the supervisor's released `gate.lock.1`) | 29 ms (`receivedAt` 1795792801986 -> `settledAt` 1795792802015) |
+| Claude Code `ls` only | `claude-code-d0a50a5e-0f80-48af-984a-edac6397dd22` | absent | 469 ms (includes hook process start; 1795792846736 -> 1795792847205) |
+| Claude Code `ls` while the worker lock is held | same session, `gate.lock.2` live | still absent | 120 ms (1795792887787 -> 1795792887907) |
+
+The third row is the decisive one: the same held lock made the gated commit wait 1179 ms (D), but
+the `ls` event finished in 120 ms and wrote nothing. The trace line is:
+
+```json
+{"event":"tool.before","processStart":1795792882685.64,"receivedAt":1795792887787,"handlersLoadedAt":1795792887867,"settledAt":1795792887907,"outcomes":{"hooked-rules":"null","verify-gate":"null"}}
+```
+
+The `session.start` event in that run took 1168 ms (`1795792882835 -> 1795792884003`) because the
+startup diagnostic deliberately waits for the lock; that is not the `ls` tool event. No
+`ledger.json` existed before or after any of these runs.
+
+The unit test covering the skip path is `a shell event that matches no rule skips the lock instead
+of waiting for it` in `tests/agent-harness/hooked-rules-delivery.test.mjs` (it holds the lock and
+asserts the call returns in under 500 ms and writes no ledger).
+
+### D. A lock held past the wait raises the manual notice
+
+Staged on Claude Code in the `d0a50a5e-0f80-48af-984a-edac6397dd22` session, whose context had no
+commit-rule entry. A detached `sleep 90` (pid `3016312`) held the newest supervisor lock:
+
+```text
+<state dir>/gate.lock.2 = {"pid":3016312,"at":...,"pgids":[]}
+```
+
+Then:
+
+```bash
+AGENT_HARNESS_TRACE=1 timeout 600 claude -p --continue "$(cat /tmp/opencode/pf-hold-prompt.txt)" \
+  --permission-mode bypassPermissions --output-format json \
+  --debug hooks --debug-file /tmp/opencode/pf-claude-hold-debug.log
+```
+
+Result: `is_error=false`, `permission_denials=[]`, and the commit ran:
+
+```text
+[feat/openspec-ff-change-issue-16 3cd7847] test: hold gate
+```
+
+The manual notice was delivered as PreToolUse `additionalContext` (182 chars, not a denial):
+
+```text
+hook hooked-rules failed on tool.before: the ledger lock could not be won in time. Read the hooked rules listed in AGENTS.md (.agents/hooked-rules/) by hand at the moments they name.
+```
+
+It appears both in the transcript's `hook_additional_context` at `15:21:11.276Z` and in
+`pf-claude-hold-debug.log`:
+
+```text
+2026-11-27T15:21:11.266Z [DEBUG] Hook PreToolUse (...) provided additionalContext (182 chars)
+```
+
+The trace line is the ~1 s retry then failure, with no ledger write:
+
+```json
+{"event":"tool.before","processStart":1795792869924.61,"receivedAt":1795792870058,"handlersLoadedAt":1795792870193,"settledAt":1795792871237,"outcomes":{"hooked-rules":"failed","verify-gate":"null"}}
+```
+
+`receivedAt -> settledAt` is 1179 ms; `outcomes["hooked-rules"]` is `failed`; `ledger.json` is
+absent; and the host did not deny the call. The scratch holder and `gate.lock.2` were removed and
+the test commit was reset.
+
+The unit tests for this behaviour are `a held lock fails a gated command open with the manual
+notice and records nothing` and `a contended supervisor lock is retried so the gate still denies
+within the wait`, both in `tests/agent-harness/hooked-rules-delivery.test.mjs`.
+
+### Post-fix verification
+
+```bash
+env -u AGENT_HARNESS_TRACE node --test tests/agent-harness/hooked-rules-delivery.test.mjs
+# ℹ tests 61
+# ℹ pass 61
+# ℹ fail 0
+
+env -u AGENT_HARNESS_TRACE node --test tests/agent-harness/hooked-rules-cli.test.mjs
+# ℹ tests 23
+# ℹ pass 23
+# ℹ fail 0
+```
+
+### Cleanup and final state
+
+Test commits removed (each with `git reset --hard f2bc786`):
+
+```text
+72ebad0  test: live gate        (A, OpenCode)
+3acac9e  test: live gate        (A, Claude Code)
+514576c  test: parallel gate    (B trial 1)
+871cbcf  test: parallel gate    (B trial 2)
+e6ad849  test: parallel gate    (B trial 3)
+3cd7847  test: hold gate        (D)
+```
+
+The temporary skill links were removed:
+
+```bash
+rm -f .claude/skills/agent-harness-hooked-rules .claude/skills/agent-harness-verify-gate \
+      .opencode/skills/agent-harness-hooked-rules .opencode/skills/agent-harness-verify-gate
+rmdir .claude/skills .opencode/skills .opencode
+```
+
+Final state before committing this evidence section:
+
+```text
+git status --porcelain    empty
+git rev-parse HEAD        f2bc7862a12b871c5ca1676ac603c1b507c3cb5e
+```
+
+Only the hook-runtime trace and ledger state under the git directory remain, as expected.
+
+### Post-fix concerns
+
+1. **OpenCode slash prompt is still handler-level only.** The `prompt` event returns `result` and
+   the ledger records `skill:agent-harness-verify-gate`, but the injected text is not visible in
+   `opencode session export`. Claude Code's equivalent is model-level (the 645-byte
+   `UserPromptSubmit` attachment quoted above).
+2. **The OpenCode B retry did not execute.** After the parallel denial the host refused to make
+   tool calls in the next message, so only the denial is recorded for that trial. The Claude Code
+   retries and the OpenCode A retry both show the identical retry passing.
+3. **`AGENT_HARNESS_TRACE=1` still perturbs the verify-gate tests.** OpenCode turn ends show
+   `verify-gate:"failed"` (runtime shutdown after the handler time budget) and Claude Code turn
+   ends show `no-change`; no verify block interfered with the hook events above. This is the
+   pre-existing test fragility described in the earlier report, not a hooked-rules result.
+4. **The D lock was staged by hand** with a real live `sleep` process and a well-formed
+   `gate.lock.2`; it was removed immediately after the run. The behaviour matches the unit test,
+   but it is a staged condition, not an organic contention run.
