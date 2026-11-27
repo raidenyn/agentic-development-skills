@@ -236,11 +236,8 @@ export async function main({
         resolved: true,
       });
     }
-    if (
-      (type === 'tool.before' || type === 'tool.after') &&
-      !anyHandlerWants(repoRoot, mapped.event.tool?.kind ?? 'other')
-    ) {
-      // No installed handler wants this kind: return before loading any handler (design D2).
+    if ((type === 'tool.before' || type === 'tool.after') && !anyHandlerWants(repoRoot, mapped.event)) {
+      // No installed handler wants this event: return before loading any handler (design D2).
       writeTrace(
         repoRoot,
         {

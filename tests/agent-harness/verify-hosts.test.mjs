@@ -373,3 +373,59 @@ test('an unreadable tool.json falls back to the full load', async () => {
   const text = JSON.parse(res.stdout).hookSpecificOutput.additionalContext;
   assert.match(text, /hook verify-gate was not loaded/);
 });
+
+// ---- skill fields: a rules-style declaration and skill-file reads (design D1) -----------------
+
+async function rulesStyleStub(r) {
+  const src = join(r.gitDir, 'src-skill-stub');
+  mkdirSync(src, { recursive: true });
+  writeFileSync(
+    join(src, 'tool.json'),
+    JSON.stringify({ name: 'skill-stub', version: '0.1.0', handler: true, tools: ['shell', 'skill'] }),
+  );
+  writeFileSync(
+    join(src, 'handler.mjs'),
+    "export default { name: 'skill-stub', events: ['tool.after'],\n" +
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the string is source text that holds ${...} on purpose
+      '  handle: (e) => ({ context: `stub ${e.skill}|${e.skillVia}|${e.tool.kind}|${e.ok}` }) };\n',
+  );
+  const install = installTool({ sourceDir: src, repoRoot: r.dir });
+  assert.equal(install.code, 0, install.messages.join('\n'));
+}
+
+const readPayload = (r, path) => ({
+  ...JSON.parse(fxClaude('PostToolUse-Read', r.dir)),
+  tool_input: { file_path: join(r.dir, path) },
+});
+
+test('a plain Read and a missing SKILL.md with a rules-style handler installed are traced as skipped', async () => {
+  const r = await installed();
+  await rulesStyleStub(r);
+  await r.write('src/a.mts', 'a\n');
+  for (const path of ['src/a.mts', 'skills/x/SKILL.md']) {
+    const res = await claudeRun(r, JSON.stringify(readPayload(r, path)), { AGENT_HARNESS_TRACE: '1' });
+    assert.equal(res.code, 0, res.stderr);
+    assert.equal(res.stdout, '', path);
+    const t = traceLines(r).at(-1);
+    assert.equal(t.event, 'tool.after');
+    assert.equal(t.skipped, 'no-subscriber', path);
+    assert.deepEqual(t.outcomes, {});
+  }
+});
+
+test('a Read of a skill file loads the handlers and the rules-style stub sees the skill', async () => {
+  const r = await installed();
+  await rulesStyleStub(r);
+  await r.write('skills/agent-harness-verify-gate/SKILL.md', '# gate\n');
+  const res = await claudeRun(r, JSON.stringify(readPayload(r, 'skills/agent-harness-verify-gate/SKILL.md')), {
+    AGENT_HARNESS_TRACE: '1',
+  });
+  assert.equal(res.code, 0, res.stderr);
+  assert.equal(
+    JSON.parse(res.stdout).hookSpecificOutput.additionalContext,
+    'stub agent-harness-verify-gate|read|read|true',
+  );
+  const t = traceLines(r).at(-1);
+  assert.equal(typeof t.handlersLoadedAt, 'number');
+  assert.equal(t.outcomes['skill-stub'], 'result');
+});

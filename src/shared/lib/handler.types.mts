@@ -3,7 +3,7 @@
 
 export type HarnessEvent = 'tool.before' | 'tool.after' | 'prompt' | 'turn.end' | 'compact' | 'session.start';
 export type HostName = 'claude-code' | 'opencode' | (string & {});
-export type ToolKind = 'shell' | 'edit' | 'read' | 'other';
+export type ToolKind = 'shell' | 'edit' | 'read' | 'skill' | 'other';
 
 // A host event after the adapter normalized it. Fields beyond `type` and `host` depend on the type.
 export interface EventPayload {
@@ -14,6 +14,12 @@ export interface EventPayload {
   command?: string;
   // tool.after on an edit tool: repo-relative paths with forward slashes.
   files?: string[];
+  // on a tool event: the invoked skill's name, for a skill call or a read of its SKILL.md.
+  skill?: string;
+  // how a tool event reached the skill: a Skill call, or a Read of the skill file.
+  skillVia?: 'call' | 'read';
+  // tool.after: whether the call succeeded.
+  ok?: boolean;
   prompt?: string;
   afterCompact?: boolean;
   // turn.end: running background subagents.

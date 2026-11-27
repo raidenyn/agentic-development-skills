@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { ASSETS, fakeOpencodeCtx, tempRepo, until } from './helpers.mjs';
 
 const lib = (f) => import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', f)).href);
-const { createOpencodePlugin, eventDeadlines } = await lib('opencode-adapter.mjs');
+const { createOpencodePlugin, eventDeadlines, toToolEvent } = await lib('opencode-adapter.mjs');
 const { createRuntime } = await lib('runtime.mjs');
 const { installTool } = await lib('install.mjs');
 const { sessionStateDir } = await lib('state.mjs');
@@ -699,4 +699,45 @@ test('after dispose the hooks pass through and turn ends are not run', async () 
   turn(p.emit, ROOT);
   await sleep(50);
   assert.equal(seen.length, 0);
+});
+
+// ---- skill fields and tool outcome (design D1) --------------------------------------------------
+
+test('a skill call takes its name from the tool arguments, never from the call id', () => {
+  const call = (input, id = 'call_1') => toToolEvent('tool.before', { tool: 'skill', id, input }, '/repo');
+  const byId = call({ id: 'a' });
+  assert.equal(byId.tool.kind, 'skill');
+  assert.equal(byId.skill, 'a');
+  assert.equal(byId.skillVia, 'call');
+  assert.equal(call({ name: 'b' }).skill, 'b');
+  assert.equal(call({}).skill, undefined);
+  assert.equal(call({}, 'call_9').skill, undefined);
+});
+
+test('a read of a SKILL.md carries the skill; grep and glob do not', async () => {
+  const r = await repo();
+  await r.write('skills/x/SKILL.md', '# x\n');
+  const read = (tool, input) => toToolEvent('tool.after', { tool, id: 'call_1', input }, r.dir);
+  const direct = read('read', { path: 'skills/x/SKILL.md' });
+  assert.equal(direct.tool.kind, 'read');
+  assert.equal(direct.skill, 'x');
+  assert.equal(direct.skillVia, 'read');
+  assert.equal(read('read', { filePath: 'skills/x/SKILL.md' }).skill, 'x');
+  assert.equal(read('grep', { path: 'skills/x/SKILL.md' }).skill, undefined);
+  assert.equal(read('glob', { path: 'skills/x/SKILL.md' }).skill, undefined);
+});
+
+test('tool.after carries ok from the status and, for shell, the exit code', () => {
+  const after = (input) => toToolEvent('tool.after', { id: 'call_1', ...input }, '/repo');
+  const shell = (exit) => ({
+    tool: 'shell',
+    input: { command: 'x' },
+    status: 'completed',
+    result: { metadata: { exit } },
+  });
+  assert.equal(after(shell(1)).ok, false);
+  assert.equal(after(shell(0)).ok, true);
+  assert.equal(after({ tool: 'read', input: { path: 'a' }, status: 'error' }).ok, false);
+  const before = toToolEvent('tool.before', { tool: 'shell', id: 'c', input: { command: 'x' } }, '/repo');
+  assert.equal(Object.hasOwn(before, 'ok'), false);
 });

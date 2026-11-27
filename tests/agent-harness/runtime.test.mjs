@@ -398,3 +398,24 @@ test('a proof called without a signal is aborted at its deadline', async () => {
   assert.match(text, /proof slow timed out/);
   assert.equal(aborted, true);
 });
+
+// ---- skill declarations (design D1) ------------------------------------------------------------
+
+test('declaredKinds accepts skill', () => {
+  assert.deepEqual(declaredKinds({ tools: ['shell', 'skill'] }), ['shell', 'skill']);
+});
+
+test('a handler declaring skill is called for a skill read and not for a plain read', async () => {
+  const handler = { name: 'h', events: ['tool.after'], tools: ['shell', 'skill'], handle: () => ({ context: 'x' }) };
+  const r = rt([handler]);
+  const skillRead = await r.dispatch(
+    { type: 'tool.after', host: 'claude-code', tool: { name: 'Read', kind: 'read', input: {} }, skill: 'x' },
+    ids,
+  );
+  assert.equal(skillRead.context, 'x');
+  const plainRead = await r.dispatch(
+    { type: 'tool.after', host: 'claude-code', tool: { name: 'Read', kind: 'read', input: {} } },
+    ids,
+  );
+  assert.equal(plainRead.context, undefined);
+});

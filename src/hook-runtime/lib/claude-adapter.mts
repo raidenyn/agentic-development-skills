@@ -1,6 +1,7 @@
 // Claude Code adapter (design D2 tool kinds, D3 event mapping and result delivery): hook payload to
 // normalized event, and merged dispatch result to the host's hook JSON.
 import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { skillFromPath } from './skill-path.mts';
 import type { AdaptedEvent, DispatchResult, EventPayload, HarnessEvent, ToolKind } from './handler.types.mts';
 
 export const HOST = 'claude-code';
@@ -37,6 +38,7 @@ const KINDS: Record<string, ToolKind> = {
   Read: 'read',
   Glob: 'read',
   Grep: 'read',
+  Skill: 'skill',
 };
 
 const isObject = (v: unknown): v is Record<string, any> => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -70,12 +72,23 @@ export function toEvent(payload: unknown, repoRoot: string): AdaptedEvent | null
     const toolName = String(payload.tool_name ?? '');
     const input = isObject(payload.tool_input) ? payload.tool_input : {};
     const kind: ToolKind = Object.hasOwn(KINDS, toolName) ? (KINDS[toolName] as ToolKind) : 'other';
+    const base = typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : repoRoot;
     event.tool = { name: toolName, kind, input, callId: payload.tool_use_id };
     if (kind === 'shell' && typeof input.command === 'string') event.command = input.command;
-    if (kind === 'edit') {
-      const base = typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : repoRoot;
-      event.files = editFiles(input, repoRoot, base);
+    if (kind === 'edit') event.files = editFiles(input, repoRoot, base);
+    if (kind === 'skill' && typeof input.skill === 'string' && input.skill) {
+      event.skill = input.skill;
+      event.skillVia = 'call';
     }
+    // Only the Read tool can read a skill file: Glob and Grep share the kind but never resolve one.
+    if (toolName === 'Read') {
+      const skill = skillFromPath(input.file_path, base);
+      if (skill) {
+        event.skill = skill;
+        event.skillVia = 'read';
+      }
+    }
+    if (type === 'tool.after') event.ok = name === 'PostToolUse';
   } else if (type === 'prompt') {
     event.prompt = typeof payload.prompt === 'string' ? payload.prompt : '';
   } else if (type === 'session.start') {
