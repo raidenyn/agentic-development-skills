@@ -29,9 +29,9 @@
 
 ## 5. Skill, versions and build
 
-- [ ] 5.1 Add the README Skills row by hand. Write `skills/agent-harness-hooked-rules/SKILL.md` (under 500 lines). Cover when to use it, the rule format with an example, the three moments, once per context and re-delivery, the regex dialect, the keys not supported yet, the pointer block, the Onboard and Update sections with the untrusted-checkout warning, and Remove. Make the description start with "Use when".
-- [ ] 5.2 Update `skills/agent-harness-hook-runtime/SKILL.md` for the `skill` kind, `skill`, `skillVia` and `ok` fields, and the `skill` declaration rule.
-- [ ] 5.3 Add the hooked-rules `update` to `harness:update` in `package.json`, after the hook-runtime update. Run `pnpm run build` and confirm that the verify gate's built files are unchanged.
+- [x] 5.1 Add the README Skills row by hand. Write `skills/agent-harness-hooked-rules/SKILL.md` (under 500 lines). Cover when to use it, the rule format with an example, the three moments, once per context and re-delivery, the regex dialect, the keys not supported yet, the pointer block, the Onboard and Update sections with the untrusted-checkout warning, and Remove. Make the description start with "Use when".
+- [x] 5.2 Update `skills/agent-harness-hook-runtime/SKILL.md` for the `skill` kind, `skill`, `skillVia` and `ok` fields, and the `skill` declaration rule.
+- [x] 5.3 Add the hooked-rules `update` to `harness:update` in `package.json`, after the hook-runtime update. Run `pnpm run build` and confirm that the verify gate's built files are unchanged.
 
 ## 6. Onboard this repository
 
