@@ -68,6 +68,34 @@ The `/agent-harness-verify-gate` prompt reached the `prompt` hook on both hosts 
 
 ---
 
+## What is left to later work
+
+- **#17** — `requires` and `exempt` with named proofs, and the proofs they name. This version
+  rejects both keys as unsupported; veles's rule files that use them stay invalid until #17.
+- **#18** — `stops`, the OpenSpec stop reminder, the `opsx:` skill aliases and apply-skill arming.
+  `stops` is rejected here, and an `opsx:` name matches only literally in this version.
+- **#23** — running veles's full rule-case suite and onboarding veles and line-mcp. Only the
+  grammar, two gate patterns and the moments are ported and tested here.
+- **Follow-ups recorded but not done** — a match-time guard for pathological regexes (a
+  synchronous match can run past the handler deadline; the supervisor can only terminate the
+  worker afterwards), and recovery when a lock's release fails mid-flight.
+
+## Residual findings accepted before merge
+
+- **Failed unlock can strand a context's lock** — if the supervisor's release throws, the
+  ownership record is dropped and a later acquisition can treat the lock as live until restart.
+  The direction is fail-open (no deny), and the trigger is a filesystem error in the release path.
+- **Directory failure at a contended `session.start`** — the handler returns before reading the
+  rules folder, so an unreadable folder is reported at the next non-contended startup rather
+  than on that one.
+- **Write before the unlock acknowledgement** — the ledger is written after the abort/deadline
+  check but before the supervisor confirms the unlock; a retirement in that window can record a
+  delivery the host never showed.
+- **Worker contention fails open immediately** — a briefly held worker lock no longer retries for
+  up to a second as design D5 describes; the call passes and records nothing.
+
+---
+
 ## Next step
 
 Run `/opsx:verify` on this change.
