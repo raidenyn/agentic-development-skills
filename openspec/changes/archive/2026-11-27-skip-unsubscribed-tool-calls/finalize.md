@@ -35,11 +35,19 @@ separate `.worktrees/<change>` branch to merge. The branch is pushed and tracked
 
 - **Baseline status at finish**: `passing`
 
-`pnpm run check` 414/414; `python3 scripts/skills.py validate` 0 errors/warnings;
+`pnpm run check` 451/451 after merging `main`; `python3 scripts/skills.py validate` 0 errors/warnings;
 `claude plugin validate .` passed; `python3 -m unittest discover -s scripts -p 'test_*.py'` 65 tests OK.
 The docs-only commits after the run were re-validated with `skills.py validate` and both tool `check` commands.
 
 ---
+
+## Branch update (after the first push)
+
+`main` advanced with #68 (released as `v0.7.0`) and #69 while this PR was open. The branch merged
+`origin/main` in `61614b2`, resolved the version conflict by bumping to hook-runtime `0.1.5` and
+verify-gate `0.2.4`, regenerated the assets, installed copies and lock, and re-ran the full check
+(451/451). The delta specs and `SKILL.md` merged so both this change's `tools` text and #68's
+`stale`/signal text are present.
 
 ## Next step
 
