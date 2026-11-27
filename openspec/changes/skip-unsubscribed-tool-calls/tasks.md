@@ -1,9 +1,9 @@
 ## 1. Declared tool kinds in dispatch
 
-- [ ] 1.1 Add the optional `tools?: readonly ToolKind[]` to `Handler` in `src/shared/lib/handler.types.mts` and `tools?: unknown` to `ToolMeta` in `src/shared/lib/lock.types.mts`. Both are additive.
-- [ ] 1.2 In `src/hook-runtime/lib/runtime.mts`, export `declaredKinds(meta)`. It returns the valid, non-empty list of known kinds, or `null`, which means every kind. In `loadHandlers`, pass it from `tool.json` onto the started handler as `tools`.
-- [ ] 1.3 In `dispatch`, skip a handler on `tool.before`/`tool.after` when `declaredKinds(handler)` is non-null and excludes `event.tool.kind`. An invalid `tools` on an in-process handler means every kind.
-- [ ] 1.4 Add tests in `tests/agent-harness/runtime.test.mjs` for the filter, for a missing key and for an invalid key. These are the delta spec scenarios under "Handler loading and dispatch".
+- [x] 1.1 Add the optional `tools?: readonly ToolKind[]` to `Handler` in `src/shared/lib/handler.types.mts` and `tools?: unknown` to `ToolMeta` in `src/shared/lib/lock.types.mts`. Both are additive.
+- [x] 1.2 In `src/hook-runtime/lib/runtime.mts`, export `declaredKinds(meta)`. It returns the valid, non-empty list of known kinds, or `null`, which means every kind. In `loadHandlers`, pass it from `tool.json` onto the started handler as `tools`.
+- [x] 1.3 In `dispatch`, skip a handler on `tool.before`/`tool.after` when `declaredKinds(handler)` is non-null and excludes `event.tool.kind`. An invalid `tools` on an in-process handler means every kind.
+- [x] 1.4 Add tests in `tests/agent-harness/runtime.test.mjs` for the filter, for a missing key and for an invalid key. These are the delta spec scenarios under "Handler loading and dispatch".
 
 ## 2. Verify gate declaration
 
