@@ -90,7 +90,7 @@ The search skips archived threads, so an archived conductor never stops the run.
 | exactly `<title>` | reuse |
 | anything else, `<old title>` included | change: show the old title and `<title>` |
 
-A thread whose launch line names another board never gets here: Preflight stopped it.
+A thread whose launch line is missing or names another board gets here only in a dry run, which Preflight lets go on. There this table is not used: plan the rename as "in the conductor thread", as [the triggers](#webhook) are planned.
 
 Write, only in this thread: call `t3_thread_update` with `action` `"rename"`, `title` `<title>` and no `threadId`. Read it back with `t3_thread_read`: `thread.title` must equal `<title>`. A refused rename is not tried another way: the owner step is "Rename this thread to `<title>`, exactly." A wrong title does not stop the wakes, which take the board from the launch line, but each wake reports it as a gap.
 
@@ -523,7 +523,7 @@ In the survey, the URL is not known yet. The plan lists each repository as "regi
 
 The trigger exists, so its URL is not known in this run: only its creation returned it. Ask for no secret and register no hook. The `Webhook owner steps:` list is carried instead.
 
-Read this thread's own messages, newest first, as [The backward scan](triggers-github.md#the-backward-scan) does (`t3_thread_read` with `view` `"messages"`, `limit` 100, `runLimit` 50 and `maxCharsPerItem` 20000), into `<work>/scan-<k>.json`. Without `runLimit` 50 the tool returns only the current run and the carried list is wrong; with `view` `"activity"` the tool calls and their output make the pages of a long conductor thread too large to read. Read the next page, with `beforePosition` set to `earlierPosition`, until the pages read hold a report with a `Webhook owner steps:` line and every repository of `<work>/repos.txt` is named by one of the reports read, or until `earlierPosition` is null. Older pages cannot change the result: the carried list comes from the newest report, and a repository already named is not added. Then:
+Read this thread's own messages, newest first, as [The backward scan](triggers-github.md#the-backward-scan) does (`t3_thread_read` with `view` `"messages"`, `limit` 100, `runLimit` 50 and `maxCharsPerItem` 20000), into `<work>/scan-<k>.json`. Without `runLimit` 50 the tool returns only the current run and the carried list is wrong; with `view` `"activity"` the tool calls and their output make the pages of a long conductor thread too large to read. Read the next page, with `beforePosition` set to `earlierPosition`, until the pages read hold a report with a `Webhook owner steps:` line and every repository of `<work>/repos.txt` is named by one of the reports read that hold a `Webhook owner steps:` line, as the `jq` below counts them, or until `earlierPosition` is null. Older pages cannot change the result: the carried list comes from the newest report, and a repository already named is not added. Then:
 
 ```bash
 jq -s 'add | unique_by(.position)' <work>/scan-*.json | jq -r --rawfile repos <work>/repos.txt '

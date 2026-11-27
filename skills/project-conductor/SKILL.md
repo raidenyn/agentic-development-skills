@@ -81,7 +81,7 @@ Preflight writes nothing.
 
 Reference: [The rename](references/onboarding-github.md#the-rename). Spec: The onboarding thread becomes the conductor.
 
-Survey: this thread's title. Exactly `<board title> Conductor`: reuse. Anything else, the old form `project-conductor <board URL>` included: change. (Preflight has already stopped a thread whose launch line names another board.)
+Survey: this thread's title. Exactly `<board title> Conductor`: reuse. Anything else, the old form `project-conductor <board URL>` included: change. In a thread whose launch line is missing or names another board, which only a dry run gets past Preflight, plan the rename as "in the conductor thread", as the triggers are.
 
 Write: rename this thread with `t3_thread_update` `rename`, then read the title back. A refused rename is an owner step.
 

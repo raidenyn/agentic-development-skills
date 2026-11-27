@@ -9,7 +9,7 @@ The placeholders are those of [run-github.md](run-github.md#preflight): `<work>`
 | `<conductor project>` | The conductor thread's T3 project: `thread.projectId` of the `t3_thread_read` answer in [Identity](run-github.md#identity). |
 | `<reconcile>` | `reconcileMinutes` of `<work>/settings.json`: a whole number from 1 to 1440. |
 
-Every procedure here runs in the conductor thread itself, after the identity check of [Preflight](run-github.md#preflight). An identity failure stops it before any trigger call. Inside onboarding, which runs before the thread has its title and the block its `conductor`, onboarding's own [Preflight](onboarding-github.md#preflight) and [Conductor thread](onboarding-github.md#conductor-thread) step replace the identity check. A `null` `reconcileMinutes` (a settings gap) stops every trigger write except the `enabled: false` writes of [End of the board](#end-of-the-board), which need no setting: the report names the gap.
+Every procedure here runs in the conductor thread itself, after the identity check of [Preflight](run-github.md#preflight). An identity failure stops it before any trigger call. Inside onboarding, which runs before the block has its `conductor`, onboarding's own [Preflight](onboarding-github.md#preflight) and [Conductor thread](onboarding-github.md#conductor-thread) step replace the identity check. A `null` `reconcileMinutes` (a settings gap) stops every trigger write except the `enabled: false` writes of [End of the board](#end-of-the-board), which need no setting: the report names the gap.
 
 Nothing here keeps state. Which repositories have a hook, and which are an owner step, is read again each time from GitHub and from this thread's own reports.
 
