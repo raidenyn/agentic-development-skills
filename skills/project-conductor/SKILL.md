@@ -420,4 +420,6 @@ Onboarding runs it for each repository of the board; the owner runs it alone wit
 2. **With admin,** list the repository's hooks. Reuse the hook whose `config.url` equals the URL and set its events to `issues` and `pull_request`; otherwise create one hook with the URL, the secret, `content_type` `json` and those two events. Read it back.
 3. **Without admin, or when a write is refused,** try nothing else. The report gives the owner's steps of [Owner steps](references/triggers-github.md#owner-steps): the webhook settings page, the payload URL, the content type `application/json`, "the secret you gave at onboarding", and the events "Issues" and "Pull requests".
 
+4. **When the owner says they added a hook** that was an owner step, run it again without URL or secret, as [Done by the owner](references/triggers-github.md#done-by-the-owner) says. With admin, find the hook by the trigger's id in its URL and report `reused <id>`. Without admin, report `done by the owner, not checked: not an admin`. Either way the repository leaves the `Webhook owner steps:` list.
+
 The secret is never printed or stored. A standalone run ends with its report and the `Webhook owner steps:` line, listing every repository whose registration is an owner step after this run.
