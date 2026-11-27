@@ -20,8 +20,8 @@
 
 ## 4. Versions, build and docs
 
-- [ ] 4.1 Bump `src/hook-runtime/tool.json` to 0.1.4 and `src/verify-gate/tool.json` to 0.2.3, then run `pnpm run harness:update`.
-- [ ] 4.2 Update `skills/agent-harness-hook-runtime/SKILL.md` in three places. Document the `tools` key in the handler `tool.json` shape. Add `tools?` to the handler interface block. Reword when the `was not loaded` notice appears on Claude Code: at events that a handler would receive. Add `skipped?` to the trace-shape comment in `src/hook-runtime/lib/runtime.mts`.
+- [x] 4.1 Bump `src/hook-runtime/tool.json` to 0.1.4 and `src/verify-gate/tool.json` to 0.2.3, then run `pnpm run harness:update`.
+- [x] 4.2 Update `skills/agent-harness-hook-runtime/SKILL.md` in three places. Document the `tools` key in the handler `tool.json` shape. Add `tools?` to the handler interface block. Reword when the `was not loaded` notice appears on Claude Code: at events that a handler would receive. Add `skipped?` to the trace-shape comment in `src/hook-runtime/lib/runtime.mts`.
 
 ## 5. Evidence
 
