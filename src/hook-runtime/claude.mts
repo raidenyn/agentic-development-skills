@@ -7,7 +7,7 @@ import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { capabilityNotice, HOST_CAPABILITIES } from './lib/capabilities.mts';
 import { CLAUDE_EVENTS, HOST, toEvent, toOutput } from './lib/claude-adapter.mts';
-import { createRuntime, failureNotice, loadHandlers, OUTPUT_MS, writeTrace } from './lib/runtime.mts';
+import { anyHandlerWants, createRuntime, failureNotice, loadHandlers, OUTPUT_MS, writeTrace } from './lib/runtime.mts';
 import type { DispatchResult } from './lib/handler.types.mts';
 
 interface SpawnRun {
@@ -217,6 +217,25 @@ export async function main({
         now: startClock,
         resolved: true,
       });
+    }
+    if (
+      (type === 'tool.before' || type === 'tool.after') &&
+      !anyHandlerWants(repoRoot, mapped.event.tool?.kind ?? 'other')
+    ) {
+      // No installed handler wants this kind: return before loading any handler (design D2).
+      writeTrace(
+        repoRoot,
+        {
+          event: type,
+          processStart: performance.timeOrigin,
+          receivedAt: start,
+          settledAt: now(),
+          skipped: 'no-subscriber',
+          outcomes: {},
+        },
+        env,
+      );
+      return empty;
     }
     const { handlers, problems } = await loadHandlers(repoRoot);
     const handlersLoadedAt = now();

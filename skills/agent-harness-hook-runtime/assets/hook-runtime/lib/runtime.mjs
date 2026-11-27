@@ -110,6 +110,30 @@ export function declaredKinds(meta) {
   return kinds;
 }
 
+// Whether any installed handler tool could want a tool call of this kind (design D2). A missing or
+// unreadable lock, tool.json or `tools` list means every kind, so the caller loads handlers instead
+// of skipping. Returns false only when every handler tool provably excludes the kind.
+export function anyHandlerWants(repoRoot, kind) {
+  let lock;
+  try {
+    lock = readLock(repoRoot);
+  } catch {
+    return true;
+  }
+  for (const name of Object.keys(lock.tools)) {
+    let meta;
+    try {
+      meta = JSON.parse(readFileSync(join(repoRoot, '.agents', 'harness', name, 'tool.json'), 'utf8'));
+    } catch {
+      return true;
+    }
+    if (!isObject(meta) || meta.handler !== true) continue;
+    const kinds = declaredKinds(meta);
+    if (!kinds || kinds.includes(kind)) return true;
+  }
+  return false;
+}
+
 export function createRuntime({ repoRoot, host, handlers = [], problems = [], now = Date.now, budgetMs } = {}) {
   const sorted = [...handlers].sort(byName);
 

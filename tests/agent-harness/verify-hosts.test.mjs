@@ -3,11 +3,11 @@
 // root, default handler budget), plus the AGENT_HARNESS_TRACE trace lines.
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ASSETS, fakeOpencodeCtx, runNode, until } from './helpers.mjs';
-import { installBoth, verifyRepo } from './verify-helpers.mjs';
+import { installBoth, toolStateDir, verifyRepo } from './verify-helpers.mjs';
 
 const { createOpencodePlugin } = await import(
   pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'opencode-adapter.mjs')).href
@@ -254,4 +254,117 @@ test("OpenCode: a passing edit run's output is appended to result.content", asyn
     input.result.content.find((c) => String(c.text ?? '').startsWith('verify: '))?.text,
     `verify: sh ${r.script} passed after the edit of README.md:\n\nnote from lint\n`,
   );
+});
+
+// ---- launcher skip: no installed handler wants the call's kind ---------------------------------
+
+const traceLines = (r) =>
+  readFileSync(join(r.gitDir, 'agent-harness', 'hook-runtime', 'trace.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+
+const claudeRun = (r, input, env = {}) =>
+  runNode(CLAUDE_MJS, [], { cwd: r.dir, input, env: { CLAUDE_PROJECT_DIR: r.dir, ...env } });
+
+test('a Read with only the verify gate loads no handler and traces the skip', async () => {
+  const r = await installed();
+  const post = fxClaude('PostToolUse-Read', r.dir);
+  const inputs = [
+    post,
+    fxClaude('PreToolUse-Read', r.dir),
+    JSON.stringify({ ...JSON.parse(post), hook_event_name: 'PostToolUseFailure' }),
+  ];
+  for (const input of inputs) {
+    const res = await claudeRun(r, input, { AGENT_HARNESS_TRACE: '1' });
+    assert.equal(res.code, 0, res.stderr);
+    assert.equal(res.stdout, '');
+    const t = traceLines(r).at(-1);
+    assert.equal(t.skipped, 'no-subscriber');
+    assert.deepEqual(t.outcomes, {});
+    assert.equal('handlersLoadedAt' in t, false);
+  }
+});
+
+test('an Edit still loads the gate', async () => {
+  const r = await installed();
+  await r.write('README.md', 'hello world\n');
+  const res = await claudeRun(r, fxClaude('PostToolUse-Edit', r.dir), { AGENT_HARNESS_TRACE: '1' });
+  assert.equal(res.code, 0, res.stderr);
+  const t = traceLines(r).at(-1);
+  assert.equal(typeof t.handlersLoadedAt, 'number');
+  assert.ok(t.outcomes['verify-gate'], JSON.stringify(t.outcomes));
+});
+
+test('a handler without tools still loads on Read', async () => {
+  const r = await installed();
+  const src = join(r.gitDir, 'src-notools');
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, 'tool.json'), JSON.stringify({ name: 'notools', version: '0.1.0', handler: true }));
+  writeFileSync(
+    join(src, 'handler.mjs'),
+    "export default { name: 'notools', events: ['tool.after'], handle() { return null; } };\n",
+  );
+  const install = installTool({ sourceDir: src, repoRoot: r.dir });
+  assert.equal(install.code, 0, install.messages.join('\n'));
+  const res = await claudeRun(r, fxClaude('PostToolUse-Read', r.dir), { AGENT_HARNESS_TRACE: '1' });
+  assert.equal(res.code, 0, res.stderr);
+  assert.equal(typeof traceLines(r).at(-1).handlersLoadedAt, 'number');
+});
+
+test('a Bash call that ticks a task still runs the task trigger', async () => {
+  const r = await installed();
+  await r.setConfig({ taskFiles: ['tasks.md'] });
+  await r.write('tasks.md', '- [ ] 1.1 x\n');
+  r.git('add', 'tasks.md');
+  r.git('commit', '-q', '-m', 'tasks');
+  const id = 'toolu_tick_bash';
+  const pre = { ...JSON.parse(fxClaude('PreToolUse-Bash', r.dir)), tool_use_id: id };
+  const post = { ...JSON.parse(fxClaude('PostToolUse-Bash', r.dir)), tool_use_id: id };
+  let res = await claudeRun(r, JSON.stringify(pre), { AGENT_HARNESS_TRACE: '1' });
+  assert.equal(res.code, 0, res.stderr);
+  await r.write('tasks.md', '- [x] 1.1 x\n');
+  res = await claudeRun(r, JSON.stringify(post), { AGENT_HARNESS_TRACE: '1' });
+  assert.equal(res.code, 0, res.stderr);
+  const t = traceLines(r).at(-1);
+  assert.equal(t.outcomes['verify-gate'], 'ran');
+  assert.equal(r.log().at(-1).trigger, 'task');
+});
+
+test('an Edit that ticks a task still runs the task trigger', async () => {
+  const r = await installed();
+  const post = JSON.parse(fxClaude('PostToolUse-Edit-tick', r.dir));
+  const tasks = 'openspec/changes/x/tasks.md';
+  await r.write(tasks, post.tool_response.originalFile);
+  r.git('add', tasks);
+  r.git('commit', '-q', '-m', 'tasks');
+  const pre = { ...post, hook_event_name: 'PreToolUse' };
+  delete pre.tool_response;
+  let res = await claudeRun(r, JSON.stringify(pre), { AGENT_HARNESS_TRACE: '1' });
+  assert.equal(res.code, 0, res.stderr);
+  const { originalFile, oldString, newString } = post.tool_response;
+  await r.write(tasks, originalFile.replace(oldString, newString));
+  res = await claudeRun(r, JSON.stringify(post), { AGENT_HARNESS_TRACE: '1' });
+  assert.equal(res.code, 0, res.stderr);
+  const t = traceLines(r).at(-1);
+  assert.equal(t.outcomes['verify-gate'], 'ran');
+  assert.equal(r.log().at(-1).trigger, 'task');
+});
+
+test('a PreToolUse-Bash writes a before-image', async () => {
+  const r = await installed();
+  const pre = JSON.parse(fxClaude('PreToolUse-Bash', r.dir));
+  const res = await claudeRun(r, JSON.stringify(pre));
+  assert.equal(res.code, 0, res.stderr);
+  const calls = join(toolStateDir(r.dir, 'verify-gate'), 'sessions', `claude-code-${pre.session_id}`, 'main', 'calls');
+  assert.deepEqual(readdirSync(calls), [`${pre.tool_use_id}.json`]);
+});
+
+test('an unreadable tool.json falls back to the full load', async () => {
+  const r = await installed();
+  writeFileSync(join(r.dir, '.agents', 'harness', 'verify-gate', 'tool.json'), '{');
+  const res = await claudeRun(r, fxClaude('PostToolUse-Read', r.dir));
+  assert.equal(res.code, 0, res.stderr);
+  const text = JSON.parse(res.stdout).hookSpecificOutput.additionalContext;
+  assert.match(text, /hook verify-gate was not loaded/);
 });
