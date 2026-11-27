@@ -31,8 +31,8 @@
 ## Live evidence for the goals of #16
 
 Recorded by the Task 6 runs; raw traces in the worktree's git dir
-(`agent-harness/hook-runtime/trace.jsonl`) and the full transcripts in
-`.superpowers/sdd/plan/task-6-report.md`.
+(`agent-harness/hook-runtime/trace.jsonl`) and the consolidated evidence with
+transcript excerpts in `evidence/task-6-live-evidence.md`.
 
 | Goal | Evidence | Verdict |
 | --- | --- | --- |
