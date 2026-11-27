@@ -3,7 +3,7 @@
 // The pure cases call decide directly; the handler cases call the built handler in process with one
 // state folder per agent, as the runtime gives it.
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { pathToFileURL } from 'node:url';
@@ -11,7 +11,9 @@ import { ASSETS, tempRepo } from './helpers.mjs';
 
 const lib = (file) => import(pathToFileURL(join(ASSETS.hookedRules, 'lib', file)).href);
 const { decide, capped, promptSkill, CONTEXT_CAP } = await lib('deliver.mjs');
+const { acquireLedgerLock, withLedger } = await lib('ledger.mjs');
 const { parseRule } = await lib('rules.mjs');
+const { createRuntime } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'runtime.mjs')).href);
 const handlerMod = await import(pathToFileURL(join(ASSETS.hookedRules, 'handler.mjs')).href);
 const { createHookedRulesHandler } = handlerMod;
 const h = handlerMod.default;
@@ -147,6 +149,13 @@ test('a SKILL.md read matches a namespaced skill by its last part; a Skill call 
   assert.deepEqual(readOut.result, { context: 'Brainstorm first.' });
   assert.deepEqual(readOut.ledger.entries['brain.md'].triggers, ['skill:brainstorming']);
   assert.equal(decide([rule], empty(), skill('brainstorming')).result, null);
+});
+
+test('a SKILL.md read matches a skill listed by its exact name', () => {
+  const rule = ruleOf('apply.md', 'skills: ["openspec-apply-change"]', 'Apply the change.\n');
+  const out = decide([rule], empty(), read('openspec-apply-change'));
+  assert.deepEqual(out.result, { context: 'Apply the change.' });
+  assert.deepEqual(out.ledger.entries['apply.md'].triggers, ['skill:openspec-apply-change']);
 });
 
 test('a successful matching command delivers with a command trigger; a failed one does not', () => {
@@ -406,15 +415,31 @@ test('two concurrent handle calls for one skill give exactly one context', async
   assert.equal(results.filter((result) => result?.context).length, 1);
 });
 
-test('an exception from matching returns null without a deny or a record', async () => {
+test('an exception from matching rejects so dispatch fails open with the manual notice', async () => {
   const rule = ruleOf('boom.md', `gates: ["${COMMIT_FILE}"]`, 'Commit types.\n');
   rule.gates[0].regex.test = () => {
     throw new Error('boom');
   };
   const throwing = createHookedRulesHandler({ loadRules: () => ({ rules: [rule], errors: [] }) });
   const r = await repo();
-  assert.equal(await call(throwing, r, shellBefore('git commit -m "x"')), null);
-  assert.equal(existsSync(ledgerPath(r)), false);
+  await assert.rejects(call(throwing, r, shellBefore('git commit -m "x"')), /boom/);
+  assert.equal(existsSync(ledgerPath(r)), false, 'nothing is recorded');
+
+  const out = await createRuntime({ repoRoot: r.dir, host: 'claude-code', handlers: [throwing] }).dispatch(
+    structuredClone(shellBefore('git commit -m "x"')),
+    { sessionId: 's1', agentId: 'main' },
+  );
+  assert.equal(out.deny, undefined, 'the host call is not denied');
+  assert.equal(out.outcomes['hooked-rules'], 'failed');
+  assert.equal(out.notices.length, 1);
+  assert.match(out.notices[0], /^hook hooked-rules failed on tool\.before: boom\./);
+  assert.ok(out.notices[0].includes(throwing.manual), 'the notice names the hand-read manual');
+});
+
+test('a ledger that cannot be read rejects instead of passing silently', async () => {
+  const r = await repo({ '.agents/hooked-rules/commit.md': RULE(`gates: ["${COMMIT_FILE}"]`, 'Commit types.\n') });
+  mkdirSync(ledgerPath(r), { recursive: true });
+  await assert.rejects(call(h, r, shellBefore('git commit -m "x"')), /EISDIR|directory/i);
 });
 
 test('an edit-kind tool.before never denies', async () => {
@@ -449,13 +474,124 @@ test('a held lock passes the gate and returns the moment without recording', asy
   mkdirSync(stateDirOf(r), { recursive: true });
   const seeded = JSON.stringify(empty());
   writeFileSync(ledgerPath(r), seeded);
-  writeFileSync(join(stateDirOf(r), 'ledger.lock'), JSON.stringify({ pid: process.pid, at: Date.now() }));
+  const slot = join(stateDirOf(r), 'ledger.lock.1');
+  writeFileSync(slot, JSON.stringify({ pid: process.pid, at: Date.now() }));
   try {
     assert.equal(await call(h, r, shellBefore('git commit -m "x"')), null, 'the gate fails open');
     assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' });
     assert.equal(readFileSync(ledgerPath(r), 'utf8'), seeded, 'nothing is written');
   } finally {
-    rmSync(join(stateDirOf(r), 'ledger.lock'), { force: true });
+    rmSync(slot, { force: true });
+  }
+});
+
+test('two takeover attempts on one stale lock admit exactly one dispatch', async () => {
+  const r = await repo();
+  const dir = stateDirOf(r);
+  mkdirSync(dir, { recursive: true });
+  const stale = join(dir, 'ledger.lock.1');
+  const body = JSON.stringify({ pid: process.pid, at: Date.now(), released: false });
+  writeFileSync(stale, body);
+  // Both contenders wait on slot 1, so both observe it going stale at the same moment and race for
+  // the successor slot. Only the link can decide between them.
+  const nearlyStale = new Date(Date.now() - 9750);
+  utimesSync(stale, nearlyStale, nearlyStale);
+  const [first, second] = await Promise.all([acquireLedgerLock(dir), acquireLedgerLock(dir)]);
+  assert.ok(first, 'one contender takes the stale lock over');
+  assert.equal(second, null, 'the other contender does not join it');
+  assert.equal(readFileSync(stale, 'utf8'), body, 'the stale slot is never moved or rewritten');
+  assert.ok(existsSync(first.path), 'the winner holds its own slot');
+  first.release();
+  assert.equal(existsSync(first.path), false, 'release removes only that slot');
+  const next = await acquireLedgerLock(dir);
+  assert.ok(next, 'the next dispatch acquires after the release');
+  next.release();
+});
+
+test('a stale write cannot roll the generation back below a lock-free bump', async () => {
+  const r = await repo();
+  mkdirSync(stateDirOf(r), { recursive: true });
+  writeFileSync(ledgerPath(r), JSON.stringify(empty()));
+  const value = await withLedger(stateDirOf(r), (ledger) => {
+    // A compaction that won no lock publishes the bump while this dispatch holds a stale copy.
+    writeFileSync(ledgerPath(r), JSON.stringify({ ...ledger, generation: ledger.generation + 1 }));
+    const entry = { sha256: 'x', generation: 0, state: 'pending', patterns: [], triggers: [] };
+    return { ledger: { ...ledger, entries: { ...ledger.entries, late: entry } }, value: 'decided' };
+  });
+  assert.equal(value, 'decided');
+  assert.equal(storedLedger(r).generation, 1, 'the compaction survives the stale write');
+  assert.equal(storedLedger(r).entries.late.state, 'pending');
+});
+
+test('a broken ledger.json is repaired by an event that records nothing', async () => {
+  const r = await repo({ '.agents/hooked-rules/commit.md': RULE(`gates: ["${COMMIT_FILE}"]`, 'Commit types.\n') });
+  mkdirSync(stateDirOf(r), { recursive: true });
+  writeFileSync(ledgerPath(r), '{ not json');
+  assert.equal(await call(h, r, shellAfter('echo hi')), null);
+  assert.deepEqual(storedLedger(r), empty());
+});
+
+test('a broken ledger.json is left alone by a call that was aborted', async () => {
+  const r = await repo({ '.agents/hooked-rules/apply.md': RULE('skills: ["s"]', 'Apply.\n') });
+  mkdirSync(stateDirOf(r), { recursive: true });
+  writeFileSync(ledgerPath(r), '{ not json');
+  const controller = new AbortController();
+  controller.abort();
+  assert.equal(await call(h, r, skill('s'), { signal: controller.signal }), null);
+  assert.equal(readFileSync(ledgerPath(r), 'utf8'), '{ not json');
+});
+
+test('a startup report waits for the lock instead of being shown twice', async () => {
+  const r = await repo({
+    '.agents/hooked-rules/bad.md': RULE(['skills: ["s"]', 'when: "x"'].join('\n'), 'Bad.\n'),
+  });
+  mkdirSync(stateDirOf(r), { recursive: true });
+  const slot = join(stateDirOf(r), 'ledger.lock.1');
+  writeFileSync(slot, JSON.stringify({ pid: process.pid, at: Date.now() }));
+  try {
+    assert.equal(await call(h, r, sessionStart()), null, 'no report without the lock');
+  } finally {
+    rmSync(slot, { force: true });
+  }
+  const first = await call(h, r, sessionStart());
+  assert.ok(first?.context?.includes('.agents/hooked-rules/bad.md'));
+  assert.equal(await call(h, r, sessionStart()), null, 'the deferred report is shown once');
+});
+
+test('a compaction that was aborted or is past its deadline does not bump the generation', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  /** @type {[any, ContextOptions][]} */
+  const cases = [
+    [compact(), { signal: controller.signal }],
+    [compact(), { deadline: Date.now() - 1 }],
+    [sessionStart(true), { signal: controller.signal }],
+    [sessionStart(true), { deadline: Date.now() - 1 }],
+  ];
+  for (const [event, opts] of cases) {
+    const r = await repo({ '.agents/hooked-rules/apply.md': RULE('skills: ["s"]', 'Apply.\n') });
+    assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' });
+    assert.equal(await call(h, r, event, opts), null);
+    assert.equal(storedLedger(r).generation, 0, `${event.type} did not bump`);
+    assert.equal(storedLedger(r).entries['apply.md'].state, 'delivered');
+    assert.equal(await call(h, r, skill('s')), null, 'the rule stays delivered');
+  }
+});
+
+test('an unreadable rules folder is reported at the next session start', async (t) => {
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    t.skip('root reads a 0o000 folder');
+    return;
+  }
+  const r = await repo({ '.agents/hooked-rules/a.md': RULE('skills: ["s"]', 'A.\n') });
+  const dir = join(r.dir, '.agents', 'hooked-rules');
+  chmodSync(dir, 0o000);
+  try {
+    const out = await call(h, r, sessionStart());
+    assert.ok(out?.context, 'the unreadable folder is reported, not discarded');
+    assert.match(out.context, /\.agents\/hooked-rules: cannot be read/);
+  } finally {
+    chmodSync(dir, 0o755);
   }
 });
 

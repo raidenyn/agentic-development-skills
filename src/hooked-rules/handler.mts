@@ -40,27 +40,25 @@ const withoutDeny = (value: DecisionResult): DecisionResult => (value !== null &
 export function createHookedRulesHandler({ loadRules: load = loadRules }: { loadRules?: LoadRules } = {}): Handler {
   // A moment or a gate: decide on the ledger under its lock, then record what the call decided. The
   // deadline and abort check sits right before the write, so a result the runtime drops is not
-  // recorded as delivered.
+  // recorded as delivered. A match or persistence failure rejects, so the runtime shows the manual
+  // notice and the host's call still passes.
   const deliver = (stateDir: string, event: EventPayload, ctx: Ctx) =>
     withLedger<DecisionResult>(stateDir, (ledger, locked) => {
-      let decision: ReturnType<typeof decide>;
-      try {
-        decision = decide(load(ctx.repoRoot).rules, ledger, event);
-      } catch {
-        return null; // a regex that throws at match time passes the call
-      }
+      const decision = decide(load(ctx.repoRoot).rules, ledger, event);
       if (expired(ctx)) return null;
       if (!locked) return { ledger, value: withoutDeny(decision.result) };
       return { ledger: decision.ledger, value: decision.result };
     }).then(resultOf);
 
+  // The startup diagnostic is not a moment: it waits until its keys can be recorded, so a lock
+  // timeout cannot show the same report at the next session start.
   const report = (stateDir: string, errors: RuleIssue[], ctx: Ctx) =>
     withLedger<DecisionResult>(stateDir, (ledger, locked) => {
+      if (!locked) return null;
       const fresh = errors.filter((issue) => !ledger.reported.includes(issueKey(issue)));
       if (fresh.length === 0) return { ledger, value: null };
-      const value: DecisionResult = { context: reportText(fresh) };
       if (expired(ctx)) return null;
-      if (!locked) return { ledger, value };
+      const value: DecisionResult = { context: reportText(fresh) };
       return { ledger: { ...ledger, reported: [...ledger.reported, ...fresh.map(issueKey)] }, value };
     }).then(resultOf);
 
@@ -71,33 +69,29 @@ export function createHookedRulesHandler({ loadRules: load = loadRules }: { load
     async handle(event: EventPayload, ctx: Ctx) {
       const stateDir = ctx?.stateDir;
       if (typeof stateDir !== 'string' || stateDir === '') return null;
-      try {
-        switch (event?.type) {
-          case 'compact':
-            await bump(stateDir);
+      switch (event?.type) {
+        case 'compact':
+          await bump(stateDir, { signal: ctx.signal, deadline: ctx.deadline });
+          return null;
+        case 'session.start':
+          // OpenCode emits session.start for each child session too; only the main context reports.
+          if (event.afterCompact) {
+            await bump(stateDir, { signal: ctx.signal, deadline: ctx.deadline });
             return null;
-          case 'session.start':
-            // OpenCode emits session.start for each child session too; only the main context reports.
-            if (event.afterCompact) {
-              await bump(stateDir);
-              return null;
-            }
-            if (!isRoot(ctx)) return null;
-            return report(stateDir, load(ctx.repoRoot).errors, ctx);
-          case 'tool.before':
-            // A gate is checked on a shell command only; an edit or read call never denies.
-            if (event.tool?.kind !== 'shell') return null;
-            return deliver(stateDir, event, ctx);
-          case 'tool.after':
-            if (event.ok !== true) return null;
-            return deliver(stateDir, event, ctx);
-          case 'prompt':
-            return deliver(stateDir, event, ctx);
-          default:
-            return null;
-        }
-      } catch {
-        return null;
+          }
+          if (!isRoot(ctx)) return null;
+          return report(stateDir, load(ctx.repoRoot).errors, ctx);
+        case 'tool.before':
+          // A gate is checked on a shell command only; an edit or read call never denies.
+          if (event.tool?.kind !== 'shell') return null;
+          return deliver(stateDir, event, ctx);
+        case 'tool.after':
+          if (event.ok !== true) return null;
+          return deliver(stateDir, event, ctx);
+        case 'prompt':
+          return deliver(stateDir, event, ctx);
+        default:
+          return null;
       }
     },
   };
