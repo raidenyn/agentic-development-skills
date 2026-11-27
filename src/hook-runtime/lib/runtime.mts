@@ -20,6 +20,7 @@ type RuntimeHandler = Handler & Record<string, any>;
 type Validated = {
   kind?: string | null;
   text?: string;
+  stale?: string;
   error?: string;
   ack?: () => unknown;
   release?: () => unknown;
@@ -45,6 +46,8 @@ export interface RuntimeOptions {
 export interface Runtime {
   dispatch(event: EventPayload, opts?: DispatchOptions): Promise<DispatchResult>;
   proof(name: string, ctx?: ProofCtx): Promise<string | null>;
+  // Closes every handler that has a close; the others are ignored. Close errors are swallowed.
+  close(opts?: { cleanupDeadline?: number }): Promise<void>;
   handlers: RuntimeHandler[];
   problems: string[];
 }
@@ -134,6 +137,9 @@ function validate(result: unknown, type: HarnessEvent): Validated {
   if (!RESULT_KINDS[type].includes(kind)) return { error: `returned ${kind}, which ${type} does not accept` };
   if (typeof result[kind] !== 'string') return { error: `returned a ${kind} that is not text` };
   const out: Validated = { kind, text: result[kind] };
+  if (kind === 'block' || kind === 'context') {
+    if (typeof result.stale === 'string') out.stale = result.stale;
+  }
   if (kind === 'block') {
     if (typeof result.ack === 'function') out.ack = result.ack;
     if (typeof result.release === 'function') out.release = result.release;
@@ -339,6 +345,7 @@ export function createRuntime(
     }
     const deadlines = isObject(config['hook-runtime']?.deadlines) ? config['hook-runtime'].deadlines : {};
     const texts: Record<string, string[]> = { deny: [], block: [], context: [] };
+    const staleTexts: string[] = [];
     const acks: (() => unknown)[] = [];
     const releases: (() => unknown)[] = [];
     const cleanups: Promise<unknown>[] = [];
@@ -375,6 +382,7 @@ export function createRuntime(
       }
       if (r.result) {
         texts[r.result.kind]!.push(r.result.text);
+        if (r.result.stale !== undefined) staleTexts.push(r.result.stale);
         if (r.result.ack) acks.push(r.result.ack);
         if (r.result.release) releases.push(r.result.release);
       }
@@ -386,6 +394,7 @@ export function createRuntime(
     if (texts.deny!.length) out.deny = texts.deny!.join(JOIN);
     if (texts.block!.length) out.block = texts.block!.join(JOIN);
     if (texts.context!.length && !out.deny) out.context = texts.context!.join(JOIN);
+    if (staleTexts.length) out.stale = staleTexts.join(JOIN);
     if (acks.length)
       out.ack = async () => {
         for (const fn of acks) await callQuietly(fn);
@@ -397,7 +406,14 @@ export function createRuntime(
     return out;
   }
 
-  return { dispatch, proof, handlers: sorted, problems };
+  // A failing close does not skip the others; the caller gets no error, because there is nothing
+  // useful left to do once a handler's worker is gone.
+  async function close(opts: { cleanupDeadline?: number } = {}): Promise<void> {
+    const closers = sorted.filter((h) => typeof h.close === 'function').map((h) => callQuietly(() => h.close(opts)));
+    await Promise.allSettled(closers);
+  }
+
+  return { dispatch, proof, close, handlers: sorted, problems };
 }
 
 export async function loadHandlers(

@@ -157,8 +157,8 @@ For the same session and failure, counting the root agent and all its subagents 
 - **THEN** the fourth turn end with that failure passes with a notice
 
 #### Scenario: A superseded block does not count
-- **WHEN** an OpenCode turn-end result is dropped because a newer turn started
-- **THEN** its charge is refunded and the counter for that failure is unchanged
+- **WHEN** an OpenCode turn-end result is superseded because a newer turn started
+- **THEN** its charge is refunded and the counter for that failure is unchanged, whether or not its stale notice is shown
 
 #### Scenario: Simultaneous failures at count two
 - **WHEN** the root and a subagent of one session fail with the same failure at the same moment, with two blocks already counted
@@ -176,7 +176,7 @@ A block SHALL be charged to the session's count before it is delivered, as a cha
 - **THEN** the turn end is not blocked and gets a notice that the block counter was busy
 
 ### Requirement: Failure identity
-Two failures SHALL be the same when their exact argv, their exit status (with the signal name, if any) and their output tail match after normalizing only volatile fields: the repo root, temp paths, timestamps, durations, and hex values that cannot be decimal codes.
+Two failures SHALL be the same when their exact argv, their exit status (with the signal name, if any) and their output tail match after normalizing only volatile fields: the repo root, temp paths, timestamps, durations, and hex values that cannot be decimal codes. Any other difference in the tail SHALL make a new failure with its own count, bounded only by the session's 10-block backstop. A pass SHALL NOT reset the count of a failure.
 
 #### Scenario: Diagnostic codes stay distinct
 - **WHEN** one failure prints `E101` and a later one prints `E202`, with otherwise equal output
@@ -193,6 +193,29 @@ Two failures SHALL be the same when their exact argv, their exit status (with th
 #### Scenario: A changing temp path is the same failure
 - **WHEN** two runs fail with output that differs only in a path under the OS temp directory
 - **THEN** they count as one failure
+
+#### Scenario: A changed count in the tail is a new failure
+- **WHEN** a failure printing `3 failed` was blocked three times and the next run prints `2 failed`
+- **THEN** that run is blocked as attempt 1 of a new failure
+
+#### Scenario: A pass does not reset the count
+- **WHEN** a failure was blocked three times, a turn end then passed, and the same failure returns
+- **THEN** the turn end passes with the limit notice
+
+### Requirement: Stale text of a failing turn end
+Every failing turn-end result of the gate (a block, a limit notice or a busy-ledger notice) SHALL carry `stale` set to `verify: the check at the end of the previous turn failed and was not counted; the next turn end checks again. <command> failed: <body>`. That text SHALL contain no attempt count and no instruction to fix anything. The background notice, given while subagents still run, and a passing, skipped or contended turn end SHALL carry no `stale`.
+
+#### Scenario: A failing turn end carries stale text
+- **WHEN** a turn end fails and is blocked
+- **THEN** the result's `stale` is exactly the fixed text with the command and the failure body
+
+#### Scenario: A passing turn end carries none
+- **WHEN** a turn end passes
+- **THEN** the result has no `stale`
+
+#### Scenario: The background notice carries none
+- **WHEN** a root turn end fails while a subagent still runs
+- **THEN** the background notice has no `stale`
 
 ### Requirement: Content key
 The gate SHALL compute a content key from a private index kept in its state folder and built with `git read-tree HEAD`, so the real index is never changed and its flags are not inherited. The key SHALL be a git tree id over tracked and untracked non-ignored files, plus a digest of their filesystem stat data from `lstat` (path, mode, ctime, mtime, inode, size), plus a hash of the `verify-gate` config section with its defaults filled in.

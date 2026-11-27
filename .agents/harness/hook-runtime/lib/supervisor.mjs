@@ -7,11 +7,12 @@ import { spawn as spawnChild } from 'node:child_process';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
-import { acquireGateLock, updateGateLock } from './state.mjs';
+import { acquireGateLock, staleGroups, updateGateLock } from './state.mjs';
 
 const ENTRY = fileURLToPath(new URL('./worker-entry.mjs', import.meta.url));
 export const POOL_SIZE = 4;
 export const KILL_AFTER_MS = 5000;
+export const REAP_MAX_AGE_MS = 86_400_000;
 const POLL_MS = 25;
 const CONFIRM_MS = 5000;
 
@@ -38,21 +39,29 @@ function signalGroup(pgid, sig) {
 }
 
 // SIGTERM, then SIGKILL after min(5 s, cleanupDeadline - now - 1 s); resolves once every group is
-// empty, independent of the leaders' exits.
-export async function killGroups(pgids, { cleanupDeadline } = {}) {
+// empty, independent of the leaders' exits. With confirmUntil the wait ends at that time and
+// SIGKILL is always sent before returning, because the caller cannot wait for the confirmation
+// window (the reap at lock acquisition).
+export async function killGroups(pgids, { cleanupDeadline, confirmUntil } = {}) {
   let live = pgids.filter(groupAlive);
   if (!live.length) return;
   for (const p of live) signalGroup(p, 'SIGTERM');
   const room = Number.isFinite(cleanupDeadline) ? cleanupDeadline - Date.now() - 1000 : KILL_AFTER_MS;
   const killAt = Date.now() + Math.max(0, Math.min(KILL_AFTER_MS, room));
+  const confirm = Number.isFinite(confirmUntil) ? confirmUntil : undefined;
+  const end = confirm ?? killAt + CONFIRM_MS;
   let killed = false;
-  while (live.length && Date.now() < killAt + CONFIRM_MS) {
+  while (live.length && Date.now() < end) {
     await sleep(POLL_MS);
     if (!killed && Date.now() >= killAt) {
       for (const p of live) signalGroup(p, 'SIGKILL');
       killed = true;
     }
     live = live.filter(groupAlive);
+  }
+  if (confirm !== undefined && !killed) {
+    live = live.filter(groupAlive);
+    for (const p of live) signalGroup(p, 'SIGKILL');
   }
 }
 
@@ -297,19 +306,42 @@ class WorkerRecord {
     child.on('close', (code, signal) => end({ code, signal, pgid, timedOut }));
   }
 
-  onLockAcquire({ requestId, callId, dir }) {
+  // Reap the groups a dead holder recorded before taking the gate lock (design D3): SIGTERM, then
+  // SIGKILL by this event's deadline. The reply is asynchronous, so an ended event is checked again
+  // after the reap; every throw is replied, because onMessage does not catch this promise.
+  async onLockAcquire({ requestId, callId, dir }) {
     const reply = (m) => this.post({ type: 'lock.response', requestId, callId, ...m });
-    if (!this.isActive(requestId)) return reply({ error: 'the event has ended' });
-    let handle;
     try {
-      handle = acquireGateLock(dir);
+      if (!this.isActive(requestId)) return reply({ error: 'the event has ended' });
+      const stale = staleGroups(dir, { maxAgeMs: REAP_MAX_AGE_MS }).filter((pgid) => {
+        try {
+          process.kill(-pgid, 0);
+          return true;
+        } catch {
+          return false; // gone (ESRCH) or not ours (EPERM)
+        }
+      });
+      if (stale.length) {
+        const holder = [...this.pending.values()].find((p) => p.requestId === requestId && p.ctx);
+        const deadline = holder?.ctx?.deadline;
+        const cleanupDeadline = Number.isFinite(deadline) ? deadline : Date.now() + 2000;
+        await killGroups(stale, { cleanupDeadline, confirmUntil: cleanupDeadline });
+        if (this.dead || !this.isActive(requestId)) return reply({ error: 'the event has ended' });
+        if (stale.some(groupAlive)) return reply({ lockId: null });
+      }
+      let handle;
+      try {
+        handle = acquireGateLock(dir);
+      } catch (err) {
+        return reply({ error: errText(err) });
+      }
+      if (!handle) return reply({ lockId: null });
+      const lockId = ++idCounter;
+      this.locks.set(lockId, { handle, requestId, pgids: [] });
+      return reply({ lockId });
     } catch (err) {
       return reply({ error: errText(err) });
     }
-    if (!handle) return reply({ lockId: null });
-    const lockId = ++idCounter;
-    this.locks.set(lockId, { handle, requestId, pgids: [] });
-    return reply({ lockId });
   }
 
   onLockRelease({ requestId, callId, lockId }) {
@@ -496,9 +528,9 @@ class HandlerPool {
     }
   }
 
-  async close() {
+  async close({ cleanupDeadline } = {}) {
     this.closed = true;
-    await Promise.all(this.workers.map((w) => w.retire('closed')));
+    await Promise.all(this.workers.map((w) => w.retire('closed', { cleanupDeadline })));
   }
 }
 
@@ -527,7 +559,7 @@ export async function startWorker(toolDir, { loadBudgetMs = 2000, tool = basenam
     manual: meta.manual,
     proofs,
     handle: (event, ctx, internal) => pool.handle(event, ctx, internal),
-    close: () => pool.close(),
+    close: (opts) => pool.close(opts),
     workerGens: () => pool.workers.map((w) => w.gen),
   };
 }

@@ -32,6 +32,69 @@ const HOST_MARGIN_MS = 7000; // work deadline = host deadline - 7 s (cleanup 6 s
 const GIT_TIMEOUT_MS = 2000;
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
+type CleanupOpts = { cleanupDeadline?: number };
+interface Closable {
+  close(opts?: CleanupOpts): Promise<void>;
+}
+
+// Every runtime main() created, kept until the process exits: a signal listener may still need its
+// workers for the ack or release that follows the stdout write.
+const runtimes = new Set<Closable>();
+// The entry of another worktree of the same repository, when main() delegates to it (design D2).
+let delegate: { closeAll?: (opts?: CleanupOpts) => Promise<void> } | null = null;
+let signalled = false;
+// The result main() returned but runAsScript has not finished writing yet. stdout writes are
+// synchronous on Linux, so it is pending until the write returns, and a signal can still arrive
+// after the bytes are written; the listener releases it because delivery cannot be confirmed.
+let pending: { release: (() => Promise<void>) | null } | null = null;
+
+// Close every runtime this process created, and the delegated copy's runtimes too. One failure does
+// not skip the others; the caller only needs them settled.
+export async function closeAll(opts: CleanupOpts = {}): Promise<void> {
+  const calls = [...runtimes].map((rt) =>
+    Promise.resolve()
+      .then(() => rt.close(opts))
+      .catch(() => {}),
+  );
+  if (typeof delegate?.closeAll === 'function') {
+    const theirs = delegate.closeAll;
+    calls.push(
+      Promise.resolve()
+        .then(() => theirs.call(delegate, opts))
+        .catch(() => {}),
+    );
+  }
+  await Promise.allSettled(calls);
+}
+
+// Delivers nothing more when the host signals the hook: release a result that was not written yet
+// (bounded at 1 s), then close the runtimes with a 4.5 s cleanup deadline and exit 0.
+export async function onSignal({
+  pending: undelivered,
+  closeAll: close,
+  exit,
+}: {
+  pending: { release: (() => Promise<void>) | null } | null;
+  closeAll: (o: { cleanupDeadline: number }) => Promise<void>;
+  exit: (code: number) => void;
+}): Promise<void> {
+  const release = undelivered?.release;
+  if (release) {
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(resolve, 1000);
+      Promise.resolve()
+        .then(release)
+        .catch(() => {})
+        .finally(() => {
+          clearTimeout(t);
+          resolve();
+        });
+    });
+  }
+  await close({ cleanupDeadline: Date.now() + 4500 });
+  exit(0);
+}
+
 // spawn(argv, {cwd, env, timeoutMs}) -> Promise<{code, signal, stdout, stderr, pgid}>
 export function defaultSpawn(
   argv: string[],
@@ -203,6 +266,8 @@ export async function main({
       if (!existsSync(entry)) return empty;
       const mod = await import(pathToFileURL(entry).href);
       if (typeof mod.main !== 'function') throw new Error(`${entry} exports no main`);
+      // The listener reaches this copy's closeAll through the module-level delegate (design D4).
+      delegate = mod;
       let first = true;
       const startClock = () => {
         if (!first) return now();
@@ -240,6 +305,7 @@ export async function main({
     const { handlers, problems } = await loadHandlers(repoRoot);
     const handlersLoadedAt = now();
     const runtime = createRuntime({ repoRoot, host: HOST, handlers, problems, now });
+    runtimes.add(runtime);
     merged = await runtime.dispatch(mapped.event, {
       sessionId: mapped.sessionId,
       agentId: mapped.agentId,
@@ -285,15 +351,38 @@ async function readStdin(): Promise<string> {
 }
 
 async function runAsScript(): Promise<void> {
+  // Installed before stdin is read, so a host that signals a stuck hook still cleans up. Only the
+  // script installs them: main() in process stays listener-free.
+  const onSignalEvent = () => {
+    if (signalled) {
+      process.exit(0);
+      return;
+    }
+    signalled = true;
+    const undelivered = pending;
+    pending = null;
+    setTimeout(() => process.exit(0), 5000);
+    onSignal({ pending: undelivered, closeAll, exit: (code) => process.exit(code) }).catch(() => process.exit(0));
+  };
+  for (const sig of ['SIGTERM', 'SIGHUP', 'SIGINT'] as const) process.on(sig, onSignalEvent);
+
   let result: Pick<MainResult, 'text' | 'ack' | 'release'> = { text: '', ack: null, release: null };
   try {
     result = await main({ stdin: await readStdin() });
   } catch {}
+  // The listener released the undelivered result and owns the exit (design D4).
+  if (signalled) return;
+  pending = { release: result.release };
   const finish = async (err?: unknown) => {
+    const undelivered = pending;
+    pending = null;
+    if (signalled) return;
     try {
-      if (err) await result.release?.();
+      if (err) await undelivered?.release?.();
       else await result.ack?.();
     } catch {}
+    // A signal arrived while the ack ran: the listener's closeAll still has to finish.
+    if (signalled) return;
     process.exit(0);
   };
   if (!result.text) return finish();

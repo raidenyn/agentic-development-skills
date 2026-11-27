@@ -2,6 +2,8 @@
 
 This repo publishes Agent Skills. Each skill lives in `skills/<name>/` and is listed once in `.claude-plugin/marketplace.json`.
 
+If `repo-search` exists, use it for where/why questions; fall back to grep.
+
 ## Conventions (enforced by `scripts/skills.py validate` in CI)
 
 - Folder name, frontmatter `name` and marketplace plugin `name` are identical: lowercase `a-z`, `0-9` and single hyphens, at most 64 characters, not starting with `claude-` or `anthropic-`.

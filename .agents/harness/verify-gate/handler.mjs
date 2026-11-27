@@ -321,6 +321,8 @@ async function turnEnd(event, ctx, deps, trace) {
   trace(r.status === 'skipped' ? 'no-change' : r.status === 'contended' ? 'contended' : 'ran');
   if (r.status === 'contended') return { context: CONTENDED };
   if (r.status !== 'failed' || r.aborted) return null;
+  // Shown if a newer turn supersedes this result; it names no attempt and asks for no fix.
+  const stale = `verify: the check at the end of the previous turn failed and was not counted; the next turn end checks again. ${cmd} failed: ${body(r)}`;
   if (!charging) {
     return {
       context: `verify: ${cmd} fails while ${background} subagent(s) still run; verification runs again at the next turn end. ${body(r)}`,
@@ -330,15 +332,18 @@ async function turnEnd(event, ctx, deps, trace) {
   if (c?.busy) {
     return {
       context: `verify: ${cmd} failed, and the block counter was busy, so this turn end is not blocked. ${MANUAL}\n\n${cmd} failed: ${body(r)}`,
+      stale,
     };
   }
   if (!c?.charged) {
     return {
       context: `verify: still failing after ${c?.limit ?? max} blocks; continuing. ${MANUAL}\n\n${cmd} failed: ${body(r)}`,
+      stale,
     };
   }
   return {
     block: `verify: ${cmd} failed (attempt ${c.n} of ${max}). Fix the failure before ending the turn: ${body(r)}`,
+    stale,
     ack: () => confirmCharge({ lock, sessionDir: sessionDir(), id: c.id }),
     release: () => refundCharge({ lock, sessionDir: sessionDir(), id: c.id }),
   };
