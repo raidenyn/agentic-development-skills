@@ -25,7 +25,7 @@ const RULE_KEYS = new Set([...SCALAR_KEYS, ...LIST_KEYS]);
 // The scope rejections for this version; #17 and #18 replace them with veles's checks.
 const UNSUPPORTED_KEYS = ['requires', 'exempt', 'stops'];
 
-const FRONTMATTER_KEY_RE = /^([A-Za-z][A-Za-z0-9_-]*):(?: (.*))?$/;
+const FRONTMATTER_KEY_RE = /^([A-Za-z][A-Za-z0-9_-]*):(?: ([\s\S]*))?$/;
 const FRONTMATTER_ITEM = '"(?:[^"\\\\]|\\\\.)*"';
 const FRONTMATTER_QUOTED_RE = new RegExp(`^${FRONTMATTER_ITEM}$`);
 const FRONTMATTER_FLOW_RE = new RegExp(`^\\[(${FRONTMATTER_ITEM}(?:, ${FRONTMATTER_ITEM})*)\\]$`);
@@ -93,7 +93,8 @@ function split(text) {
   let blockKey = null;
   let block = null;
   for (let index = start + 1; index < lines.length; index += 1) {
-    const line = lines[index].trimEnd();
+    const raw = lines[index];
+    const line = raw.trimEnd();
     if (line === '---') {
       if (blockKey !== null && block !== null && block.length === 0)
         throw new RuleError(`\`${blockKey}\` has no list items`);
@@ -103,6 +104,9 @@ function split(text) {
         originalBody: pieces.slice(2 * index + 2).join(''),
       };
     }
+    // A tab anywhere on a frontmatter line is an error, including one a trailing trim would hide
+    // and one inside a block-list item.
+    if (raw.includes('\t')) throw new RuleError(`tabs are not allowed in frontmatter: ${JSON.stringify(raw)}`);
     if (blockKey !== null && block !== null) {
       const item = FRONTMATTER_BLOCK_RE.exec(line);
       if (item !== null) {
@@ -114,7 +118,6 @@ function split(text) {
       block = null;
     }
     if (line === '') continue;
-    if (line.includes('\t')) throw new RuleError(`tabs are not allowed in frontmatter: ${JSON.stringify(line)}`);
     if (line.startsWith(' '))
       throw new RuleError(`nested mappings and indentation are not supported: ${JSON.stringify(line)}`);
     const match = FRONTMATTER_KEY_RE.exec(line);

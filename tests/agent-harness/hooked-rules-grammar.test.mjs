@@ -77,12 +77,18 @@ test('an unknown key names the key in the error', () => {
   assert.match(errorFor('pointer: "p"\nskills: ["a"]\nwhen: "x"'), /when/);
 });
 
+test('U+2028 and U+2029 inside quoted values are text, not line endings', () => {
+  const parsed = parseRule('u.md', rule('pointer: "p\u2028q"\nskills: ["a\u2028b", "c\u2029d"]'));
+  assert.equal(parsed.pointer, 'p\u2028q');
+  assert.deepEqual(parsed.skills, ['a\u2028b', 'c\u2029d']);
+});
+
 test('a symlinked or non-regular rule file is an error and is not read', async () => {
   const r = await tempRepo();
   try {
     await r.write('target.md', rule('pointer: "p"\nskills: ["a"]'));
     await mkdir(join(r.dir, RULES_DIR), { recursive: true });
-    await symlink('../target.md', join(r.dir, RULES_DIR, 'link.md'));
+    await symlink('../../target.md', join(r.dir, RULES_DIR, 'link.md'));
     await mkdir(join(r.dir, RULES_DIR, 'dir.md'));
     const { rules, errors } = loadRules(r.dir);
     assert.deepEqual(rules, []);
@@ -119,6 +125,8 @@ test('frontmatter and body errors', () => {
     ['a blank body', rule('pointer: "p"\nskills: ["a"]', '\n \n')],
     ['an empty list', rule('pointer: "p"\nskills: []')],
     ['a tab', rule('pointer:\t"p"\nskills: ["a"]')],
+    ['a trailing tab', rule('pointer: "p"\t\nskills: ["a"]')],
+    ['a tab in a block item', rule('pointer: "p"\nskills:\n  - "a\tb"')],
     ['an indented line', rule('pointer: "p"\nskills: ["a"]\n  nested: "x"')],
     ['a duplicate key', rule('pointer: "p"\nskills: ["a"]\nskills: ["b"]')],
     ['the \\n escape', rule('pointer: "p"\nskills: ["a\\nb"]')],
@@ -153,20 +161,24 @@ test('an invalid regex names its key', () => {
   assert.match(errorFor('pointer: "p"\ngates: ["["]'), /gates/);
 });
 
-test("veles's commit-types gate compiles, stops at ; and newlines, and keeps the grep false positive", () => {
+test("veles's commit-types gates compile, stop at ; and newlines, and keep the grep false positive", () => {
   const parsed = parseRule(
     'commit.md',
     rule(String.raw`pointer: "p"
-gates: ["\\bgit\\b[^;&|\\n]*?\\scommit\\b"]`),
+gates: ["\\bgit\\b[^;&|\\n]*?\\scommit\\b", "\\bgh\\s+pr\\s+(create|edit)\\b"]`),
   );
-  assert.equal(parsed.gates[0].source, String.raw`\bgit\b[^;&|\n]*?\scommit\b`);
-  assert.equal(parsed.gates[0].regex.test('git -C x commit -m y'), true);
-  assert.equal(parsed.gates[0].regex.test('echo git; commit'), false);
-  assert.equal(
-    parsed.gates[0].regex.test('git log --grep commit'),
-    true,
-    'a known veles false positive, kept on purpose',
+  assert.deepEqual(
+    parsed.gates.map((gate) => gate.source),
+    [String.raw`\bgit\b[^;&|\n]*?\scommit\b`, String.raw`\bgh\s+pr\s+(create|edit)\b`],
   );
+  const [commit, pullRequest] = parsed.gates;
+  assert.equal(commit.regex.test('git -C x commit -m y'), true);
+  assert.equal(commit.regex.test('echo git; commit'), false);
+  assert.equal(commit.regex.test('git log\nsay commit'), false, 'the separator class stops at a newline');
+  assert.equal(commit.regex.test('git log --grep commit'), true, 'a known veles false positive, kept on purpose');
+  assert.equal(pullRequest.regex.test('gh pr create --title x'), true);
+  assert.equal(pullRequest.regex.test('gh pr edit 5 --body y'), true);
+  assert.equal(pullRequest.regex.test('gh pr list'), false);
 });
 
 test('loadRules returns valid rules next to the errors of invalid ones, in file-name order', async () => {
