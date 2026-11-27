@@ -63,7 +63,7 @@ The conductor has exactly two triggers, both made with `bindToCurrentThread: tru
 
 Rules for both:
 
-- **The prompt** is two lines: the `Trigger:` line, then the wake sentence. It never carries the board URL: a wake takes the board from its own thread title.
+- **The prompt** is two lines: the `Trigger:` line, then the wake sentence. It never carries the board URL: a wake takes the board from its conductor thread's launch line ([Identity](run-github.md#identity)).
 - **No merged filter.** A filter on `body.pull_request.merged` drops every `issues` delivery, because the path is missing there (`evidence/00-trigger-syntax.md`). So a pull request closed without a merge also starts a run, which finds nothing to do.
 - **`replayKey` `{{headers.x-github-delivery}}`** drops a repeated delivery of the same event. **`coalesceKey` `{{headers.x-github-hook-id}}`** is the same for every delivery of one repository's hook, so a merge that closes its issue, which sends two deliveries, becomes one wake. The host accepts only a template here: a literal key such as `project-conductor` is rejected with `Expected <filter>` (live proofs of 2026-11-26 and 2026-11-27). Deliveries of two repositories' hooks are not coalesced; both wakes read the same board and are harmless.
 - **`maxDeliveryAgeMinutes`** equals `<reconcile>`: a delivery held longer than that is skipped, because the timer has already run by then.
@@ -122,7 +122,7 @@ Registers the webhook trigger's URL as a GitHub webhook of one repository. Onboa
 
 When the owner says in this thread that they added the webhook of an owner step, for example "Add the GitHub webhook for `<repo>` - done", run Register the webhook for `<repo>` again without a URL and without a secret:
 
-1. **With admin,** list the hooks as in step 3 and look for one whose URL is the trigger's. The URL is not known in this run, so match, without case, the part `/scheduled-task%3A<uuid>/` of `config.url`, where `<uuid>` is the webhook trigger's `scheduledTaskId` from `list_scheduled_tasks` without its `scheduled-task:` prefix. Found, active and with exactly `issues` and `pull_request`: the result is `reused <id>`. Otherwise the result stays `owner step`, and the report says what differs.
+1. **With admin,** list the hooks as in step 3 and look for one whose URL is the trigger's. The URL is not known in this run, so match, without case, the part `/scheduled-task%3A<uuid>/` or `/scheduled-task:<uuid>/` of `config.url`, where `<uuid>` is the webhook trigger's `scheduledTaskId` from `list_scheduled_tasks` without its `scheduled-task:` prefix. Found, active and with exactly `issues` and `pull_request`: the result is `reused <id>`. Otherwise the result stays `owner step`, and the report says what differs.
 2. **Without admin,** the agent cannot read the hooks. Take the owner's word: the result is `done by the owner, not checked: not an admin`. Nothing is written.
 
 Both end with the standalone report below. A `done by the owner` repository leaves the `Webhook owner steps:` list, so a missed delivery from it counts for the [automatic check](#automatic-check), which then tells the owner to check that hook.

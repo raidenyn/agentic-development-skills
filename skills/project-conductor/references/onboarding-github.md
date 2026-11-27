@@ -48,7 +48,7 @@ Then read this thread, the one that becomes the conductor:
 
 1. Call `t3_thread_configure` with no arguments. Its `threadId` is `<conductor id>`.
 2. Call `t3_thread_read` with `threadId` `<conductor id>` and `limit` 1. Keep `thread.title` and `thread.projectId` (`<conductor project>`).
-3. Read the launch line as [Identity](run-github.md#identity) does, steps 3 and the `sed`: the first line of this thread's first message. Its board must be this board, compared by `<board owner>` without case and by `<n>`. No launch line, or another board: stop the run, nothing is written: "Run the onboarding of this board in a new thread that starts with `/project-conductor <board URL>`."
+3. Read the launch line as [Identity](run-github.md#identity) does, steps 3 and the `sed`: the first line of this thread's first message. Its board must be this board, compared by `<board owner>` without case and by `<n>`. No launch line, or another board: a run that would write stops here, nothing is written: "Run the onboarding of this board in a new thread that starts with `/project-conductor <board URL>`." A dry run goes on as a dry run outside the conductor thread, and its Pending also says: "The rename, the secret and the triggers need a thread that starts with `/project-conductor <board URL>`."
 
 A failed call stops the run: "The onboarding could not read its own thread: <error>."
 

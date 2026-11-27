@@ -12,7 +12,7 @@ The repository SHALL contain a skill `project-conductor` at `skills/project-cond
 - a row in the README's Skills table;
 - a reference file `references/onboarding-github.md` holding the `gh` commands the procedure uses.
 
-The procedure MUST start from the command `/project-conductor <board URL>` as the first line of the thread's first message, the launch line, and MUST run in that thread. A thread whose first message is not a launch line for this board MUST NOT be onboarded. That thread MAY be in any T3 project or in "No project".
+The procedure MUST start from the command `/project-conductor <board URL>` as the first line of the thread's first message, the launch line, and MUST run in that thread. A run in a thread whose first message is not a launch line for this board MUST NOT write; it MAY run as a dry run. That thread MAY be in any T3 project or in "No project".
 
 #### Scenario: Validators accept the skill
 - **WHEN** `python3 scripts/skills.py validate`, `claude plugin validate .`, the Python unit tests and `pnpm run check` run

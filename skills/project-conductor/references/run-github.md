@@ -51,7 +51,7 @@ Then read the conductor's own thread:
 
 1. Call the T3 tool `t3_thread_configure` with no arguments. Its `threadId` is `<conductor id>`.
 2. Call `t3_thread_read` with `threadId` `<conductor id>` and `limit` 1. Write its `thread.title` to `<work>/title.txt`, as is.
-3. Call `t3_thread_read` with `threadId` `<conductor id>`, `view` `"messages"`, `afterPosition` -1, `limit` 1 and `maxCharsPerItem` 2000. The one item is the thread's first message, at `position` 0. Write its `text` to `<work>/first.txt`, as is. No item, or an item whose `position` is not 0, is an identity failure.
+3. Call `t3_thread_read` with `threadId` `<conductor id>`, `view` `"messages"`, `afterPosition` -1, `limit` 1 and `maxCharsPerItem` 2000. The one item is the thread's first message, and the answer's `earlierPosition` is null. Write its `text` to `<work>/first.txt`, as is; join a `textTruncated` item as [Collect](#collect) does. No item is an identity failure.
 
 Take the board from the launch line:
 
