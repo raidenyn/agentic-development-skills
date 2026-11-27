@@ -27,7 +27,7 @@ separate `.worktrees/<change>` branch to merge. The branch is pushed and tracked
 
 ## PR comment
 
-- **Comment status**: `pending`
+- **Comment status**: `posted`
 
 ---
 
