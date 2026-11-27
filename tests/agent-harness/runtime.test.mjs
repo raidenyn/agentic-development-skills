@@ -14,6 +14,7 @@ after(() => repo.cleanup());
 
 const rt = (handlers, opts = {}) => createRuntime({ repoRoot: repo.dir, host: 'claude-code', handlers, ...opts });
 const ids = { sessionId: 's1', agentId: 'main' };
+const JOIN = '\n\n';
 
 test('exports the six events and their result kinds', () => {
   assert.deepEqual([...EVENTS].sort(), ['compact', 'prompt', 'session.start', 'tool.after', 'tool.before', 'turn.end']);
@@ -85,6 +86,31 @@ test('block texts are joined at turn.end, with combined ack and release', async 
   assert.deepEqual(seen, ['ack a', 'ack b']);
   await out.release();
   assert.deepEqual(seen, ['ack a', 'ack b', 'rel a', 'rel b']);
+});
+
+test('keeps stale texts and joins them in name order', async () => {
+  const out = await rt([
+    { name: 'b', events: ['turn.end'], handle: () => ({ context: 'B', stale: 'sb' }) },
+    { name: 'a', events: ['turn.end'], handle: () => ({ block: 'A', stale: 'sa' }) },
+  ]).dispatch({ type: 'turn.end' }, ids);
+  assert.equal(out.stale, `sa${JOIN}sb`);
+});
+
+test('only one handler sets stale', async () => {
+  const out = await rt([
+    { name: 'a', events: ['turn.end'], handle: () => ({ block: 'A', stale: 'sa' }) },
+    { name: 'b', events: ['turn.end'], handle: () => ({ context: 'B' }) },
+  ]).dispatch({ type: 'turn.end' }, ids);
+  assert.equal(out.stale, 'sa');
+});
+
+test('a non-string stale is ignored', async () => {
+  const out = await rt([{ name: 'a', events: ['turn.end'], handle: () => ({ block: 'A', stale: 5 }) }]).dispatch(
+    { type: 'turn.end' },
+    ids,
+  );
+  assert.equal(out.stale, undefined);
+  assert.equal(out.block, 'A');
 });
 
 test('invalid result kind is dropped and reported', async () => {

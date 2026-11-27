@@ -8,8 +8,16 @@ import { pathToFileURL } from 'node:url';
 import { ASSETS, tempRepo } from './helpers.mjs';
 
 const S = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'state.mjs')).href);
-const { acquireGateLock, writeJsonAtomic, sessionStateDir, rootSessionStateDir, gitDir, toolStateDir, updateGateLock } =
-  S;
+const {
+  acquireGateLock,
+  writeJsonAtomic,
+  sessionStateDir,
+  rootSessionStateDir,
+  gitDir,
+  toolStateDir,
+  updateGateLock,
+  staleGroups,
+} = S;
 
 const dir = () => mkdtempSync(join(tmpdir(), 'gate-'));
 const locks = (d) =>
@@ -239,4 +247,68 @@ test('two real processes: exactly one acquires the same lock dir', async () => {
   const fourth = acquireGateLock(join(d, 'locks'));
   assert.equal(fourth.path, join(d, 'locks', 'gate.lock.3'));
   fourth.release();
+});
+
+const MAX_AGE = 86_400_000;
+
+test('staleGroups is empty when the newest lock is released', () => {
+  const d = dir();
+  put(d, 1, { pid: deadPid(), at: Date.now(), pgids: [111], released: true });
+  assert.deepEqual(staleGroups(d, { maxAgeMs: MAX_AGE }), []);
+});
+
+test("staleGroups is empty while the lock's holder is alive", () => {
+  const d = dir();
+  put(d, 1, { pid: process.pid, at: 0, pgids: [111] });
+  assert.deepEqual(staleGroups(d, { maxAgeMs: MAX_AGE }), []);
+});
+
+test("staleGroups returns a dead holder's recorded groups", () => {
+  const d = dir();
+  put(d, 1, { pid: deadPid(), at: Date.now(), pgids: [111, 222] });
+  assert.deepEqual(staleGroups(d, { maxAgeMs: MAX_AGE }), [111, 222]);
+});
+
+test('staleGroups ignores a dead lock older than maxAgeMs', () => {
+  const d = dir();
+  put(d, 1, { pid: deadPid(), at: Date.now() - 25 * 3600e3, pgids: [111] });
+  assert.deepEqual(staleGroups(d, { maxAgeMs: MAX_AGE }), []);
+});
+
+test('staleGroups is empty without a lock file or directory', () => {
+  const d = dir();
+  assert.deepEqual(staleGroups(d, { maxAgeMs: MAX_AGE }), []);
+  assert.deepEqual(staleGroups(join(d, 'missing'), { maxAgeMs: MAX_AGE }), []);
+});
+
+test('staleGroups is empty when pgids is missing or not an array', () => {
+  const d = dir();
+  put(d, 1, { pid: deadPid(), at: Date.now() });
+  assert.deepEqual(staleGroups(d, { maxAgeMs: MAX_AGE }), []);
+  put(d, 1, { pid: deadPid(), at: Date.now(), pgids: 'x' });
+  assert.deepEqual(staleGroups(d, { maxAgeMs: MAX_AGE }), []);
+});
+
+test('staleGroups is empty for malformed JSON or a missing at', () => {
+  const d = dir();
+  writeFileSync(join(d, 'gate.lock.1'), '{not json');
+  assert.deepEqual(staleGroups(d, { maxAgeMs: MAX_AGE }), []);
+  put(d, 1, { pid: deadPid(), pgids: [111] });
+  assert.deepEqual(staleGroups(d, { maxAgeMs: MAX_AGE }), []);
+});
+
+test('staleGroups reads only the newest lock', () => {
+  const d = dir();
+  put(d, 1, { pid: deadPid(), at: Date.now(), pgids: [111] });
+  put(d, 2, { pid: process.pid, at: Date.now(), pgids: [], released: true });
+  assert.deepEqual(staleGroups(d, { maxAgeMs: MAX_AGE }), []);
+  put(d, 1, { pid: process.pid, at: Date.now(), pgids: [], released: true });
+  put(d, 2, { pid: deadPid(), at: Date.now(), pgids: [222] });
+  assert.deepEqual(staleGroups(d, { maxAgeMs: MAX_AGE }), [222]);
+});
+
+test('staleGroups returns only positive integer groups', () => {
+  const d = dir();
+  put(d, 1, { pid: deadPid(), at: Date.now(), pgids: [0, -7, 1.5, '9', 111] });
+  assert.deepEqual(staleGroups(d, { maxAgeMs: MAX_AGE }), [111]);
 });

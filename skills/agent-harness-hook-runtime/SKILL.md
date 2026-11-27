@@ -47,8 +47,9 @@ event:   { type: tool.before | tool.after | prompt | turn.end | compact | sessio
            tool?: { name, kind: shell|edit|read|other, input, callId },   // callId: addition
            command?, files?, prompt?, afterCompact?,
            background? }                        // addition, turn.end: running subagents of this agent
-result:  { deny: text } | { context: text }
-       | { block: text, ack?: () -> void, release?: () -> void }        // ack, release: additions
+result:  { deny: text } | { context: text, stale?: string }        // stale: addition
+       | { block: text, stale?: string, ack?: () -> void,
+           release?: () -> void }        // ack, release, stale: additions
 context: { repoRoot, host, sessionId, agentId, deadline, signal, stateDir, config,
            proof(name), trace(outcome) }        // signal, trace: additions
 ```
@@ -66,6 +67,7 @@ The names marked as additions are optional and extend the RFC's handler shape wi
 - **`deadline`** is the epoch ms after which the result is discarded. **`signal`** aborts at that moment; stop writing state when it does.
 - **`proof(name)`** runs another handler's named check, such as `verify-pass`, and returns null or a failure text.
 - **`trace(outcome)`** names what the handler did, for example `"no-change"`. With `AGENT_HARNESS_TRACE=1`, each event appends a line to `<git dir>/agent-harness/hook-runtime/trace.jsonl` with the timings and every handler's outcome.
+- **`stale`** is the text to show if the result is superseded; the result itself is not delivered. Claude Code never uses it, because it never supersedes a result.
 
 Result kinds per event. Any other kind is dropped and reported as a hook failure.
 
@@ -76,7 +78,7 @@ Result kinds per event. Any other kind is dropped and reported as a hook failure
 | `turn.end` | `block`, `context` |
 | `compact` | none |
 
-When several handlers answer, any `deny` wins, and `block` and `context` texts are joined in handler-name order.
+When several handlers answer, any `deny` wins, and the `block` and `context` texts are joined in handler-name order. The `stale` texts are joined in handler-name order too.
 
 On a block, the runtime calls `ack` once the host accepted it and `release` when it is known not to have been delivered. Charge any limit before returning the block, confirm it in `ack` and refund it in `release`.
 
@@ -95,6 +97,10 @@ A handler that would start after the work deadline is skipped and reported. Load
 **Workers.** Each handler runs in its own worker thread, with a pool of up to four per handler. A handler that loops synchronously, in its import or in `handle`, freezes only its own worker. At the deadline the worker is terminated and a fresh one serves later events.
 
 Termination kills only the process groups that the supervisor started for that worker. The bundled handlers start their processes through the supervisor's `spawn` message, which is runtime-internal plumbing and not part of the published interface. A process that a handler starts itself with `child_process` is not tracked and is not killed at the deadline, so such a handler must stop its own children when `signal` aborts.
+
+Before the supervisor takes the gate lock a handler requested for a directory (the verify gate's `gate.lock.*`), it reads the newest lock in that directory. If the lock is unreleased, its holder's `pid` is dead and it was taken less than 24 h ago, the supervisor first terminates the groups the lock records that it may signal; a group that answers EPERM is skipped. The reap is bounded by the requesting event's deadline, or by 2 s when that request has none, and always sends SIGKILL before it gives up. The lock is taken only once those groups are gone; otherwise the acquisition reports the lock as busy.
+
+On Claude Code, on the first SIGTERM, SIGHUP or SIGINT, if `main()` has returned a result that is not yet delivered, its `release` is awaited first, bounded at about 1 s. Then every runtime the run started is closed, including a delegated checkout's copy when that copy has `closeAll`, with a 4.5 s cleanup deadline. Then the process exits 0 by 5 s with empty stdout, and `ack` is never called. An older delegated copy without `closeAll` is cleaned up by the next run.
 
 ## Capabilities
 
@@ -131,7 +137,7 @@ Tool kinds:
 Host behaviour to know when you write a handler:
 - **Subagents run in the background on both hosts.** A root turn end can come while a subagent still edits, which is what `background` is for. Both hosts start a new root turn when the subagent finishes.
 - **On OpenCode, the parent is handed every round of a blocked subagent's work.** That includes the failing round before the fix, and the round after it.
-- **On OpenCode, a superseded turn-end result is not delivered.** If a later turn has already started when the result is ready, `release` is called instead.
+- **On OpenCode, a superseded turn-end result is not delivered as a block.** A result is superseded when a later turn has started before the result is ready. Its `release` is called. If no later turn end is queued and the result has `stale`, that text is sent as a message that does not resume the agent.
 - **One-shot `opencode run --standalone` gets no turn-end checks or blocks.** The process exits when the session goes idle, which kills the detached turn-end check, and the turn ends unverified. Use the long-lived server (`opencode serve` or the TUI), or run `node .agents/harness/verify-gate/cli.mjs run` afterwards.
 - **On OpenCode, context after a failed tool call is not delivered.** The model gets a notice that it was not delivered.
 - **On Claude Code, the runtime follows the agent into a linked worktree of the same repository.** It reads the git top level and common directory of the event's `cwd`, with two git calls that run in parallel, each bounded at 2 s. A `cwd` in another repository, a separate clone or submodule, outside any checkout, or in a worktree without `.agents/harness/hook-runtime/`, gets no output at all. When git cannot answer, `$CLAUDE_PROJECT_DIR` is used. A tool call that moves the agent has its `tool.before` in the old checkout and its `tool.after` in the new one, and `session.start` does not repeat after a move. Commands still see the session's original `CLAUDE_PROJECT_DIR` in their environment. OpenCode's session directory does not move.

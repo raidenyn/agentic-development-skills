@@ -450,6 +450,7 @@ test('a rejected synthetic calls release, not ack', async () => {
 });
 
 // Turn-end handler whose n-th call (1-based) sleeps slow[n] ms and answers make(n).
+// `make` may return `stale` too: the handler returns `out` unchanged, so the adapter sees it.
 /** @param {{ slow?: Record<number, number>, make?: (n: number) => any, budget?: number }} [opts] */
 function scripted({ slow = {}, make = () => null, budget } = {}) {
   const calls = [];
@@ -516,8 +517,8 @@ test("turn B fixes the tree while A's slow run fails: A's block is released, not
   assert.deepEqual(s.acks, []);
 });
 
-test("C starts but has not ended when B's run settles: nothing is delivered and B's release is called", async () => {
-  const s = scripted({ slow: { 1: 300 }, make: (n) => ({ block: `block ${n}` }) });
+test("C starts but has not ended when B's run settles: only B's stale notice is sent and both are released", async () => {
+  const s = scripted({ slow: { 1: 300 }, make: (n) => ({ block: `block ${n}`, stale: `stale ${n}` }) });
   const p = await plugin({ handlers: [s.handler] });
   turn(p.emit, ROOT);
   await until(() => s.calls.length === 1, 2000, 'A started');
@@ -526,8 +527,43 @@ test("C starts but has not ended when B's run settles: nothing is delivered and 
   await until(() => s.releases.length === 2, 3000, 'two releases');
   await sleep(50);
   assert.deepEqual(s.releases, [1, 2]);
-  assert.deepEqual(p.calls.synthetic, []);
+  assert.deepEqual(p.calls.synthetic, [{ sessionID: ROOT, text: 'stale 2', resume: false }]);
   assert.equal(s.calls.length, 2);
+});
+
+test('a superseded result with no later turn end is shown as a stale notice', async () => {
+  const s = scripted({ slow: { 1: 300 }, make: () => ({ block: 'A', stale: 'stale A' }) });
+  const p = await plugin({ handlers: [s.handler] });
+  turn(p.emit, ROOT);
+  await until(() => s.calls.length === 1, 2000, 'A started');
+  p.emit('session.execution.started', ROOT); // a newer turn starts, no end yet
+  await until(() => s.releases.length === 1, 3000, 'release of A');
+  assert.deepEqual(p.calls.synthetic, [{ sessionID: ROOT, text: 'stale A', resume: false }]);
+  assert.deepEqual(s.releases, [1]);
+  assert.deepEqual(s.acks, []);
+});
+
+test('a superseded result with a queued turn end is dropped even with stale', async () => {
+  const s = scripted({ slow: { 1: 300 }, make: (n) => ({ block: `block ${n}`, stale: `stale ${n}` }) });
+  const p = await plugin({ handlers: [s.handler] });
+  turn(p.emit, ROOT);
+  await until(() => s.calls.length === 1, 2000, 'A started');
+  turn(p.emit, ROOT); // B is queued while A runs
+  await until(() => s.acks.length === 1, 3000, 'ack of B');
+  assert.deepEqual(p.calls.synthetic, [{ sessionID: ROOT, text: 'block 2', resume: true }]);
+  assert.deepEqual(s.releases, [1]);
+});
+
+test('a superseded result without stale sends nothing', async () => {
+  const s = scripted({ slow: { 1: 300 }, make: () => ({ block: 'A' }) });
+  const p = await plugin({ handlers: [s.handler] });
+  turn(p.emit, ROOT);
+  await until(() => s.calls.length === 1, 2000, 'A started');
+  p.emit('session.execution.started', ROOT); // a newer turn starts, no end yet
+  await until(() => s.releases.length === 1, 3000, 'release of A');
+  await sleep(50);
+  assert.deepEqual(p.calls.synthetic, []);
+  assert.deepEqual(s.releases, [1]);
 });
 
 test('a backlog of three turn ends behind a run that used almost all its budget: all three run', async () => {

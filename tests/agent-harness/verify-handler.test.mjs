@@ -533,6 +533,101 @@ test('release refunds the charge', async () => {
   assert.deepEqual(r.blocks().charges, []);
 });
 
+test('a failing turn end carries the stale text', async () => {
+  const r = await repo();
+  r.fail();
+  const { result } = await fire(h, r, turnEnd());
+  assert.match(
+    result.stale,
+    /^verify: the check at the end of the previous turn failed and was not counted; the next turn end checks again\. sh .*verify\.sh failed: /,
+  );
+  assert.match(result.stale, /E101 something broke/);
+  assert.doesNotMatch(result.stale, /attempt|Fix the failure/);
+});
+
+test('the limit notice carries the stale text', async () => {
+  const r = await repo();
+  r.fail();
+  r.setTouch('src/generated.txt');
+  for (let i = 1; i <= 3; i++)
+    assert.match((await fire(h, r, turnEnd())).result.block, new RegExp(`attempt ${i} of 3`));
+  const { result } = await fire(h, r, turnEnd());
+  assert.ok(result.context && result.stale);
+  assert.match(result.context, /still failing after 3 blocks/);
+  assert.match(result.stale, /next turn end checks again\. sh .*verify\.sh failed: /);
+  assert.match(result.stale, /E101 something broke/);
+  assert.doesNotMatch(result.stale, /attempt|still failing|Fix the failure/);
+});
+
+test('the busy-ledger notice carries the stale text', async () => {
+  const r = await repo();
+  r.fail();
+  const busyLedger = {
+    acquire: async (dir) => (dir.endsWith('ledger') ? null : localLock.acquire(dir)),
+  };
+  const { result } = await fire(h, r, turnEnd(), { lock: busyLedger });
+  assert.ok(result.context && result.stale);
+  assert.match(result.context, /block counter was busy/);
+  assert.match(result.stale, /next turn end checks again\. sh .*verify\.sh failed: /);
+});
+
+test('(guard) a passing turn end carries no stale', async () => {
+  const r = await repo();
+  const { result, traced } = await fire(h, r, turnEnd());
+  assert.deepEqual(traced, ['ran']);
+  assert.ok(r.passRecord());
+  assert.equal(result?.stale, undefined);
+});
+
+test('(guard) the background notice carries no stale', async () => {
+  const r = await repo();
+  r.fail();
+  const { result } = await fire(h, r, turnEnd(1));
+  assert.match(result.context, /^verify: sh .*verify\.sh fails while 1 subagent\(s\) still run/);
+  assert.equal(result.stale, undefined);
+});
+
+test('(guard) a skipped or contended turn end carries no stale', async () => {
+  const r = await repo();
+  await fire(h, r, turnEnd());
+  const skipped = await fire(h, r, turnEnd());
+  assert.equal(skipped.result, null);
+  assert.deepEqual(skipped.traced, ['no-change']);
+  assert.equal(skipped.result?.stale, undefined);
+  const held = acquireGateLock(r.toolDir);
+  try {
+    const contended = await fire(h, r, turnEnd(), { budgetMs: 600 });
+    assert.deepEqual(contended.traced, ['contended']);
+    assert.match(contended.result.context, /verification already running/);
+    assert.equal(contended.result.stale, undefined);
+  } finally {
+    held.release();
+  }
+});
+
+test('(guard) a changed count in the tail is a new failure', async () => {
+  const r = await repo();
+  r.fail('3 failed\n');
+  r.setTouch('src/generated.txt');
+  for (let i = 1; i <= 3; i++)
+    assert.match((await fire(h, r, turnEnd())).result.block, new RegExp(`attempt ${i} of 3`));
+  r.fail('2 failed\n');
+  assert.match((await fire(h, r, turnEnd())).result.block, /attempt 1 of 3/);
+});
+
+test('(guard) a pass does not reset the count', async () => {
+  const r = await repo();
+  r.fail();
+  for (let i = 1; i <= 3; i++)
+    assert.match((await fire(h, r, turnEnd())).result.block, new RegExp(`attempt ${i} of 3`));
+  r.pass();
+  await r.write('src/a.js', 'after the blocks\n');
+  assert.equal((await fire(h, r, turnEnd())).result, null);
+  r.fail();
+  await r.write('src/a.js', 'after the pass\n');
+  assert.match((await fire(h, r, turnEnd())).result.context, /still failing after 3 blocks/);
+});
+
 test('a root turn end with background 1 runs and returns the background notice, not a block, and does not count', async () => {
   const r = await repo();
   r.fail();
