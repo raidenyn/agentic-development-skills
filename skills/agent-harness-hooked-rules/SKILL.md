@@ -84,9 +84,10 @@ A rule is delivered once it matches a moment, with one trigger per match.
 - **Command.** A command regex matches anywhere in the whole command, after a successful call only. A
   failed command delivers nothing and records nothing.
 - **Gate.** The first time a command matches a rule's `gates` and the rule is not delivered, the call is
-  denied with the rule's text and the rule is recorded as pending with the matched patterns. Retrying
-  the same command passes and marks the rule delivered. A different gated command is denied again. A
-  rule that was already delivered at a skill or command never denies.
+  denied with the rule's text and the rule is recorded as pending with the matched patterns. A retry
+  that matches one of those pending patterns passes and marks the rule delivered, whatever the rest of
+  the command says. A disjoint gate denies again only while the rule is pending, and its pattern joins
+  the pending set. A rule that was already delivered at a skill or command never denies.
 
 ## Once per context and re-delivery
 
@@ -111,8 +112,9 @@ Patterns are JavaScript regular expressions compiled with the `u` flag. Lookbehi
 - With `u`, `\b` and `\w` are ASCII-only, unlike Python's `re`.
 - A pattern matches anywhere in the command; there is no implicit anchor.
 - A pattern that does not compile is an error for its file.
-- JavaScript never throws while matching, so a pathological regex can block the handler until its
-  deadline. Treat rule files as reviewed repo content.
+- JavaScript never throws while matching, so a pathological regex can keep matching past the handler's
+  deadline; the runtime's timer cannot preempt a synchronous match. Treat rule files as reviewed repo
+  content.
 
 ## Keys not supported yet
 
@@ -159,12 +161,15 @@ error for `install`, `update` and `check`.
    the generated block in `AGENTS.md`.
 5. **CI.** Add `node .agents/harness/hooked-rules/cli.mjs check` and
    `node .agents/harness/hooked-rules/cli.mjs pointers --check` next to the runtime's `check`.
-6. **Commit** `.agents/harness/`, `.agents/hooked-rules/` and `AGENTS.md`.
-7. **Verify live.** Start a new session on each host the repo uses, then:
+6. **Commit** `.agents/harness.json`, `.agents/harness/`, `.agents/hooked-rules/` and `AGENTS.md`.
+7. **Verify live.** Restart the host after the first install or an update: OpenCode loads the plugin and
+   its handlers once per process, and a new conversation alone does not reload them. Claude Code loads
+   the handler for each hook call. Then, in a fresh session on each host the repo uses:
    - invoke a rule's skill and check that its text arrives once, and not a second time;
    - run a matching command and check that the rule arrives after the call;
-   - run a gated command and check that the first call is denied with the rule's text and the retry
-     passes.
+   - in a separate fresh context where the rule is still pending, run a gated command and check that the
+     first call is denied with the rule's text and the retry passes. Do not invoke the rule's skill
+     first: that delivers the rule, and its gate then passes.
    - For timings, set `AGENT_HARNESS_TRACE=1`: `<git dir>/agent-harness/hook-runtime/trace.jsonl`
      records each handler outcome.
 
@@ -181,8 +186,9 @@ error for `install`, `update` and `check`.
 2. **Review** the diff of `.agents/`, the rule files and the `AGENTS.md` block.
 3. **Check.** Run `node .agents/harness/hooked-rules/cli.mjs check` and
    `node .agents/harness/hooked-rules/cli.mjs pointers --check`.
-4. **Restart OpenCode sessions**, which load handlers once per process. Claude Code loads the handler
-   for each hook call.
+4. **Restart the host**, not just start a new conversation: OpenCode loads the plugin and its handlers
+   once per process, so an updated handler is not active until that process restarts. Claude Code loads
+   the handler for each hook call.
 
 In the skill's own source repo, `assets/hooked-rules/` is generated from TypeScript under
 `src/hooked-rules/`; edit the source, never the assets. When you change it, bump `version` in
@@ -194,7 +200,12 @@ In the skill's own source repo, `assets/hooked-rules/` is generated from TypeScr
    the `hooked-rules` key in `.agents/harness.json`.
 2. Delete `.agents/hooked-rules/` and the `## Hook-delivered rules` block in `AGENTS.md`.
 3. Delete both `check` steps from CI.
-4. Optionally, delete `<git dir>/agent-harness/hooked-rules/`.
+4. Delete local references too: any `hooked-rules` `check` or `pointers --check` call in the repo's own
+   verify command or scripts (for example `scripts/verify.mts`), and any `hooked-rules` step in a
+   `harness:update`-style script. Left behind, the first calls a deleted CLI and the second reinstalls
+   the tool.
+5. Restart OpenCode after the removal, since it loads the plugin and its handlers once per process.
+6. Optionally, delete `<git dir>/agent-harness/hooked-rules/`.
 
 The host configs belong to the hook runtime. Remove them with that skill if no handler is left.
 
