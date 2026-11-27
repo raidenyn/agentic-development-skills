@@ -15,4 +15,6 @@ export interface ToolMeta {
   name: string;
   version: string;
   handler?: boolean;
+  // Handler tools only: the tool kinds the handler needs, validated by declaredKinds.
+  tools?: unknown;
 }
