@@ -103,7 +103,8 @@ test('an Edit outside editFiles prints nothing and traces edit-skipped', async (
 
 test('a no-change Stop prints nothing and its trace line says no-change', async () => {
   const r = await installed();
-  assert.equal(out(await stop(r)), null);
+  // The first Stop must stay untraced whatever the parent environment holds; only the second writes.
+  assert.equal(out(await stop(r, { env: { AGENT_HARNESS_TRACE: '' } })), null);
   assert.equal(r.log().length, 1);
   const res = await stop(r, { env: { AGENT_HARNESS_TRACE: '1' } });
   assert.equal(res.stdout, '');
@@ -168,13 +169,16 @@ test('two simultaneous failures at count two (two OpenCode sessions sharing a ro
 });
 
 test('OpenCode: a no-change turn end writes a trace line with hostCreatedAt', async () => {
-  const r = await installed();
-  const p = await opencode(r);
-  turn(p.emit, ROOT);
-  await until(() => r.passRecord() !== null, 15000, 'a first full pass');
-  await new Promise((res) => setTimeout(res, 200));
-  process.env.AGENT_HARNESS_TRACE = '1';
+  const saved = process.env.AGENT_HARNESS_TRACE;
+  // The first pass must stay untraced even when the parent environment already turns tracing on.
+  delete process.env.AGENT_HARNESS_TRACE;
   try {
+    const r = await installed();
+    const p = await opencode(r);
+    turn(p.emit, ROOT);
+    await until(() => r.passRecord() !== null, 15000, 'a first full pass');
+    await new Promise((res) => setTimeout(res, 200));
+    process.env.AGENT_HARNESS_TRACE = '1';
     const file = join(r.gitDir, 'agent-harness', 'hook-runtime', 'trace.jsonl');
     p.emit('session.execution.started', ROOT);
     p.emit('session.execution.succeeded', ROOT, {});
@@ -187,11 +191,12 @@ test('OpenCode: a no-change turn end writes a trace line with hostCreatedAt', as
     assert.deepEqual(t.outcomes, { 'verify-gate': 'no-change' });
     assert.equal(typeof t.hostCreatedAt, 'number');
     assert.ok(t.receivedAt <= t.settledAt);
+    assert.equal(r.log().length, 1);
+    await p.close();
   } finally {
-    delete process.env.AGENT_HARNESS_TRACE;
+    if (saved === undefined) delete process.env.AGENT_HARNESS_TRACE;
+    else process.env.AGENT_HARNESS_TRACE = saved;
   }
-  assert.equal(r.log().length, 1);
-  await p.close();
 });
 
 test('an OpenCode handler that spawns with default settings gets 5 s of work', async () => {

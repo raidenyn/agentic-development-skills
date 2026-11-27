@@ -75,7 +75,9 @@ export function locateBlock(text) {
 /**
  * text with the block replaced between its markers, or appended under its heading. A block that is
  * already current right under its heading leaves the text untouched; blank lines between the heading
- * and the begin marker are removed, and a missing heading is written back in front of the begin marker.
+ * and the begin marker are removed, and a missing heading is written back in front of the begin
+ * marker. When the heading already sits right above the marker, everything through the begin marker
+ * line is kept byte for byte, so a mixed-line-ending file does not have its heading rewritten.
  */
 export function applyBlock(text, block) {
   const location = locateBlock(text);
@@ -85,6 +87,12 @@ export function applyBlock(text, block) {
     return `${text}${separator}${POINTER_HEADING}${eol}${block.replace(/\n/g, eol)}${eol}`;
   }
   if (location.headingOk && normalizeLineEndings(text.slice(location.begin, location.end)) === block) return text;
+  if (location.headingOk) {
+    const afterBegin = text.slice(location.begin + POINTER_BEGIN.length);
+    const breakMatch = LINE_BREAK_RE.exec(afterBegin);
+    const prefixEnd = location.begin + POINTER_BEGIN.length + (breakMatch?.index === 0 ? breakMatch[0].length : 0);
+    return `${text.slice(0, prefixEnd)}${block.split('\n').slice(1).join(eol)}${text.slice(location.end)}`;
+  }
   const start = location.heading === null ? location.begin : location.heading;
   return `${text.slice(0, start)}${POINTER_HEADING}${eol}${block.replace(/\n/g, eol)}${text.slice(location.end)}`;
 }

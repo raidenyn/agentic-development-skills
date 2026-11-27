@@ -14,13 +14,23 @@ const issueKey = (issue) => `${issue.path}: ${issue.message}`;
 const expired = (ctx) => ctx.signal.aborted || Date.now() >= ctx.deadline;
 const isRoot = (ctx) => (ctx.agentId ?? 'main') === 'main';
 
+// A folder that cannot be read at all is not an invalid rule among valid siblings: it rejects, so the
+// runtime emits its fail-open notice with this handler's manual. Individual file errors stay in the
+// load result, so valid siblings keep delivering and the startup report names each bad file.
+function loadChecked(load, ctx) {
+  const result = load(ctx.repoRoot);
+  const failed = result.errors.find((issue) => issue.directory);
+  if (failed) throw new Error(`${failed.path} ${failed.message}`);
+  return result;
+}
+
 // The session-start report of the load errors this context has not been told about yet.
 function reportText(errors) {
   const what = errors.length === 1 ? 'a rule file' : `${errors.length} rule files`;
   const verb = errors.length === 1 ? 'was' : 'were';
   const fix = errors.length === 1 ? 'it' : 'them';
   const lines = errors.map((issue) => `- ${issueKey(issue)}`).join('\n');
-  return `hooked-rules: ${what} could not be read and ${verb} skipped; fix ${fix} so the rules deliver again:\n\n${lines}`;
+  return `hooked-rules: ${what} could not be read and ${verb} skipped; fix ${fix} so the rules deliver again:\n\n${lines}\n\n${MANUAL}`;
 }
 
 const resultOf = (value) => {
@@ -41,28 +51,29 @@ export function createHookedRulesHandler({ loadRules: load = loadRules } = {}) {
     withLedger(
       stateDir,
       (ledger, locked) => {
-        const decision = decide(load(ctx.repoRoot).rules, ledger, event);
+        const decision = decide(loadChecked(load, ctx).rules, ledger, event);
         if (expired(ctx)) return null;
         if (!locked) return { ledger, value: withoutDeny(decision.result) };
         return { ledger: decision.ledger, value: decision.result };
       },
-      { live: () => !expired(ctx) },
+      { live: () => !expired(ctx), lock: ctx.lock },
     ).then(resultOf);
 
   // The startup diagnostic is not a moment: it waits until its keys can be recorded, so a lock
   // timeout cannot show the same report at the next session start.
-  const report = (stateDir, errors, ctx) =>
+  const report = (stateDir, ctx) =>
     withLedger(
       stateDir,
       (ledger, locked) => {
         if (!locked) return null;
         if (expired(ctx)) return null;
+        const { errors } = loadChecked(load, ctx);
         const fresh = errors.filter((issue) => !ledger.reported.includes(issueKey(issue)));
         if (fresh.length === 0) return { ledger, value: null };
         const value = { context: reportText(fresh) };
         return { ledger: { ...ledger, reported: [...ledger.reported, ...fresh.map(issueKey)] }, value };
       },
-      { live: () => !expired(ctx) },
+      { live: () => !expired(ctx), lock: ctx.lock },
     ).then(resultOf);
 
   return {
@@ -83,7 +94,7 @@ export function createHookedRulesHandler({ loadRules: load = loadRules } = {}) {
             return null;
           }
           if (!isRoot(ctx)) return null;
-          return report(stateDir, load(ctx.repoRoot).errors, ctx);
+          return report(stateDir, ctx);
         case 'tool.before':
           // A gate is checked on a shell command only; an edit or read call never denies.
           if (event.tool?.kind !== 'shell') return null;

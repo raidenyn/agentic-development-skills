@@ -23,14 +23,14 @@
     "hooked-rules": {
       "version": "0.1.0",
       "files": {
-        "cli.mjs": "5dc1a8a85d82f01a5bea714c67ec736da834c28a5a5bac29382dfd566907016e",
-        "handler.mjs": "324a8b736fedf4edf4dcbc84bbeac7e33c02795f31a98dd6655c15d66158da93",
+        "cli.mjs": "7649ee03928097c0a6028a13a5b12e21aa91c95089e556dceb4d26eeb367a6c6",
+        "handler.mjs": "5ad0a694ac240576da2a340c24304616fcda9994f31b4ecf22081236f4fd6e10",
         "lib/config.mjs": "afcabd0f71591de520665f08798e5456e5abdb6ed95bb4ff6a79f24739270d40",
         "lib/deliver.mjs": "b845e31965ab53fb615f12865125a83f9cb8965eb0df45dde6feab8717c91d42",
         "lib/install.mjs": "d1abb61c1b9bd95317c4efb0b8205ed0bd24e16a29a0de4304b0a29634b0dffa",
-        "lib/ledger.mjs": "dadc5ac7bbbe410af5880d54a9e945358a08daae75b481124246973934d6d539",
-        "lib/pointers.mjs": "8a348b2ac7341afedda8335d014f63d5042582f5607ef69134a53996869de5a1",
-        "lib/rules.mjs": "79c06f98449cf57076898db2a047d67552d75cf080bacafc313a11e259f43e25",
+        "lib/ledger.mjs": "2d5c5e8c6587147c2c9162e8a0146d9794577acd9f750e0beed0df825f41a007",
+        "lib/pointers.mjs": "bbba8bcb0c2c6ecb083a26995a6673fe1891624c1b5e705cbae5828d06beacc8",
+        "lib/rules.mjs": "51482d989b6c9e41826309217d94231eb74d07e139416ef30b441787128cd4e6",
         "lib/state.mjs": "0eb56ddc5457799a3348cbd701cd4f714727d2da3ea3ee3d6c07ef33c6c75ccc",
         "tool.json": "c48a70772e2315cd1fff303b7c6d464e498f2db57b11aed6e0d75e61f37a39a7"
       }

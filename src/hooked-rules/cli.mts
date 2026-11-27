@@ -4,7 +4,7 @@
 //   node .agents/harness/hooked-rules/cli.mjs check [--repo DIR]
 //   node .agents/harness/hooked-rules/cli.mjs pointers [--check] [--repo DIR]
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readHarnessConfig } from './lib/config.mts';
@@ -78,6 +78,17 @@ function configErrors(section: unknown): string[] {
   return Object.keys(section).map((key) => `unknown key "${key}" in "${TOOL}"`);
 }
 
+// The rules folder must be a folder or absent; a regular file at its path is a repo error, not an
+// empty rules set. An absent folder is created by install and is not an error for check.
+function rulesDirError(repoRoot: string): string | null {
+  try {
+    if (!statSync(join(repoRoot, RULES_DIR)).isDirectory()) return `${RULES_DIR} is not a directory`;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') return `${RULES_DIR} cannot be read: ${errText(err)}`;
+  }
+  return null;
+}
+
 function install(repoRoot: string, mode: InstallMode, io: Io): number {
   const node = requireNode22();
   if (node) return io.fail([node]);
@@ -95,6 +106,8 @@ function install(repoRoot: string, mode: InstallMode, io: Io): number {
   const errors = configErrors(config[TOOL]);
   if (errors.length) return io.fail(errors.map((e) => `.agents/harness.json: ${e}`));
   // Every refusal is decided before anything is written; the copies and the lock come last.
+  const rulesFailure = rulesDirError(repoRoot);
+  if (rulesFailure !== null) return io.fail([rulesFailure]);
   const res = installTool({ sourceDir: HERE, repoRoot, mode });
   if (res.code !== 0) return io.fail(res.messages);
   const messages = [...res.messages];

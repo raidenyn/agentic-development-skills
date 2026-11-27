@@ -365,13 +365,15 @@ test('a handler that never settles at tool.after: the spawned claude.mjs prints 
 async function repoWithSkillFiles() {
   const r = await tempRepo();
   cleanups.push(r.cleanup);
-  await r.write('skills/x/SKILL.md', '# x\n');
+  await r.write('skills/real-skill/SKILL.md', '# x\n');
   await r.write('notes/x.md', 'notes\n');
   await r.write('docs/skills/x/SKILL.md.bak', 'a backup, not a skill\n');
-  mkdirSync(join(r.dir, '.claude', 'skills', 'x'), { recursive: true });
-  symlinkSync('../../../skills/x/SKILL.md', join(r.dir, '.claude', 'skills', 'x', 'SKILL.md'));
-  mkdirSync(join(r.dir, 'docs', 'y'), { recursive: true });
-  symlinkSync('../../notes/x.md', join(r.dir, 'docs', 'y', 'SKILL.md'));
+  // The link and its target use different slugs, so a match proves the resolved target is used.
+  mkdirSync(join(r.dir, '.claude', 'skills', 'link-skill'), { recursive: true });
+  symlinkSync('../../../skills/real-skill/SKILL.md', join(r.dir, '.claude', 'skills', 'link-skill', 'SKILL.md'));
+  // A symlink under skills/ that resolves outside any skills folder earns no credit.
+  mkdirSync(join(r.dir, 'skills', 'y'), { recursive: true });
+  symlinkSync('../../notes/x.md', join(r.dir, 'skills', 'y', 'SKILL.md'));
   return r;
 }
 
@@ -392,17 +394,17 @@ test('a Read of a SKILL.md carries the skill, through a symlink too; lookalikes 
   const read = (tool_name, path) =>
     toEvent({ ...fixture('PostToolUse-Read', r.dir), tool_name, tool_input: { file_path: join(r.dir, path) } }, r.dir)
       .event;
-  const direct = read('Read', 'skills/x/SKILL.md');
+  const direct = read('Read', 'skills/real-skill/SKILL.md');
   assert.equal(direct.tool.kind, 'read');
-  assert.equal(direct.skill, 'x');
+  assert.equal(direct.skill, 'real-skill');
   assert.equal(direct.skillVia, 'read');
-  assert.equal(read('Read', '.claude/skills/x/SKILL.md').skill, 'x');
+  assert.equal(read('Read', '.claude/skills/link-skill/SKILL.md').skill, 'real-skill');
   // Backslashes are read as slashes before the path is resolved (a Linux realpath regression).
-  assert.equal(read('Read', 'skills\\x\\SKILL.md').skill, 'x');
+  assert.equal(read('Read', 'skills\\real-skill\\SKILL.md').skill, 'real-skill');
   for (const [tool, path] of [
-    ['Grep', 'skills/x/SKILL.md'],
+    ['Grep', 'skills/real-skill/SKILL.md'],
     ['Read', 'docs/skills/x/SKILL.md.bak'],
-    ['Read', 'docs/y/SKILL.md'],
+    ['Read', 'skills/y/SKILL.md'],
     ['Read', 'skills/missing/SKILL.md'],
   ])
     assert.equal(read(tool, path).skill, undefined, `${tool} ${path}`);

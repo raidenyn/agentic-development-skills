@@ -83,11 +83,13 @@ A rule is delivered once it matches a moment, with one trigger per match.
   `/<name>` is its first whitespace-separated word; a mention later in the prompt does not.
 - **Command.** A command regex matches anywhere in the whole command, after a successful call only. A
   failed command delivers nothing and records nothing.
-- **Gate.** The first time a command matches a rule's `gates` and the rule is not delivered, the call is
-  denied with the rule's text and the rule is recorded as pending with the matched patterns. A retry
-  that matches one of those pending patterns passes and marks the rule delivered, whatever the rest of
-  the command says. A disjoint gate denies again only while the rule is pending, and its pattern joins
-  the pending set. A rule that was already delivered at a skill or command never denies.
+- **Gate.** A fresh rule has no ledger entry, so it is undelivered, not pending. The first time a
+  command matches a rule's `gates`, the call is denied with the rule's text and the rule is recorded as
+  pending with the matched patterns. A retry that matches one of those pending patterns clears that
+  rule: it passes and marks the rule delivered, whatever the rest of the command says, but another rule
+  whose gate matches can still deny the retry. A disjoint gate for the same rule denies again while the
+  rule is pending, and its pattern joins the pending set. A rule that was already delivered at a skill
+  or command never denies.
 
 ## Once per context and re-delivery
 
@@ -112,9 +114,9 @@ Patterns are JavaScript regular expressions compiled with the `u` flag. Lookbehi
 - With `u`, `\b` and `\w` are ASCII-only, unlike Python's `re`.
 - A pattern matches anywhere in the command; there is no implicit anchor.
 - A pattern that does not compile is an error for its file.
-- JavaScript never throws while matching, so a pathological regex can keep matching past the handler's
-  deadline; the runtime's timer cannot preempt a synchronous match. Treat rule files as reviewed repo
-  content.
+- JavaScript never throws while matching, so a pathological regex cannot cooperate with the handler's
+  cancellation: the runtime's timer cannot preempt a synchronous match. The supervisor terminates the
+  worker at the deadline, so the host's call still settles. Treat rule files as reviewed repo content.
 
 ## Keys not supported yet
 
@@ -167,9 +169,9 @@ error for `install`, `update` and `check`.
    the handler for each hook call. Then, in a fresh session on each host the repo uses:
    - invoke a rule's skill and check that its text arrives once, and not a second time;
    - run a matching command and check that the rule arrives after the call;
-   - in a separate fresh context where the rule is still pending, run a gated command and check that the
-     first call is denied with the rule's text and the retry passes. Do not invoke the rule's skill
-     first: that delivers the rule, and its gate then passes.
+   - in a separate fresh context where the rule is still undelivered (it has no ledger entry), run a
+     gated command and check that the first call is denied with the rule's text and the retry passes. Do
+     not invoke the rule's skill first: that delivers the rule, and its gate then passes.
    - For timings, set `AGENT_HARNESS_TRACE=1`: `<git dir>/agent-harness/hook-runtime/trace.jsonl`
      records each handler outcome.
 

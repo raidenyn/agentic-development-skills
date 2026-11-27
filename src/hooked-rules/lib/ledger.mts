@@ -1,14 +1,17 @@
 // The per-context delivery ledger (design D5): one JSON file per agent context, and a compaction log
-// whose line count is the effective generation. One lock file, `ledger.lock`, guards the ledger
-// write. Acquisition publishes the lock atomically: the owner token is written to a temp file and
-// hard-linked to `ledger.lock`, so a lock never exists without its full owner record and a missing or
-// unreadable owner can only be a crash artifact. A dead holder (its pid is gone) is taken over by
-// renaming the lock to a unique name and verifying the moved token is the dead one we checked; a
-// displaced artifact is discarded, never put back, so a restored spent lock can never block later
-// calls. Ownership is re-read from the canonical path immediately before every write and on release,
-// so a dispatch whose lock a takeover replaced writes nothing. Only regular files are ever read as
-// owner records, so a stray FIFO cannot block the event loop. Calls in one process are serialized per
-// state directory before the file lock is even tried; the file lock orders separate processes.
+// whose line count is the effective generation. In a hook worker the write is guarded by the lock the
+// supervisor owns through `context.lock`; the supervisor tracks it per worker generation and releases
+// it when that generation retires, so a terminated worker cannot leave the ledger locked. In process
+// (tests) one lock file, `ledger.lock`, guards the write instead. Its acquisition publishes the lock
+// atomically: the owner token is written to a temp file and hard-linked to `ledger.lock`, so a lock
+// never exists without its full owner record and a missing or unreadable owner can only be a crash
+// artifact. A dead holder (its pid is gone) is taken over by renaming the lock to a unique name and
+// verifying the moved token is the dead one we checked; a displaced artifact is discarded, never put
+// back, so a restored spent lock can never block later calls. Ownership is re-read from the canonical
+// path immediately before every write and on release, so a dispatch whose lock a takeover replaced
+// writes nothing. Only regular files are ever read as owner records, so a stray FIFO cannot block the
+// event loop. Calls in one process are serialized per state directory before the lock is even tried;
+// the lock orders separate processes and worker threads.
 //
 // `compactions.log` is append-only: a compaction appends one small line and never rewrites the
 // ledger, so no writer, however late, can lower the effective generation or revive an entry a
@@ -27,47 +30,21 @@ import {
 import { join, resolve } from 'node:path';
 import { writeJsonAtomic } from './state.mts';
 import type { Entry, Ledger } from './deliver.types.mts';
+import type {
+  LedgerLock,
+  LedgerLockHooks,
+  LedgerOperation,
+  LedgerOptions,
+  LockState,
+  Owner,
+  TakeOver,
+} from './ledger.types.mts';
 
 export const LEDGER_FILE = 'ledger.json';
 export const LOCK_FILE = 'ledger.lock';
 export const COMPACTIONS_FILE = 'compactions.log';
 const WAIT_MS = 1000; // how long to wait for the lock
 const RETRY_MS = 20; // the retry interval
-
-export interface LedgerLock {
-  /** The canonical lock path. Ownership is always read from this path, never from a moved handle. */
-  readonly path: string;
-  /** The owner token this dispatch wrote; a write is only made while the token is still there. */
-  readonly token: string;
-  /** Whether the canonical lock still names this dispatch's token. */
-  owned(): boolean;
-  release(): void;
-}
-
-/** Test seams at the three points where a takeover or an acquisition can race. */
-export interface LedgerLockHooks {
-  /** Awaited after the owner token is written and before it is linked to the canonical path. */
-  beforeLink?(): void | Promise<void>;
-  /** Awaited after a dead owner was seen and before the dead-owner re-check. */
-  beforeTakeOver?(): void | Promise<void>;
-  /** Awaited after the dead-owner re-check and immediately before the rename. */
-  beforeRename?(): void | Promise<void>;
-}
-
-export interface LedgerOptions {
-  /** Checked right before a write, after the final read; false writes nothing. */
-  live?: () => boolean;
-}
-
-// fn returns the next ledger and the value to hand back. It returns null to write nothing; returning
-// the ledger it was given also writes nothing.
-export type LedgerOperation<T> = (ledger: Ledger, locked: boolean) => { ledger: Ledger; value: T } | null;
-
-interface Owner {
-  token?: unknown;
-  pid?: unknown;
-  at?: unknown;
-}
 
 const emptyLedger = (): Ledger => ({ version: 1, generation: 0, entries: {}, reported: [] });
 
@@ -112,8 +89,6 @@ function pidAlive(pid: unknown): boolean {
     return (error as NodeJS.ErrnoException).code !== 'ESRCH';
   }
 }
-
-type LockState = { kind: 'absent' } | { kind: 'dead'; token: string | null } | { kind: 'live' };
 
 // A lock is stale only when its recorded owner is dead, or the path is not a lock file this version
 // wrote (a legacy directory or a stray path). A live pid keeps the lock, however old it is. An
@@ -160,8 +135,6 @@ function makeLock(path: string, token: string): LedgerLock {
 // else — a lock another dispatch published meanwhile, or a non-file crash artifact — is discarded
 // with an unlink, never restored, and this dispatch gives up writing nothing. Restoring a displaced
 // lock can resurrect a lock its holder has already released; discarding cannot.
-type TakeOver = 'retry' | 'give-up';
-
 function takeOver(path: string, deadToken: string | null): TakeOver {
   const claimed = uniqueName(`${path}.stale`);
   try {
@@ -331,11 +304,14 @@ function withProcessLock<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 async function withLedgerLocked<T>(
   dir: string,
   fn: LedgerOperation<T>,
-  { live = () => true }: LedgerOptions,
+  { live = () => true, lock: runtimeLock }: LedgerOptions,
 ): Promise<T | null> {
-  const lock = await acquireLedgerLock(dir);
+  // In a worker the lock is the supervisor's: it survives this call only while the generation does,
+  // and `retire()` releases it. In process the local file lock records the host pid.
+  const runtime = runtimeLock ? await runtimeLock.acquire(dir) : null;
+  const lock = runtimeLock ? null : await acquireLedgerLock(dir);
   try {
-    const owned = lock?.owned() ?? false;
+    const owned = runtimeLock ? runtime !== null : (lock?.owned() ?? false);
     const { ledger, corrupt } = readLedgerState(dir);
     const result = fn(ledger, owned);
     if (result === null) return null;
@@ -345,23 +321,31 @@ async function withLedgerLocked<T>(
     // whose lock a takeover replaced, or whose call has expired, records nothing and fails open.
     const generation = Math.max(result.ledger.generation, effectiveGeneration(dir));
     const next = { version: 1, generation, entries: result.ledger.entries, reported: result.ledger.reported };
-    if (lock === null || !lock.owned() || !live()) return null;
+    if (!live()) return null;
+    if (runtimeLock ? runtime === null : lock === null || !lock.owned()) return null;
     writeJsonAtomic(join(dir, LEDGER_FILE), next);
     return result.value;
   } finally {
-    lock?.release();
+    if (runtime) {
+      try {
+        await runtime.release();
+      } catch {}
+    } else {
+      lock?.release();
+    }
   }
 }
 
 /**
  * Run fn on the context's ledger under its lock, and write the ledger fn returns.
  *
- * Callers in one process are serialized per state directory before the file lock is tried. Without
- * the lock fn still runs, with `locked: false`, and nothing is written. A broken ledger file is
- * replaced by the next locked, live write, even when the event records nothing. The payload is built
- * before the final read; the write then happens only while this dispatch still owns the canonical
- * lock and `live()` holds. Otherwise nothing is written and the call fails open. Read, match and
- * write failures reject, so the runtime shows its manual notice and the host's call still passes.
+ * Callers in one process are serialized per state directory before the lock is tried. A worker
+ * passes its supervisor-owned `lock`; in process the local file lock is used. Without either lock fn
+ * still runs, with `locked: false`, and nothing is written. A broken ledger file is replaced by the
+ * next locked, live write, even when the event records nothing. The payload is built before the final
+ * read; the write then happens only while this dispatch still owns the lock and `live()` holds.
+ * Otherwise nothing is written and the call fails open. Read, match and write failures reject, so the
+ * runtime shows its manual notice and the host's call still passes.
  */
 export function withLedger<T>(dir: string, fn: LedgerOperation<T>, options: LedgerOptions = {}): Promise<T | null> {
   return withProcessLock(dir, () => withLedgerLocked(dir, fn, options));
@@ -372,17 +356,16 @@ export function withLedger<T>(dir: string, fn: LedgerOperation<T>, options: Ledg
  * rolled back by a dispatch holding a stale ledger, and each appended line raises the effective
  * generation that makes earlier entries not live. The timestamp written is sampled before the final
  * check and reused, so no time-dependent payload is read after the deadline has passed; the check is
- * the last thing before the append. In one process it is ordered with the ledger operations too.
+ * the last thing before the append. It appends without the ledger queue or lock, so a compaction never
+ * waits behind a ledger operation: O_APPEND gives it its own atomic line.
  */
 export async function bump(
   dir: string,
   { signal, deadline }: { signal?: AbortSignal; deadline?: number } = {},
 ): Promise<void> {
   if (signal?.aborted || (deadline !== undefined && Date.now() >= deadline)) return;
-  await withProcessLock(dir, async () => {
-    mkdirSync(dir, { recursive: true });
-    const at = Date.now();
-    if (signal?.aborted || (deadline !== undefined && at >= deadline)) return;
-    appendFileSync(join(dir, COMPACTIONS_FILE), `${at}\n`);
-  });
+  mkdirSync(dir, { recursive: true });
+  const at = Date.now();
+  if (signal?.aborted || (deadline !== undefined && at >= deadline)) return;
+  appendFileSync(join(dir, COMPACTIONS_FILE), `${at}\n`);
 }

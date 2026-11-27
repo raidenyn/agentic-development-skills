@@ -86,8 +86,12 @@ function split(text) {
       break;
     }
   }
-  if (start === null || lines[start].trimEnd() !== '---')
-    throw new RuleError('frontmatter must start with a `---` line');
+  if (start === null) throw new RuleError('frontmatter must start with a `---` line');
+  const opening = lines[start];
+  // The delimiter checks below trim before comparing, so a tab after either `---` must be rejected
+  // on the raw line, before the trim can hide it.
+  if (opening.includes('\t')) throw new RuleError(`tabs are not allowed in frontmatter: ${JSON.stringify(opening)}`);
+  if (opening.trimEnd() !== '---') throw new RuleError('frontmatter must start with a `---` line');
 
   const values = new Map();
   let blockKey = null;
@@ -96,6 +100,7 @@ function split(text) {
     const raw = lines[index];
     const line = raw.trimEnd();
     if (line === '---') {
+      if (raw.includes('\t')) throw new RuleError(`tabs are not allowed in frontmatter: ${JSON.stringify(raw)}`);
       if (blockKey !== null && block !== null && block.length === 0)
         throw new RuleError(`\`${blockKey}\` has no list items`);
       return {
@@ -238,12 +243,17 @@ export function loadRules(repoRoot) {
   const errors = [];
   let names;
   try {
-    if (!statSync(directory).isDirectory()) return { rules, errors };
+    if (!statSync(directory).isDirectory()) {
+      // A regular file where the folder belongs is a folder failure, not an empty rules set; `check`
+      // and `install` must reject it, and the handler must surface it through the fail-open notice.
+      errors.push({ path: RULES_DIR, message: 'is not a directory', directory: true });
+      return { rules, errors };
+    }
     names = readdirSync(directory);
   } catch (error) {
     const code = error.code;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return { rules, errors };
-    errors.push({ path: RULES_DIR, message: `cannot be read: ${messageOf(error)}` });
+    if (code === 'ENOENT') return { rules, errors };
+    errors.push({ path: RULES_DIR, message: `cannot be read: ${messageOf(error)}`, directory: true });
     return { rules, errors };
   }
   names.sort();

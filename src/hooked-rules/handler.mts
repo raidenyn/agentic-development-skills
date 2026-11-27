@@ -6,10 +6,10 @@ import { decide } from './lib/deliver.mts';
 import { bump, withLedger } from './lib/ledger.mts';
 import { loadRules } from './lib/rules.mts';
 import type { DecisionResult } from './lib/deliver.types.mts';
-import type { EventPayload, Handler, HandlerContext, HandlerResult } from './lib/handler.types.mts';
+import type { EventPayload, Handler, HandlerContext, HandlerResult, WorkerContext } from './lib/handler.types.mts';
 import type { RuleIssue, RuleLoad } from './lib/rules.types.mts';
 
-type Ctx = HandlerContext & { stateDir: string };
+type Ctx = HandlerContext & Partial<Pick<WorkerContext, 'lock'>> & { stateDir: string };
 type LoadRules = (repoRoot: string) => RuleLoad;
 
 const EVENTS: Handler['events'] = ['tool.before', 'tool.after', 'prompt', 'compact', 'session.start'];
@@ -19,13 +19,23 @@ const issueKey = (issue: RuleIssue) => `${issue.path}: ${issue.message}`;
 const expired = (ctx: Ctx) => ctx.signal.aborted || Date.now() >= ctx.deadline;
 const isRoot = (ctx: Ctx) => (ctx.agentId ?? 'main') === 'main';
 
+// A folder that cannot be read at all is not an invalid rule among valid siblings: it rejects, so the
+// runtime emits its fail-open notice with this handler's manual. Individual file errors stay in the
+// load result, so valid siblings keep delivering and the startup report names each bad file.
+function loadChecked(load: LoadRules, ctx: Ctx): RuleLoad {
+  const result = load(ctx.repoRoot);
+  const failed = result.errors.find((issue) => issue.directory);
+  if (failed) throw new Error(`${failed.path} ${failed.message}`);
+  return result;
+}
+
 // The session-start report of the load errors this context has not been told about yet.
 function reportText(errors: RuleIssue[]): string {
   const what = errors.length === 1 ? 'a rule file' : `${errors.length} rule files`;
   const verb = errors.length === 1 ? 'was' : 'were';
   const fix = errors.length === 1 ? 'it' : 'them';
   const lines = errors.map((issue) => `- ${issueKey(issue)}`).join('\n');
-  return `hooked-rules: ${what} could not be read and ${verb} skipped; fix ${fix} so the rules deliver again:\n\n${lines}`;
+  return `hooked-rules: ${what} could not be read and ${verb} skipped; fix ${fix} so the rules deliver again:\n\n${lines}\n\n${MANUAL}`;
 }
 
 const resultOf = (value: DecisionResult): HandlerResult | null => {
@@ -46,28 +56,29 @@ export function createHookedRulesHandler({ loadRules: load = loadRules }: { load
     withLedger<DecisionResult>(
       stateDir,
       (ledger, locked) => {
-        const decision = decide(load(ctx.repoRoot).rules, ledger, event);
+        const decision = decide(loadChecked(load, ctx).rules, ledger, event);
         if (expired(ctx)) return null;
         if (!locked) return { ledger, value: withoutDeny(decision.result) };
         return { ledger: decision.ledger, value: decision.result };
       },
-      { live: () => !expired(ctx) },
+      { live: () => !expired(ctx), lock: ctx.lock },
     ).then(resultOf);
 
   // The startup diagnostic is not a moment: it waits until its keys can be recorded, so a lock
   // timeout cannot show the same report at the next session start.
-  const report = (stateDir: string, errors: RuleIssue[], ctx: Ctx) =>
+  const report = (stateDir: string, ctx: Ctx) =>
     withLedger<DecisionResult>(
       stateDir,
       (ledger, locked) => {
         if (!locked) return null;
         if (expired(ctx)) return null;
+        const { errors } = loadChecked(load, ctx);
         const fresh = errors.filter((issue) => !ledger.reported.includes(issueKey(issue)));
         if (fresh.length === 0) return { ledger, value: null };
         const value: DecisionResult = { context: reportText(fresh) };
         return { ledger: { ...ledger, reported: [...ledger.reported, ...fresh.map(issueKey)] }, value };
       },
-      { live: () => !expired(ctx) },
+      { live: () => !expired(ctx), lock: ctx.lock },
     ).then(resultOf);
 
   return {
@@ -88,7 +99,7 @@ export function createHookedRulesHandler({ loadRules: load = loadRules }: { load
             return null;
           }
           if (!isRoot(ctx)) return null;
-          return report(stateDir, load(ctx.repoRoot).errors, ctx);
+          return report(stateDir, ctx);
         case 'tool.before':
           // A gate is checked on a shell command only; an edit or read call never denies.
           if (event.tool?.kind !== 'shell') return null;

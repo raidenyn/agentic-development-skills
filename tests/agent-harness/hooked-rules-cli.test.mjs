@@ -2,7 +2,7 @@
 // the copied tool and its lock, the empty config section, the rules folder and the AGENTS.md block.
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { ASSETS, runNode, tempRepo } from './helpers.mjs';
 
@@ -189,6 +189,34 @@ test('check: an invalid rule file fails naming the file', async () => {
   assert.equal(check.code, 1);
   assert.match(check.stderr, /\.agents\/hooked-rules\/bad\.md/);
   assert.match(check.stderr, /when/);
+});
+
+test('install and check: a regular file at the rules path is refused, while an absent folder is no error', async () => {
+  const r = await withRuntime();
+  write(r, RULES, 'not a directory\n');
+  const lock = read(r, LOCK);
+  const config = read(r, CONFIG);
+
+  const refused = await hr(r, 'install');
+  assert.equal(refused.code, 1);
+  assert.match(refused.stderr, /\.agents\/hooked-rules is not a directory/);
+  assert.equal(existsSync(join(r.dir, HR_TOOL)), false, 'nothing is copied before the refusal');
+  assert.equal(read(r, LOCK), lock, 'the lock is unchanged');
+  assert.equal(read(r, CONFIG), config, 'the config is unchanged');
+
+  const absent = await withRuntime();
+  assert.equal((await hr(absent, 'install')).code, 0);
+  rmSync(join(absent.dir, RULES), { recursive: true, force: true });
+  const ok = await installedHr(absent, 'check');
+  assert.equal(ok.code, 0, ok.stderr);
+
+  const file = await withRuntime();
+  assert.equal((await hr(file, 'install')).code, 0);
+  rmSync(join(file.dir, RULES), { recursive: true, force: true });
+  write(file, RULES, 'not a directory\n');
+  const check = await installedHr(file, 'check');
+  assert.equal(check.code, 1);
+  assert.match(check.stderr, /\.agents\/hooked-rules: is not a directory/);
 });
 
 test('pointers appends the heading and block in name order; check passes; a pointer change fails with the fix line', async () => {
@@ -409,6 +437,29 @@ test('pointers: a current block right under its heading is left byte-identical',
   const out = await hr(r, 'pointers');
   assert.equal(out.code, 0, out.stderr);
   assert.equal(read(r, 'AGENTS.md'), text);
+  const check = await hr(r, 'pointers', '--check');
+  assert.equal(check.code, 0, check.stderr);
+});
+
+test('pointers: a stale block under a correctly placed heading keeps the prefix bytes and its line ending', async () => {
+  const begin = '<!-- hooked-rules:begin -->';
+  const text =
+    '# Rules\r\n\r\n' +
+    '## Hook-delivered rules\n' +
+    `${begin}\r\n` +
+    '- old \u2014 .agents/hooked-rules/old.md\r\n' +
+    '<!-- hooked-rules:end -->\r\n';
+  const r = await repo({ files: { 'AGENTS.md': text, '.agents/hooked-rules/a.md': rule('new') } });
+
+  const out = await hr(r, 'pointers');
+  assert.equal(out.code, 0, out.stderr);
+  const updated = read(r, 'AGENTS.md');
+  const prefix = text.slice(0, text.indexOf(begin) + begin.length + 2);
+  assert.ok(updated.startsWith(prefix), 'the heading and begin marker keep their bytes');
+  assert.ok(updated.includes('## Hook-delivered rules\n<!-- hooked-rules:begin -->'));
+  assert.match(updated, /\n- new \u2014 \.agents\/hooked-rules\/a\.md\r\n/);
+  assert.ok(updated.endsWith('<!-- hooked-rules:end -->\r\n'));
+
   const check = await hr(r, 'pointers', '--check');
   assert.equal(check.code, 0, check.stderr);
 });

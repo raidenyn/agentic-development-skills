@@ -19,13 +19,16 @@ import {
 import { dirname, join, resolve } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ASSETS, tempRepo } from './helpers.mjs';
+import { ASSETS, tempRepo, until } from './helpers.mjs';
 
 const lib = (file) => import(pathToFileURL(join(ASSETS.hookedRules, 'lib', file)).href);
 const { decide, capped, promptSkill, CONTEXT_CAP } = await lib('deliver.mjs');
 const { acquireLedgerLock, withLedger, readLedger, bump, COMPACTIONS_FILE } = await lib('ledger.mjs');
-const { loadRules, parseRule } = await lib('rules.mjs');
+const { loadRules, parseRule, RULES_DIR } = await lib('rules.mjs');
 const { createRuntime } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'runtime.mjs')).href);
+const { startWorker, terminateWorker } = await import(
+  pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'supervisor.mjs')).href
+);
 const handlerMod = await import(pathToFileURL(join(ASSETS.hookedRules, 'handler.mjs')).href);
 const { createHookedRulesHandler } = handlerMod;
 const h = handlerMod.default;
@@ -707,6 +710,91 @@ test('a compaction logged by bump voids the delivered entry', async () => {
   assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' }, 'the rule delivers again');
 });
 
+test('a compaction advances the generation while a ledger operation still waits for its lock', async () => {
+  const r = await repo();
+  const dir = stateDirOf(r);
+  mkdirSync(dir, { recursive: true });
+  let release;
+  const blocked = new Promise((resolve) => {
+    release = resolve;
+  });
+  // The ledger operation is waiting on its runtime lock, so its in-process queue turn is still open.
+  const pending = withLedger(dir, (ledger) => ({ ledger, value: 'decided' }), {
+    lock: { acquire: () => blocked },
+  });
+  try {
+    let done = false;
+    const bumped = bump(dir, { deadline: Date.now() + 5000 }).then(() => {
+      done = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(done, true, 'bump does not wait behind the ledger queue');
+    assert.equal(readLedger(dir).generation, 1, 'the compaction advanced the generation');
+    await bumped;
+  } finally {
+    release(null);
+    await pending;
+  }
+});
+
+// A minimal worker tool that runs the shipped ledger through the supervisor-owned context lock: one
+// event blocks inside the ledger operation, the next records a value.
+const LOCKER_URL = pathToFileURL(join(ASSETS.hookedRules, 'lib', 'ledger.mjs')).href;
+const LOCKER = `
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { withLedger } from ${JSON.stringify(LOCKER_URL)};
+export default {
+  name: 'locker',
+  events: ['turn.end'],
+  async handle(event, ctx) {
+    if (event.hold) {
+      await withLedger(ctx.stateDir, () => {
+        writeFileSync(join(ctx.stateDir, 'held'), 'held');
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60000);
+        return null;
+      }, { lock: ctx.lock });
+      return null;
+    }
+    const value = await withLedger(ctx.stateDir, (ledger) => ({
+      ledger: { ...ledger, reported: ['replacement'] },
+      value: 'wrote',
+    }), { lock: ctx.lock });
+    return { context: String(value) };
+  },
+};
+`;
+
+test('a retired worker releases its ledger lock so a replacement worker can write', async () => {
+  const r = await repo();
+  const stateDir = stateDirOf(r);
+  mkdirSync(stateDir, { recursive: true });
+  const toolDir = join(r.dir, '.agents', 'harness', 'locker');
+  mkdirSync(toolDir, { recursive: true });
+  writeFileSync(join(toolDir, 'handler.mjs'), LOCKER);
+
+  const first = await startWorker(toolDir, { tool: 'locker' });
+  const [gen] = first.workerGens();
+  const held = first.handle({ type: 'turn.end', hold: true }, context(r, { stateDir })).catch(() => {});
+  try {
+    await until(() => existsSync(join(stateDir, 'held')), 10000, 'the first worker holds the ledger lock');
+    // Retiring the generation terminates the blocked worker and releases the lock it held. The host
+    // pid of the worker is the test process's, so a pid-keyed local lock would stay live forever.
+    await terminateWorker(gen);
+    const second = await startWorker(toolDir, { tool: 'locker' });
+    try {
+      const out = await second.handle({ type: 'turn.end' }, context(r, { stateDir, deadline: Date.now() + 10000 }));
+      assert.deepEqual(out, { context: 'wrote' });
+      assert.deepEqual(readLedger(stateDir).reported, ['replacement']);
+    } finally {
+      await second.close();
+    }
+  } finally {
+    await first.close();
+    await held;
+  }
+});
+
 test('a denial recorded after a compaction is confirmed by its retry in the same generation', async () => {
   const r = await repo({ '.agents/hooked-rules/commit.md': RULE(`gates: ["${COMMIT_FILE}"]`, 'Commit types.\n') });
   // Pin the clock: the compaction, the denial and the retry all land in the same millisecond, so an
@@ -869,7 +957,7 @@ test('an expired startup stops at its final guard instead of repairing a corrupt
   assert.equal(readFileSync(ledgerPath(r), 'utf8'), '{ not json', 'the expiry stopped the repair');
 });
 
-test('an unreadable rules folder is reported at the next session start', async (t) => {
+test('an unreadable rules folder fails open with the manual notice at the next session start', async (t) => {
   if (typeof process.getuid === 'function' && process.getuid() === 0) {
     t.skip('root reads a 0o000 folder');
     return;
@@ -878,12 +966,34 @@ test('an unreadable rules folder is reported at the next session start', async (
   const dir = join(r.dir, '.agents', 'hooked-rules');
   chmodSync(dir, 0o000);
   try {
-    const out = await call(h, r, sessionStart());
-    assert.ok(out?.context, 'the unreadable folder is reported, not discarded');
-    assert.match(out.context, /\.agents\/hooked-rules: cannot be read/);
+    await assert.rejects(call(h, r, sessionStart()), /\.agents\/hooked-rules cannot be read/);
+    const out = await createRuntime({ repoRoot: r.dir, host: 'claude-code', handlers: [h] }).dispatch(sessionStart(), {
+      sessionId: 's1',
+      agentId: 'main',
+    });
+    assert.equal(out.outcomes['hooked-rules'], 'failed');
+    assert.match(out.notices[0], /\.agents\/hooked-rules cannot be read/);
+    assert.ok(out.notices[0].includes(h.manual), 'the notice names the hand-read manual');
   } finally {
     chmodSync(dir, 0o755);
   }
+});
+
+test('a rules path that is not a directory rejects so every event fails open with the manual notice', async () => {
+  const r = await repo();
+  mkdirSync(join(r.dir, '.agents'), { recursive: true });
+  writeFileSync(join(r.dir, RULES_DIR), 'not a directory\n');
+  for (const event of [skill('s'), shellBefore('git commit -m "x"'), prompt('/s'), sessionStart()]) {
+    await assert.rejects(call(h, r, event), /\.agents\/hooked-rules is not a directory/, event.type);
+  }
+  const out = await createRuntime({ repoRoot: r.dir, host: 'claude-code', handlers: [h] }).dispatch(skill('s'), {
+    sessionId: 's1',
+    agentId: 'main',
+  });
+  assert.equal(out.deny, undefined, 'the host call is not denied');
+  assert.equal(out.outcomes['hooked-rules'], 'failed');
+  assert.match(out.notices[0], /\.agents\/hooked-rules is not a directory/);
+  assert.ok(out.notices[0].includes(h.manual), 'the fail-open notice names the hand-read manual');
 });
 
 test('a rule with requires is a load error and its gate does not deny', async () => {

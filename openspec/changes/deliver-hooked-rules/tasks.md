@@ -35,9 +35,9 @@
 
 ## 6. Onboard this repository
 
-- [ ] 6.1 Run `pnpm run harness:update`. The lock should gain hooked-rules 0.1.0 next to hook-runtime 0.2.0. Then add `agent-harness-hooked-rules` to `tests/agent-harness/vendored.test.mjs` `TOOLS` and to the skill tuple in `scripts/test_skills.py`.
-- [ ] 6.2 Add `.agents/hooked-rules/repo-commit-types.md` and `.agents/hooked-rules/repo-harness-tools.md` (design D9), then run `pointers` to write the `AGENTS.md` block. Once `repo-commit-types.md` exists, the commit gate is live in the implementing session: the first `git commit` is denied once, as expected.
-- [ ] 6.3 Add `hooked-rules/cli.mjs check` and `pointers --check` to `FULL_CHECKS` in `scripts/verify.mts` (and `pointers --check` to `editChecks` for `.agents/hooked-rules/*.md` and `AGENTS.md`), update `scripts/test-verify.mts` to match, and add both to `.github/workflows/validate.yml`.
+- [x] 6.1 Run `pnpm run harness:update`. The lock should gain hooked-rules 0.1.0 next to hook-runtime 0.2.0. Then add `agent-harness-hooked-rules` to `tests/agent-harness/vendored.test.mjs` `TOOLS` and to the skill tuple in `scripts/test_skills.py`.
+- [x] 6.2 Add `.agents/hooked-rules/repo-commit-types.md` and `.agents/hooked-rules/repo-harness-tools.md` (design D9), then run `pointers` to write the `AGENTS.md` block. Once `repo-commit-types.md` exists, the commit gate is live in the implementing session: the first `git commit` is denied once, as expected.
+- [x] 6.3 Add `hooked-rules/cli.mjs check` and `pointers --check` to `FULL_CHECKS` in `scripts/verify.mts` (and `pointers --check` to `editChecks` for `.agents/hooked-rules/*.md` and `AGENTS.md`), update `scripts/test-verify.mts` to match, and add both to `.github/workflows/validate.yml`.
 
 ## 7. Live checks and evidence
 

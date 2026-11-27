@@ -3,7 +3,7 @@
 // double-quoted strings, then a body.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, symlink } from 'node:fs/promises';
+import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
@@ -59,13 +59,23 @@ test('flow and block lists give equal skills', () => {
   assert.deepEqual(block.skills, flow.skills);
 });
 
-test('BOM and CRLF parse, the body has LF, and the hash covers the raw bytes', () => {
+test('BOM and CRLF parse, the body has LF, and loadRules hashes the raw file bytes', async () => {
   const text = '\uFEFF---\r\npointer: "p"\r\nskills: ["a"]\r\n---\r\nThe body.\r\nTwo lines.\r\n';
-  const parsed = parseRule('bom.md', text);
-  assert.deepEqual(parsed.skills, ['a']);
-  assert.equal(parsed.body, 'The body.\nTwo lines.\n');
-  assert.equal(parsed.sha256, createHash('sha256').update(Buffer.from(text, 'utf8')).digest('hex'));
-  assert.equal(parsed.name, 'bom.md');
+  const r = await tempRepo();
+  try {
+    await mkdir(join(r.dir, RULES_DIR), { recursive: true });
+    await writeFile(join(r.dir, RULES_DIR, 'bom.md'), text);
+    const { rules, errors } = loadRules(r.dir);
+    assert.deepEqual(errors, []);
+    assert.equal(rules.length, 1);
+    const [parsed] = rules;
+    assert.deepEqual(parsed.skills, ['a']);
+    assert.equal(parsed.body, 'The body.\nTwo lines.\n');
+    assert.equal(parsed.sha256, createHash('sha256').update(Buffer.from(text, 'utf8')).digest('hex'));
+    assert.equal(parsed.name, 'bom.md');
+  } finally {
+    await r.cleanup();
+  }
 });
 
 test('lone CR line endings parse too', () => {
@@ -132,6 +142,8 @@ test('frontmatter and body errors', () => {
     ['the \\n escape', rule('pointer: "p"\nskills: ["a\\nb"]')],
     ['a missing closing marker', '---\npointer: "p"\nskills: ["a"]\n'],
     ['a plain scalar pointer', rule('pointer: p\nskills: ["a"]')],
+    ['a tab on the opening marker', '---\t\npointer: "p"\nskills: ["a"]\n---\nBody.\n'],
+    ['a tab on the closing marker', '---\npointer: "p"\nskills: ["a"]\n---\t\nBody.\n'],
   ];
   for (const [label, text] of cases) {
     assert.throws(() => parseRule('a.md', text), RuleError, label);
@@ -209,6 +221,22 @@ test('loadRules on a repo without the rules folder returns no rules and no error
   const r = await tempRepo();
   try {
     assert.deepEqual(loadRules(r.dir), { rules: [], errors: [] });
+  } finally {
+    await r.cleanup();
+  }
+});
+
+test('loadRules treats a regular file at the rules path as a folder failure, not an absent folder', async () => {
+  const r = await tempRepo();
+  try {
+    await mkdir(join(r.dir, '.agents'), { recursive: true });
+    await writeFile(join(r.dir, RULES_DIR), 'not a directory\n');
+    const { rules, errors } = loadRules(r.dir);
+    assert.deepEqual(rules, []);
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].path, RULES_DIR);
+    assert.equal(errors[0].directory, true);
+    assert.match(errors[0].message, /not a directory/);
   } finally {
     await r.cleanup();
   }

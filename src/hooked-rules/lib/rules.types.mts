@@ -18,9 +18,11 @@ export interface Rule {
 }
 
 export interface RuleIssue {
-  /** The rule file, relative to the repository root. */
+  /** The rule file, relative to the repository root; the rules folder itself for a folder failure. */
   path: string;
   message: string;
+  /** True for a failure to read `.agents/hooked-rules/` itself, rather than one invalid file in it. */
+  directory?: true;
 }
 
 export interface RuleLoad {
