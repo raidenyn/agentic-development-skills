@@ -2,7 +2,7 @@
 
 The commands of one wake of the conductor, one section per step. Everything goes through the `gh` command line tool, `jq` and the T3 MCP tools. The commands below were checked against GitHub with `gh` 2.105. If a flag is missing in your version, check `gh <command> --help` before changing the approach.
 
-A wake is a message to the conductor thread that ends with "Run one wake of the project-conductor skill for this board." The old sentence "Run one wake of the project-conductor skill for this repository." is accepted the same way, so threads started before the change keep reporting. The message may start with one `Trigger: webhook.` or `Trigger: timer.` line, or with one phase report line. The board is never taken from the message: it comes from the conductor thread's own title (see [Identity](#identity)).
+A wake is a message to the conductor thread that ends with "Run one wake of the project-conductor skill for this board." The old sentence "Run one wake of the project-conductor skill for this repository." is accepted the same way, so threads started before the change keep reporting. The message may start with one `Trigger: webhook.` or `Trigger: timer.` line, or with one phase report line. The board is never taken from the wake message: it comes from the conductor thread's launch line, the first line of its first message (see [Identity](#identity)).
 
 A wake has no served repository. The conductor serves one board, and the board's issues may belong to several repositories. Each item names its own repository, and every command for that item uses it.
 
@@ -10,7 +10,7 @@ Placeholders:
 
 | Placeholder | Meaning |
 |---|---|
-| `<board URL>` | The board's URL, from the conductor thread's own title: `https://github.com/users/<board owner>/projects/<n>` or `https://github.com/orgs/<board owner>/projects/<n>`. |
+| `<board URL>` | The board's URL, from the conductor thread's launch line: `https://github.com/users/<board owner>/projects/<n>` or `https://github.com/orgs/<board owner>/projects/<n>`. |
 | `<board owner>`, `<n>` | The board's owner and number, from `<board URL>`. |
 | `<root>` | `user` when `<board URL>` has `/users/`, `organization` when it has `/orgs/`. |
 | `<agent>` | The agent's login, from Preflight. |
@@ -40,7 +40,7 @@ Run every read anyway, so one report lists all gaps. Preflight writes nothing.
 
 ### Identity
 
-The conductor is named by its own title, `project-conductor <board URL>`, and by the `conductor` key of the board readme's [settings block](#settings-block). This part reads the title and takes the board from it. **This read happens on every wake, a repeat included. Never take the title from the thread's earlier messages, from the onboarding or from memory: call the two T3 tools below now.** Anchor: `#identity`.
+The conductor is named by two things: the **launch line**, the first line of its thread's first message, `/project-conductor <board URL>`, and the `conductor` key of the board readme's [settings block](#settings-block). The board comes from the launch line. The thread's title, `<board title> Conductor`, is a label for the owner, and a wrong title is a gap, not an identity failure. **This read happens on every wake, a repeat included. Never take the board from the wake message, from the thread's later messages, from the onboarding or from memory: call the T3 tools below now.** Anchor: `#identity`.
 
 ```bash
 gh auth status                                   # logged in, and the token scopes include "project"
@@ -50,24 +50,33 @@ gh api user --jq .login                          # <agent>
 Then read the conductor's own thread:
 
 1. Call the T3 tool `t3_thread_configure` with no arguments. Its `threadId` is `<conductor id>`.
-2. Call `t3_thread_read` with `threadId` `<conductor id>` and `limit` 1. Write its `thread.title` to `<work>/title.txt`, as is. The file must be non-empty; a missing or empty title file is an identity failure.
+2. Call `t3_thread_read` with `threadId` `<conductor id>` and `limit` 1. Write its `thread.title` to `<work>/title.txt`, as is.
+3. Call `t3_thread_read` with `threadId` `<conductor id>`, `view` `"messages"`, `afterPosition` -1, `limit` 1 and `maxCharsPerItem` 2000. The one item is the thread's first message, at `position` 0. Write its `text` to `<work>/first.txt`, as is. No item, or an item whose `position` is not 0, is an identity failure.
 
-Check the title against the exact form and take the board from it:
+Take the board from the launch line:
 
 ```bash
 mkdir -p <work>
-# "<root> <board owner> <n>"; no output: the title does not have the exact form
-sed -nE 's#^project-conductor https://github\.com/(users|orgs)/([^/ ]+)/projects/([0-9]+)$#\1 \2 \3#p' <work>/title.txt \
+# "<root> <board owner> <n>"; no output: the first line is not a launch line
+head -n 1 <work>/first.txt | tr -d '\r' \
+  | sed -nE 's#^/(project-conductor:)?project-conductor[[:space:]]+https://github\.com/(users|orgs)/([^/ ]+)/projects/([0-9]+)/?([[:space:]].*)?$#\2 \3 \4#p' \
   | sed -e 's/^users /user /' -e 's/^orgs /organization /'
 ```
 
-The whole title must match: one space after `project-conductor`, no trailing slash, nothing before or after. `<board URL>` is the title with `project-conductor ` removed.
+The first line must start with `/project-conductor` (or the plugin form `/project-conductor:project-conductor`), then the board URL, which may be followed by a space and more text. `<board URL>` is `https://github.com/<users|orgs>/<board owner>/projects/<n>`, without a trailing slash.
+
+Then compare the title with `<board title> Conductor`, where `<board title>` is the board's `title` from [The board](#the-board):
+
+```bash
+gh project view <n> --owner <board owner> --format json --jq '.title + " Conductor"'   # the expected title
+```
 
 | Result | Owner step |
 |---|---|
 | `gh auth status` fails, or lacks the `project` scope | Gap: "Log the agent account in to `gh` with the `project` scope (`gh auth refresh -s project`)." |
-| `t3_thread_configure` or `t3_thread_read` fails | Identity failure: "The conductor could not read its own thread: <error>." |
-| the `sed` prints nothing | Identity failure: "Rename this thread to `project-conductor <board URL>`, exactly, with `t3_thread_update`, or run the onboarding procedure of project-conductor in it." Name the title as read. |
+| a `t3_thread_configure` or `t3_thread_read` call fails | Identity failure: "The conductor could not read its own thread: <error>." |
+| the `sed` prints nothing | Identity failure: "This thread's first message is not `/project-conductor <board URL>`. Run the onboarding of the board in a new thread that starts with that command." Name the first line as read. |
+| the title differs from `<board title> Conductor`, such as the old form `project-conductor <board URL>` or a board renamed since onboarding | Gap, and the wake goes on: "Rename this thread to `<board title> Conductor`, or run the onboarding again in it." |
 
 An identity failure stops the wake here, except for the report. The other half of the check, the readme block's `conductor`, is in [Settings block](#settings-block).
 

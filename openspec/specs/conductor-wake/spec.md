@@ -19,7 +19,7 @@ A wake SHALL be a message to the conductor thread that ends with the sentence "R
 - one `Trigger: webhook.` or `Trigger: timer.` line;
 - one phase report line.
 
-The old sentence "Run one wake of the project-conductor skill for this repository." MUST be accepted the same way. The board MUST come from the conductor thread's own title, never from the message.
+The old sentence "Run one wake of the project-conductor skill for this repository." MUST be accepted the same way. The board MUST come from the conductor thread's launch line, the first line of its first message, `/project-conductor <board URL>`, never from the wake message.
 
 #### Scenario: Manual wake
 - **WHEN** the owner sends only the wake sentence to the conductor thread
@@ -31,7 +31,7 @@ The old sentence "Run one wake of the project-conductor skill for this repositor
 
 ### Requirement: Settings and board preflight
 Before the steps, every wake SHALL read:
-- its own title;
+- its own title and its first message;
 - the board's fields;
 - the settings block from the board readme;
 - for each repository of the board, its default branch and the agent's permission.
@@ -305,14 +305,20 @@ Every wake SHALL end with a report that lists:
 
 ### Requirement: The wake checks its own identity
 Every wake SHALL write nothing, and SHALL report the fix, when either of these fails:
-- its own title is exactly `project-conductor <board URL>`;
+- the first line of its own first message is the launch line `/project-conductor <board URL>`;
 - the settings block's `conductor` equals its own thread id.
 
 In that case Repair and Settle MUST NOT run either.
 
+A title other than `<board title> Conductor` SHALL be reported as a gap with the rename as the owner step, and the wake SHALL go on.
+
 #### Scenario: Thread renamed by hand
 - **WHEN** the conductor thread's title is changed to "my conductor"
-- **THEN** the next wake writes nothing, and the report asks for the title `project-conductor <board URL>`
+- **THEN** the next wake runs as usual, and its report lists the gap "Rename this thread to `<board title> Conductor`"
+
+#### Scenario: Thread without a launch line
+- **WHEN** a thread whose first message is "please conduct my board" holds the wake sentence and is named in the block's `conductor`
+- **THEN** the wake writes nothing, and the report asks to onboard the board in a new thread that starts with `/project-conductor <board URL>`
 
 #### Scenario: Block names another thread
 - **WHEN** the settings block's `conductor` holds another thread's id

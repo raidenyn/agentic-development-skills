@@ -13,7 +13,7 @@ The onboarding commands are in [references/onboarding-github.md](references/onbo
 
 ## Onboarding inputs
 
-The owner types `/project-conductor <board URL>` in a new thread, in any T3 project or in "No project". Onboarding runs in that thread, and that thread becomes the board's conductor. (Spec: Skill and procedure exist.)
+The owner types `/project-conductor <board URL>` as the first message of a new thread, in any T3 project or in "No project". Onboarding runs in that thread, and that thread becomes the board's conductor. That first line, the **launch line**, is where every later wake reads the board from. (Spec: Skill and procedure exist.)
 
 | Input | Default | Notes |
 |---|---|---|
@@ -33,7 +33,8 @@ These are frozen. Write them verbatim.
 
 | What | Name and value |
 |---|---|
-| Conductor title | `project-conductor <board URL>`, this thread's title |
+| Conductor title | `<board title> Conductor`, this thread's title, such as `Bank MCP Conductor`. A label only: the board comes from the launch line |
+| Launch line | `/project-conductor <board URL>`, the first line of this thread's first message |
 | Settings block | the line `<!-- project-conductor -->` in the board readme, followed by one fenced `text` block with the keys `conductor`, `maxParallel` (2), `reviewRounds` (5), `reconcileMinutes` (30, from 1 to 1440), `maxAttempts` (2), `model.plan`, `model.review`, `model.implement` |
 | Board fields | "Run phase" (single select: `plan`, `implement`, `closeout`, `care`), "Attempt" (number), "Run thread" (text) |
 | Triggers | `project-conductor webhook` and `project-conductor timer`, bound to this thread |
@@ -69,8 +70,8 @@ Survey:
 
 - `gh` is logged in and the token has the `project` scope. The agent's login, from the token.
 - The board can be read by its explicit number and owner; its URL, id and readme are known.
-- This thread's id, title and T3 project.
-- **One conductor.** The block's `conductor`: when it names another thread that `t3_thread_read` shows as not archived, stop. Then every project of `t3_project_list`, "No project" included: search each for the conductor title and compare the titles exactly; a match that is not this thread stops the run. A failed search stops it too. A full page of 50 matches with no exact match from another thread does not: report "search not exhaustive for project <id>" under Pending and go on, since the block's `conductor` is the exact guard.
+- This thread's id, title and T3 project, and its launch line. A first message that is not `/project-conductor <board URL>`, or that names another board, stops the run: "Run the onboarding of this board in a new thread that starts with `/project-conductor <board URL>`."
+- **One conductor.** The block's `conductor`: when it names another thread that `t3_thread_read` shows as not archived, stop. Then every project of `t3_project_list`, "No project" included: search each for the conductor title, and for the old title `project-conductor <board URL>`, and compare the titles exactly. A match that is not this thread stops the run only when its launch line names this board; another board with the same title is no conflict. A failed search stops it too. A full page of 50 matches with no exact match from another thread does not: report "search not exhaustive for project <id>" under Pending and go on, since the block's `conductor` is the exact guard.
 
 If `gh` is not logged in, the scope is missing, the board cannot be read or the one-conductor check stops, end the run with the report: nothing is written, and the report names the existing conductor or the fix.
 
@@ -80,7 +81,7 @@ Preflight writes nothing.
 
 Reference: [The rename](references/onboarding-github.md#the-rename). Spec: The onboarding thread becomes the conductor.
 
-Survey: this thread's title. Exactly `project-conductor <board URL>`: reuse. Another board's conductor title: stop, "Run the onboarding of this board in a new thread." Anything else: change.
+Survey: this thread's title. Exactly `<board title> Conductor`: reuse. Anything else, the old form `project-conductor <board URL>` included: change. (Preflight has already stopped a thread whose launch line names another board.)
 
 Write: rename this thread with `t3_thread_update` `rename`, then read the title back. A refused rename is an owner step.
 
@@ -190,7 +191,7 @@ Every run ends with this report, a dry run included. (Spec: Report and repeatabi
 ## Onboarding: board <board URL>
 
 Mode: <dry run | written after agreement | written without asking>
-Conductor: <this thread's id>, titled `project-conductor <board URL>`
+Conductor: <this thread's id>, titled `<board title> Conductor`, launch line `/project-conductor <board URL>`
 
 ### Created
 - <what, with its link or id>
@@ -247,7 +248,7 @@ One wake runs four steps once. All commands are in [references/run-github.md](re
 | Input | Notes |
 |---|---|
 | The wake message | A message to the conductor thread that ends with the sentence "Run one wake of the project-conductor skill for this board." The old sentence "…for this repository." is accepted the same way. It may start with one `Trigger: webhook.` or `Trigger: timer.` line, or with one phase report line. A message with only the sentence is a manual wake. |
-| The board | From the conductor thread's own title, `project-conductor <board URL>`. It is never taken from the message. |
+| The board | From the conductor thread's launch line, `/project-conductor <board URL>`, the first line of its first message. It is never taken from the wake message. |
 | The repositories | Each board item's own repository, `content.repository.nameWithOwner`. A wake has no served repository: every command for an item uses that item's repository and that repository's T3 project. |
 
 (Spec: Wake message.)
@@ -256,10 +257,10 @@ One wake runs four steps once. All commands are in [references/run-github.md](re
 
 Reference: [Preflight](references/run-github.md#preflight), [Models](references/run-github.md#models) and [Board](references/run-github.md#board). Spec: The wake checks its own identity; Settings and board preflight; Models are resolved, never substituted; Board read in one query.
 
-1. **Identity.** Read the agent's login, this thread's own id and its title, as in [Identity](references/run-github.md#identity). Every wake, a repeat included, calls `t3_thread_configure` and `t3_thread_read` for this thread and writes the returned title to `<work>/title.txt`; a title remembered from earlier messages, from the onboarding or from this procedure is not a read, and skipping the call is an identity failure. The title must be exactly `project-conductor <board URL>`; the board comes from it.
+1. **Identity.** Read the agent's login, this thread's own id, its title and its first message, as in [Identity](references/run-github.md#identity). Every wake, a repeat included, calls `t3_thread_configure` and `t3_thread_read` for this thread and writes the title to `<work>/title.txt` and the first message to `<work>/first.txt`; a board remembered from earlier messages, from the onboarding or from this procedure is not a read, and skipping the calls is an identity failure. The first line must be `/project-conductor <board URL>`; the board comes from it. A title other than `<board title> Conductor` is a gap with the rename as its owner step, and the wake goes on.
 2. **Board.** Read the board's fields, names matched exactly, case included. Then read every page of the board once, into one file, with the board readme, as in [Board](references/run-github.md#board). A failed page means Advance and Start write nothing, and the report names the gap; a partial board is never judged.
 3. **Settings block.** Parse the block after `<!-- project-conductor -->` in the board readme, as in [Settings block](references/run-github.md#settings-block). A missing number takes its default. An unknown or repeated key, a number that is not a positive integer, `reconcileMinutes` outside 1 to 1440, a missing `conductor`, no fenced block or two markers is a settings gap.
-4. **Identity, second half.** The block's `conductor` must equal this thread's id. When it does not, or the title does not have the exact form, the wake writes nothing at all, Repair and Settle included, and the report gives the fix: rename the thread, or correct the block, naming the thread the block names.
+4. **Identity, second half.** The block's `conductor` must equal this thread's id. When it does not, or the first message is not a launch line, the wake writes nothing at all, Repair and Settle included, and the report gives the fix: correct the block, naming the thread the block names, or onboard the board in a new thread that starts with `/project-conductor <board URL>`.
 5. **Repositories.** For each repository of the board, read its default branch, the agent's permission and its one T3 project, matched by `canonicalKey` without case, as in [Repositories](references/run-github.md#repositories).
 6. **Ready filter.** Run the [Ready filter](references/run-github.md#ready-filter) on the board read once. Advance and Start both use the board read and the filter's lines.
 7. **Models.** Resolve only the role a step uses: plan for Start, implement for Advance, never review. A missing line, a bare name, no match or an unsupported effort stops that step only, and is reported with the line as written in the block.
