@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Handler loading and dispatch
-The runtime SHALL load `handler.mjs` from `.agents/harness/<tool>/` for each tool in `.agents/harness/lock.json` whose `tool.json` declares `"handler": true`. It SHALL skip, with a reported failure, a handler whose copied files do not match the lock. It SHALL call handlers in process, in name order, only for the events they list, and on `tool.before` and `tool.after` only for the tool kinds they declare.
+The runtime SHALL load `handler.mjs` from `.agents/harness/<tool>/` for each tool in `.agents/harness/lock.json` whose `tool.json` declares `"handler": true`. When it loads handlers, it SHALL skip, with a reported failure, a handler whose copied files do not match the lock. It SHALL call handlers in process, in name order, only for the events they list, and on `tool.before` and `tool.after` only for the tool kinds they declare.
 
 #### Scenario: Tampered handler is not loaded
 - **WHEN** an installed handler file differs from its lock hash
