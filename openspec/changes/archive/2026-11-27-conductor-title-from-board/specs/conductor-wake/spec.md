@@ -58,7 +58,7 @@ A title other than `<board title> Conductor` SHALL be reported as a gap with the
 
 #### Scenario: Thread without a launch line
 - **WHEN** a thread whose first message is "please conduct my board" holds the wake sentence and is named in the block's `conductor`
-- **THEN** the wake writes nothing, and the report asks to onboard the board in a new thread that starts with `/project-conductor <board URL>`
+- **THEN** the wake writes nothing, and the report asks to archive this thread, delete its two triggers and onboard the board in a new thread that starts with `/project-conductor <board URL>`, then register every webhook again
 
 #### Scenario: Block names another thread
 - **WHEN** the settings block's `conductor` holds another thread's id

@@ -122,7 +122,15 @@ Registers the webhook trigger's URL as a GitHub webhook of one repository. Onboa
 
 When the owner says in this thread that they added the webhook of an owner step, for example "Add the GitHub webhook for `<repo>` - done", run Register the webhook for `<repo>` again without a URL and without a secret:
 
-1. **With admin,** list the hooks as in step 3 and look for one whose URL is the trigger's. The URL is not known in this run, so match, without case, the part `/scheduled-task%3A<uuid>/` or `/scheduled-task:<uuid>/` of `config.url`, where `<uuid>` is the webhook trigger's `scheduledTaskId` from `list_scheduled_tasks` without its `scheduled-task:` prefix. Found, active and with exactly `issues` and `pull_request`: the result is `reused <id>`. Otherwise the result stays `owner step`, and the report says what differs.
+1. **With admin,** list the hooks into `<work>/hooks.json` as in step 3 and look for one whose URL is the trigger's. The URL is not known in this run, so match, without case, the part `/scheduled-task%3A<uuid>/` or `/scheduled-task:<uuid>/` of `config.url`, where `<uuid>` is the webhook trigger's `scheduledTaskId` from `list_scheduled_tasks` without its `scheduled-task:` prefix:
+
+   ```bash
+   jq -r --arg u '<uuid>' '($u | ascii_downcase) as $u
+     | [.[] | select((.url // "") | ascii_downcase | (contains("/scheduled-task%3a" + $u + "/") or contains("/scheduled-task:" + $u + "/"))) | .id]
+     | first // empty' <work>/hooks.json    # <id>, or nothing
+   ```
+
+   Found, active and with exactly `issues` and `pull_request`: the result is `reused <id>`. Otherwise the result stays `owner step`, and the report says what differs.
 2. **Without admin,** the agent cannot read the hooks. Take the owner's word: the result is `done by the owner, not checked: not an admin`. Nothing is written.
 
 Both end with the standalone report below. A `done by the owner` repository leaves the `Webhook owner steps:` list, so a missed delivery from it counts for the [automatic check](#automatic-check), which then tells the owner to check that hook.
