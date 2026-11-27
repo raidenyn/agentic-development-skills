@@ -589,7 +589,8 @@ test('a backlog of three turn ends behind a run that used almost all its budget:
   await until(() => p.calls.synthetic.length === 1, 4000, 'last result');
   assert.equal(s.calls.length, 4);
   for (const c of s.calls) {
-    assert.ok(c.room >= 380, `run ${c.n} had its full budget (${c.room} ms)`);
+    // A fresh budget is 400 ms; the leftover after a 350 ms run would be about 50 ms. 300 tells them apart under load.
+    assert.ok(c.room >= 300, `run ${c.n} had its full budget (${c.room} ms)`);
     assert.equal(c.aborted, false, `run ${c.n} finished within its budget`);
   }
   assert.deepEqual(p.calls.synthetic, [{ sessionID: ROOT, text: 'run 4', resume: false }]);
