@@ -14,13 +14,11 @@ export interface Entry {
 
 export interface Ledger {
   version: 1;
-  /** Bumped by a compaction in this context; older entries are not live. */
+  /** Written for readability; the effective generation (the compaction-log line count) is used on read. */
   generation: number;
   entries: Record<string, Entry>;
   /** The `path:message` keys of load errors already reported in this context. */
   reported: string[];
-  /** When the decision this ledger records was taken, in epoch milliseconds; 0 when unknown. */
-  decidedAt: number;
 }
 
 export type DecisionResult = { context: string } | { deny: string } | null;

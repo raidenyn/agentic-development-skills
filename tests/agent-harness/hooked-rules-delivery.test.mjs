@@ -3,15 +3,25 @@
 // The pure cases call decide directly; the handler cases call the built handler in process with one
 // state folder per agent, as the runtime gives it.
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import {
+  appendFileSync,
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { pathToFileURL } from 'node:url';
-import { ASSETS, runNode, tempRepo } from './helpers.mjs';
+import { ASSETS, directSpawn, tempRepo } from './helpers.mjs';
 
 const lib = (file) => import(pathToFileURL(join(ASSETS.hookedRules, 'lib', file)).href);
 const { decide, capped, promptSkill, CONTEXT_CAP } = await lib('deliver.mjs');
-const { acquireLedgerLock, withLedger, readLedger, bump, INVALIDATED_FILE } = await lib('ledger.mjs');
+const { acquireLedgerLock, withLedger, readLedger, bump, COMPACTIONS_FILE } = await lib('ledger.mjs');
 const { parseRule } = await lib('rules.mjs');
 const { createRuntime } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'runtime.mjs')).href);
 const handlerMod = await import(pathToFileURL(join(ASSETS.hookedRules, 'handler.mjs')).href);
@@ -26,7 +36,7 @@ after(async () => {
 // A rule file: `---` frontmatter with a pointer, then a body.
 const RULE = (frontmatter, body = 'Rule body.\n') => `---\npointer: "see AGENTS.md"\n${frontmatter}\n---\n${body}`;
 const ruleOf = (name, frontmatter, body) => parseRule(name, RULE(frontmatter, body));
-const empty = () => ({ version: 1, generation: 0, entries: {}, reported: [], decidedAt: 0 });
+const empty = () => ({ version: 1, generation: 0, entries: {}, reported: [] });
 const clone = (value) => structuredClone(value);
 
 // The two gate patterns this repository uses, in the rule file's double-backslash form and as the
@@ -494,60 +504,80 @@ test('a held lock passes the gate and returns the moment without recording', asy
   }
 });
 
-test('two processes taking over one stale lock never own it at the same time', async () => {
+test('a contender paused after the dead-owner check does not displace a takeover lock', async () => {
   const r = await repo();
   const dir = stateDirOf(r);
   mkdirSync(dir, { recursive: true });
-  const stale = lockPath(r);
-  mkdirSync(stale);
-  writeFileSync(join(stale, 'owner'), JSON.stringify({ token: 'stale', pid: process.pid, at: Date.now() - 20000 }));
-  const ready = join(r.dir, 'ready');
-  mkdirSync(ready);
-  const ledgerUrl = JSON.stringify(pathToFileURL(join(ASSETS.hookedRules, 'lib', 'ledger.mjs')).href);
-  const script = join(r.dir, 'race.mjs');
-  writeFileSync(
-    script,
-    `import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-const { acquireLedgerLock } = await import(${ledgerUrl});
-const [dir, id, ready] = process.argv.slice(2);
-writeFileSync(join(ready, id), '');
-const until = Date.now() + 5000;
-while (Date.now() < until && readdirSync(ready).length < 2) {}
-const lock = await acquireLedgerLock(dir);
-if (lock === null) {
-  process.stdout.write(JSON.stringify({ acquired: false, owned: false }));
-} else {
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-  let owned = false;
-  try {
-    owned = JSON.parse(readFileSync(join(lock.path, 'owner'), 'utf8')).token === lock.token;
-  } catch {}
-  lock.release();
-  process.stdout.write(JSON.stringify({ acquired: true, owned }));
-}
-`,
-  );
-  // Both children reach the stale lock at the same moment and really race for its rename.
-  const children = await Promise.all([
-    runNode(script, [dir, 'a', ready], { cwd: r.dir }),
-    runNode(script, [dir, 'b', ready], { cwd: r.dir }),
-  ]);
-  for (const child of children) assert.equal(child.code, 0, child.stderr);
-  const results = children.map((child) => JSON.parse(child.stdout));
-  assert.equal(results.filter((result) => result.owned).length, 1, 'exactly one dispatch still owns the lock');
-  assert.equal(existsSync(stale), false, 'the stale lock was taken over and the owner released it');
+  const path = lockPath(r);
+  mkdirSync(path);
+  writeFileSync(join(path, 'owner'), JSON.stringify({ token: 'dead', pid: 999999999, at: Date.now() }));
+  let checked;
+  const atCheck = new Promise((resolve) => (checked = resolve));
+  let resume;
+  const paused = new Promise((resolve) => (resume = resolve));
+  const first = acquireLedgerLock(dir, {
+    beforeTakeOver: async () => {
+      checked();
+      await paused;
+    },
+  });
+  await atCheck; // the first contender saw the dead owner and stopped at the old check point
+  const second = await acquireLedgerLock(dir); // another dispatch takes the dead lock over
+  assert.ok(second);
+  resume(); // the first contender resumes and re-checks at the rename point
+  const resumed = await first;
+  assert.equal(resumed, null, 'the paused contender backs off instead of renaming the new lock');
+  assert.equal(second.owned(), true, 'exactly one dispatch holds the lock');
+  second.release();
+  assert.equal(existsSync(path), false);
 });
 
-test('a compaction published between a holder read and its write stays void', async () => {
+test('a dead holder is taken over at once and a live one is never taken over by age', async () => {
+  const r = await repo();
+  const dir = stateDirOf(r);
+  mkdirSync(dir, { recursive: true });
+  const path = lockPath(r);
+  mkdirSync(path);
+  // A slow live holder keeps its lock however old the owner record is.
+  writeFileSync(join(path, 'owner'), JSON.stringify({ token: 'slow', pid: process.pid, at: Date.now() - 20000 }));
+  assert.equal(await acquireLedgerLock(dir), null, 'a live holder is waited for, not taken over');
+  assert.equal(JSON.parse(readFileSync(join(path, 'owner'), 'utf8')).token, 'slow');
+  rmSync(path, { recursive: true, force: true });
+  // A crashed holder leaves a dead pid, which is the only takeover path.
+  mkdirSync(path);
+  writeFileSync(join(path, 'owner'), JSON.stringify({ token: 'dead', pid: 999999999, at: Date.now() }));
+  const lock = await acquireLedgerLock(dir);
+  assert.ok(lock);
+  assert.equal(JSON.parse(readFileSync(join(path, 'owner'), 'utf8')).token, lock.token);
+  lock.release();
+});
+
+test('a dispatch whose lock is taken over before its write records nothing', async () => {
+  const r = await repo();
+  const dir = stateDirOf(r);
+  mkdirSync(dir, { recursive: true });
+  const path = lockPath(r);
+  const value = await withLedger(dir, (ledger) => {
+    // Another dispatch takes the lock over between this dispatch's read and its write.
+    renameSync(path, `${path}.taken`);
+    mkdirSync(path);
+    writeFileSync(join(path, 'owner'), JSON.stringify({ token: 'other', pid: process.pid, at: Date.now() }));
+    return { ledger: { ...ledger, reported: ['late'] }, value: 'decided' };
+  });
+  assert.equal(value, null, 'the write is refused and the call fails open');
+  assert.equal(existsSync(ledgerPath(r)), false);
+  rmSync(`${path}.taken`, { recursive: true, force: true });
+  rmSync(path, { recursive: true, force: true });
+});
+
+test('a compaction logged between a holder read and its write stays void', async () => {
   const r = await repo({ '.agents/hooked-rules/apply.md': RULE('skills: ["s"]', 'Apply.\n') });
   assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' });
   const dir = stateDirOf(r);
   const value = await withLedger(dir, (ledger) => {
-    // A compaction that won no lock publishes its marker after this dispatch read the ledger.
-    writeFileSync(join(dir, INVALIDATED_FILE), JSON.stringify({ at: Date.now() }));
-    const entry = { sha256: 'late', generation: ledger.generation, state: 'pending', patterns: [], triggers: [] };
-    return { ledger: { ...ledger, entries: { ...ledger.entries, late: entry } }, value: 'decided' };
+    // The compaction lands after this dispatch read the ledger.
+    appendFileSync(join(dir, COMPACTIONS_FILE), `${Date.now()}\n`);
+    return { ledger: { ...ledger, reported: ['late'] }, value: 'decided' };
   });
   assert.equal(value, 'decided');
   const reread = readLedger(dir);
@@ -555,19 +585,35 @@ test('a compaction published between a holder read and its write stays void', as
   assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' }, 'the rule delivers again');
 });
 
-test('a bump that wins no lock still publishes its invalidation', async () => {
+test('a delayed older compaction cannot revive an entry a newer one voided', async () => {
+  const r = await repo({ '.agents/hooked-rules/apply.md': RULE('skills: ["s"]', 'Apply.\n') });
+  const dir = stateDirOf(r);
+  assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' });
+  // A newer compaction completes, then a delayed older one lands: the generation is a line count, so
+  // no timestamp can lower the cutoff.
+  writeFileSync(join(dir, COMPACTIONS_FILE), '2000000000000\n');
+  appendFileSync(join(dir, COMPACTIONS_FILE), '1000000000000\n');
+  assert.equal(readLedger(dir).generation, 2, 'both lines count');
+  assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' }, 'the entry stays void');
+});
+
+test('a compaction logged by bump voids the delivered entry', async () => {
   const r = await repo({ '.agents/hooked-rules/apply.md': RULE('skills: ["s"]', 'Apply.\n') });
   assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' });
   const dir = stateDirOf(r);
-  const held = await acquireLedgerLock(dir);
-  assert.ok(held);
-  try {
-    await bump(dir); // waits the 1 s, then writes only the marker
-    assert.ok(existsSync(join(dir, INVALIDATED_FILE)), 'the marker is published without the lock');
-    assert.ok(readLedger(dir).generation > storedLedger(r).generation, 'the delivered entry is void');
-  } finally {
-    held.release();
-  }
+  await bump(dir);
+  assert.equal(readLedger(dir).generation, 1, 'one logged compaction');
+  assert.ok(readLedger(dir).generation > storedLedger(r).entries['apply.md'].generation);
+  assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' }, 'the rule delivers again');
+});
+
+test('a denial recorded after a compaction is confirmed by its retry in the same generation', async () => {
+  const r = await repo({ '.agents/hooked-rules/commit.md': RULE(`gates: ["${COMMIT_FILE}"]`, 'Commit types.\n') });
+  await call(h, r, compact());
+  assert.deepEqual(await call(h, r, shellBefore('git commit -m "x"')), { deny: 'Commit types.' });
+  assert.equal(storedLedger(r).entries['commit.md'].generation, 1, 'recorded at the post-compaction generation');
+  assert.equal(await call(h, r, shellBefore('git commit -m "y"')), null, 'the retry in the same generation passes');
+  assert.equal(storedLedger(r).entries['commit.md'].state, 'delivered');
 });
 
 test('release removes only a lock it still owns', async () => {
@@ -601,8 +647,8 @@ test('a broken ledger.json is repaired by an event that records nothing', async 
   assert.equal(await call(h, r, shellAfter('echo hi')), null);
   const stored = storedLedger(r);
   assert.equal(stored.version, 1);
+  assert.equal(stored.generation, 0);
   assert.deepEqual(stored.entries, {});
-  assert.equal(typeof stored.decidedAt, 'number');
 });
 
 test('a broken ledger.json is left alone by a call that was aborted', async () => {
@@ -651,7 +697,7 @@ test('a compaction that was aborted or is past its deadline does not bump the ge
   }
 });
 
-test('a deadline that passes during the bump read writes nothing', async () => {
+test('a compaction whose deadline passes before its append writes nothing', async () => {
   for (const event of [compact(), sessionStart(true)]) {
     const r = await repo({ '.agents/hooked-rules/apply.md': RULE('skills: ["s"]', 'Apply.\n') });
     assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' });
@@ -660,14 +706,51 @@ test('a deadline that passes during the bump read writes nothing', async () => {
     let tick = real();
     Date.now = () => (tick += 1000);
     try {
-      // The deadline is still ahead when the call starts and passes while the ledger is read.
+      // The deadline is still ahead when the call starts and passes before the append.
       assert.equal(await call(h, r, event, { deadline: tick + 500 }), null);
     } finally {
       Date.now = real;
     }
-    assert.equal(readFileSync(ledgerPath(r), 'utf8'), before, `${event.type} wrote nothing`);
-    assert.equal(existsSync(join(stateDirOf(r), INVALIDATED_FILE)), false, `${event.type} published no marker`);
+    assert.equal(existsSync(join(stateDirOf(r), COMPACTIONS_FILE)), false, `${event.type} logged no compaction`);
+    assert.equal(readFileSync(ledgerPath(r), 'utf8'), before, `${event.type} wrote no ledger`);
   }
+});
+
+test('an expired startup does not repair a corrupt ledger found during its final read', async (t) => {
+  const r = await repo(); // no rule files, so there is no fresh issue to report
+  mkdirSync(stateDirOf(r), { recursive: true });
+  writeFileSync(ledgerPath(r), '{ not json');
+  const fifo = join(stateDirOf(r), COMPACTIONS_FILE);
+  try {
+    execFileSync('mkfifo', [fifo]);
+  } catch {
+    t.skip('mkfifo is not available');
+    return;
+  }
+  // The first write unblocks the ledger read before the callback; the second one, 400 ms later,
+  // unblocks the final read inside the write section, by then past the deadline.
+  const writer = join(r.dir, 'writer.mjs');
+  writeFileSync(
+    writer,
+    `import { appendFileSync } from 'node:fs';
+const fifo = process.argv[2];
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+await sleep(10);
+appendFileSync(fifo, 'a\\n');
+await sleep(390);
+appendFileSync(fifo, 'b\\n');
+`,
+  );
+  const child = directSpawn([process.execPath, writer, fifo], { cwd: r.dir, timeoutMs: 5000 });
+  const result = await call(h, r, sessionStart(), { deadline: Date.now() + 150 });
+  const finished = await child;
+  assert.equal(finished.code, 0, finished.stderr);
+  assert.equal(result, null);
+  assert.equal(
+    readFileSync(ledgerPath(r), 'utf8'),
+    '{ not json',
+    'the expiry during the final read stopped the repair',
+  );
 });
 
 test('an unreadable rules folder is reported at the next session start', async (t) => {

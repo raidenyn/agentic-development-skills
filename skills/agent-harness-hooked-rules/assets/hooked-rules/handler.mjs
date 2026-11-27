@@ -38,24 +38,32 @@ export function createHookedRulesHandler({ loadRules: load = loadRules } = {}) {
   // recorded as delivered. A match or persistence failure rejects, so the runtime shows the manual
   // notice and the host's call still passes.
   const deliver = (stateDir, event, ctx) =>
-    withLedger(stateDir, (ledger, locked) => {
-      const decision = decide(load(ctx.repoRoot).rules, ledger, event);
-      if (expired(ctx)) return null;
-      if (!locked) return { ledger, value: withoutDeny(decision.result) };
-      return { ledger: decision.ledger, value: decision.result };
-    }).then(resultOf);
+    withLedger(
+      stateDir,
+      (ledger, locked) => {
+        const decision = decide(load(ctx.repoRoot).rules, ledger, event);
+        if (expired(ctx)) return null;
+        if (!locked) return { ledger, value: withoutDeny(decision.result) };
+        return { ledger: decision.ledger, value: decision.result };
+      },
+      { live: () => !expired(ctx) },
+    ).then(resultOf);
 
   // The startup diagnostic is not a moment: it waits until its keys can be recorded, so a lock
   // timeout cannot show the same report at the next session start.
   const report = (stateDir, errors, ctx) =>
-    withLedger(stateDir, (ledger, locked) => {
-      if (!locked) return null;
-      if (expired(ctx)) return null;
-      const fresh = errors.filter((issue) => !ledger.reported.includes(issueKey(issue)));
-      if (fresh.length === 0) return { ledger, value: null };
-      const value = { context: reportText(fresh) };
-      return { ledger: { ...ledger, reported: [...ledger.reported, ...fresh.map(issueKey)] }, value };
-    }).then(resultOf);
+    withLedger(
+      stateDir,
+      (ledger, locked) => {
+        if (!locked) return null;
+        if (expired(ctx)) return null;
+        const fresh = errors.filter((issue) => !ledger.reported.includes(issueKey(issue)));
+        if (fresh.length === 0) return { ledger, value: null };
+        const value = { context: reportText(fresh) };
+        return { ledger: { ...ledger, reported: [...ledger.reported, ...fresh.map(issueKey)] }, value };
+      },
+      { live: () => !expired(ctx) },
+    ).then(resultOf);
 
   return {
     name: 'hooked-rules',
