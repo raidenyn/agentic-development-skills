@@ -16,6 +16,8 @@ export const FULL_CHECKS: string[][] = [
   ['pnpm', 'run', 'check'],
   ['node', '.agents/harness/hook-runtime/cli.mjs', 'check'],
   ['node', '.agents/harness/verify-gate/cli.mjs', 'check'],
+  ['node', '.agents/harness/hooked-rules/cli.mjs', 'check'],
+  ['node', '.agents/harness/hooked-rules/cli.mjs', 'pointers', '--check'],
 ];
 
 // Biome checks hand-written Node code only: not the generated skill assets, not the installed copy
@@ -33,6 +35,9 @@ export function editChecks(relPath: string): string[][] {
   if (relPath.startsWith('src/')) checks.push(BUILD);
   else if (generated(relPath)) checks.push([...BUILD, '--check']);
   if (relPath.startsWith('skills/') || relPath === '.claude-plugin/marketplace.json') checks.push(VALIDATE);
+  // A rule edit changes the generated pointer block, and an AGENTS.md edit can stale it too.
+  if (relPath === 'AGENTS.md' || /^\.agents\/hooked-rules\/[^/]+\.md$/.test(relPath))
+    checks.push(['node', '.agents/harness/hooked-rules/cli.mjs', 'pointers', '--check']);
   return checks;
 }
 

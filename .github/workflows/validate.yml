@@ -56,6 +56,12 @@ jobs:
       - name: Check the verify gate install
         run: node .agents/harness/verify-gate/cli.mjs check
 
+      - name: Check the hooked-rules install
+        run: node .agents/harness/hooked-rules/cli.mjs check
+
+      - name: Check the AGENTS.md pointer block
+        run: node .agents/harness/hooked-rules/cli.mjs pointers --check
+
       - name: Validate Claude Code marketplace manifest
         run: pnpm dlx @anthropic-ai/claude-code@2.1.330 plugin validate .
 

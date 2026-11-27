@@ -676,7 +676,11 @@ class BuildPagesTests(unittest.TestCase):
         self.assertEqual(code, 0, output)
         index = json.loads((out / "opencode" / "index.json").read_text(encoding="utf-8"))
         files = {entry["name"]: entry["files"] for entry in index["skills"]}
-        for skill in ("agent-harness-hook-runtime", "agent-harness-verify-gate"):
+        for skill in (
+            "agent-harness-hook-runtime",
+            "agent-harness-hooked-rules",
+            "agent-harness-verify-gate",
+        ):
             skill_dir = ROOT / "skills" / skill
             assets = [
                 (Path(dirpath) / name).relative_to(skill_dir).as_posix()

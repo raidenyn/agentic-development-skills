@@ -1,7 +1,11 @@
 {
   "hook-runtime": {},
   "verify-gate": {
-    "command": ["node", "scripts/verify.mts"],
+    "command": [
+      "node",
+      "scripts/verify.mts"
+    ],
     "base": "origin/main"
-  }
+  },
+  "hooked-rules": {}
 }

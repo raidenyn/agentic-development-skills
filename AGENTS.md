@@ -29,3 +29,9 @@ If `repo-search` exists, use it for where/why questions; fall back to grep.
 - Biome lints and formats; `noNonNullAssertion` is off because `!` keeps the typed build byte-identical, and `noExplicitAny` is off because `any` marks host and JSON boundaries on purpose (strict `tsc` still rejects implicit `any`). Use `any` only there.
 
 Agent hooks run `node scripts/verify.mts` on edits, ticked tasks and turn end (`.agents/harness/`); run it by hand with `node .agents/harness/verify-gate/cli.mjs run`.
+
+## Hook-delivered rules
+<!-- hooked-rules:begin -->
+- Conventional Commits for commits and PR titles — .agents/hooked-rules/repo-commit-types.md
+- Harness tools: bump tool.json, never edit assets, run harness:update — .agents/hooked-rules/repo-harness-tools.md
+<!-- hooked-rules:end -->

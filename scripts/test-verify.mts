@@ -59,8 +59,16 @@ test('FULL_CHECKS is the full list', () => {
     ['pnpm', 'run', 'check'],
     ['node', '.agents/harness/hook-runtime/cli.mjs', 'check'],
     ['node', '.agents/harness/verify-gate/cli.mjs', 'check'],
+    ['node', '.agents/harness/hooked-rules/cli.mjs', 'check'],
+    ['node', '.agents/harness/hooked-rules/cli.mjs', 'pointers', '--check'],
   ]);
   assert.ok(!FULL_CHECKS.some((c) => c.join(' ') === 'pnpm test'));
+});
+
+test('edit of a rule file or AGENTS.md runs the pointer check', () => {
+  const POINTER_CHECK = ['node', '.agents/harness/hooked-rules/cli.mjs', 'pointers', '--check'];
+  assert.deepEqual(editChecks('.agents/hooked-rules/repo-commit-types.md'), [POINTER_CHECK]);
+  assert.deepEqual(editChecks('AGENTS.md'), [POINTER_CHECK]);
 });
 
 test('an invalid .json file fails the edit run', async () => {

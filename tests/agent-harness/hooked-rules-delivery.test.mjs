@@ -16,15 +16,15 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { after, test } from 'node:test';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ASSETS, tempRepo } from './helpers.mjs';
 
 const lib = (file) => import(pathToFileURL(join(ASSETS.hookedRules, 'lib', file)).href);
 const { decide, capped, promptSkill, CONTEXT_CAP } = await lib('deliver.mjs');
 const { acquireLedgerLock, withLedger, readLedger, bump, COMPACTIONS_FILE } = await lib('ledger.mjs');
-const { parseRule } = await lib('rules.mjs');
+const { loadRules, parseRule } = await lib('rules.mjs');
 const { createRuntime } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'runtime.mjs')).href);
 const handlerMod = await import(pathToFileURL(join(ASSETS.hookedRules, 'handler.mjs')).href);
 const { createHookedRulesHandler } = handlerMod;
@@ -903,4 +903,17 @@ test('a missing rules folder means no rules and no error', async () => {
   assert.equal(await call(h, r, shellBefore('git commit -m "x"')), null);
   assert.equal(await call(h, r, skill('s')), null);
   assert.equal(existsSync(ledgerPath(r)), false);
+});
+
+// This repository onboards its own rules (design D9, "This repository delivers hooked rules").
+test("this repository's rules load and its harness command matches build and update", () => {
+  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const { rules, errors } = loadRules(repoRoot);
+  assert.deepEqual(errors, []);
+  const tools = rules.find((rule) => rule.name === 'repo-harness-tools.md');
+  assert.ok(tools, 'repo-harness-tools.md loads');
+  const [pattern] = tools.commands;
+  assert.equal(pattern.regex.test('pnpm run build'), true);
+  assert.equal(pattern.regex.test('pnpm harness:update'), true);
+  assert.equal(pattern.regex.test('pnpm run build:check'), false);
 });
