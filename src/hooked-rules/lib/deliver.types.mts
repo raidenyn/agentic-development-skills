@@ -19,6 +19,8 @@ export interface Ledger {
   entries: Record<string, Entry>;
   /** The `path:message` keys of load errors already reported in this context. */
   reported: string[];
+  /** When the decision this ledger records was taken, in epoch milliseconds; 0 when unknown. */
+  decidedAt: number;
 }
 
 export type DecisionResult = { context: string } | { deny: string } | null;

@@ -55,9 +55,9 @@ export function createHookedRulesHandler({ loadRules: load = loadRules }: { load
   const report = (stateDir: string, errors: RuleIssue[], ctx: Ctx) =>
     withLedger<DecisionResult>(stateDir, (ledger, locked) => {
       if (!locked) return null;
+      if (expired(ctx)) return null;
       const fresh = errors.filter((issue) => !ledger.reported.includes(issueKey(issue)));
       if (fresh.length === 0) return { ledger, value: null };
-      if (expired(ctx)) return null;
       const value: DecisionResult = { context: reportText(fresh) };
       return { ledger: { ...ledger, reported: [...ledger.reported, ...fresh.map(issueKey)] }, value };
     }).then(resultOf);

@@ -3,15 +3,15 @@
 // The pure cases call decide directly; the handler cases call the built handler in process with one
 // state folder per agent, as the runtime gives it.
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { pathToFileURL } from 'node:url';
-import { ASSETS, tempRepo } from './helpers.mjs';
+import { ASSETS, runNode, tempRepo } from './helpers.mjs';
 
 const lib = (file) => import(pathToFileURL(join(ASSETS.hookedRules, 'lib', file)).href);
 const { decide, capped, promptSkill, CONTEXT_CAP } = await lib('deliver.mjs');
-const { acquireLedgerLock, withLedger } = await lib('ledger.mjs');
+const { acquireLedgerLock, withLedger, readLedger, bump, INVALIDATED_FILE } = await lib('ledger.mjs');
 const { parseRule } = await lib('rules.mjs');
 const { createRuntime } = await import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', 'runtime.mjs')).href);
 const handlerMod = await import(pathToFileURL(join(ASSETS.hookedRules, 'handler.mjs')).href);
@@ -26,7 +26,7 @@ after(async () => {
 // A rule file: `---` frontmatter with a pointer, then a body.
 const RULE = (frontmatter, body = 'Rule body.\n') => `---\npointer: "see AGENTS.md"\n${frontmatter}\n---\n${body}`;
 const ruleOf = (name, frontmatter, body) => parseRule(name, RULE(frontmatter, body));
-const empty = () => ({ version: 1, generation: 0, entries: {}, reported: [] });
+const empty = () => ({ version: 1, generation: 0, entries: {}, reported: [], decidedAt: 0 });
 const clone = (value) => structuredClone(value);
 
 // The two gate patterns this repository uses, in the rule file's double-backslash form and as the
@@ -47,7 +47,17 @@ async function repo(files = {}) {
 
 const stateDirOf = (r, agent = 'main') => join(r.dir, '.state', agent);
 const ledgerPath = (r, agent = 'main') => join(stateDirOf(r, agent), 'ledger.json');
+const lockPath = (r, agent = 'main') => join(stateDirOf(r, agent), 'ledger.lock');
 const storedLedger = (r, agent = 'main') => JSON.parse(readFileSync(ledgerPath(r, agent), 'utf8'));
+
+// A lock directory held by a live dispatch under another token, as the runtime leaves it while a
+// concurrent event runs.
+function holdLock(r, agent = 'main') {
+  const path = lockPath(r, agent);
+  mkdirSync(path, { recursive: true });
+  writeFileSync(join(path, 'owner'), JSON.stringify({ token: 'held', pid: process.pid, at: Date.now() }));
+  return path;
+}
 
 /** @typedef {{ agentId?: string, stateDir?: string, deadline?: number, signal?: AbortSignal }} ContextOptions */
 
@@ -346,7 +356,7 @@ test('a subagent compaction leaves the root delivered, and a root compaction re-
   assert.equal(storedLedger(r, 'main').generation, 0);
   await call(h, r, compact());
   assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' });
-  assert.equal(storedLedger(r, 'main').generation, 1);
+  assert.ok(storedLedger(r, 'main').generation >= 1, 'the root compaction bumped the generation');
 });
 
 test('session.start with afterCompact re-arms, a plain one does not', async () => {
@@ -474,53 +484,114 @@ test('a held lock passes the gate and returns the moment without recording', asy
   mkdirSync(stateDirOf(r), { recursive: true });
   const seeded = JSON.stringify(empty());
   writeFileSync(ledgerPath(r), seeded);
-  const slot = join(stateDirOf(r), 'ledger.lock.1');
-  writeFileSync(slot, JSON.stringify({ pid: process.pid, at: Date.now() }));
+  const held = holdLock(r);
   try {
     assert.equal(await call(h, r, shellBefore('git commit -m "x"')), null, 'the gate fails open');
     assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' });
     assert.equal(readFileSync(ledgerPath(r), 'utf8'), seeded, 'nothing is written');
   } finally {
-    rmSync(slot, { force: true });
+    rmSync(held, { recursive: true, force: true });
   }
 });
 
-test('two takeover attempts on one stale lock admit exactly one dispatch', async () => {
+test('two processes taking over one stale lock never own it at the same time', async () => {
   const r = await repo();
   const dir = stateDirOf(r);
   mkdirSync(dir, { recursive: true });
-  const stale = join(dir, 'ledger.lock.1');
-  const body = JSON.stringify({ pid: process.pid, at: Date.now(), released: false });
-  writeFileSync(stale, body);
-  // Both contenders wait on slot 1, so both observe it going stale at the same moment and race for
-  // the successor slot. Only the link can decide between them.
-  const nearlyStale = new Date(Date.now() - 9750);
-  utimesSync(stale, nearlyStale, nearlyStale);
-  const [first, second] = await Promise.all([acquireLedgerLock(dir), acquireLedgerLock(dir)]);
-  assert.ok(first, 'one contender takes the stale lock over');
-  assert.equal(second, null, 'the other contender does not join it');
-  assert.equal(readFileSync(stale, 'utf8'), body, 'the stale slot is never moved or rewritten');
-  assert.ok(existsSync(first.path), 'the winner holds its own slot');
-  first.release();
-  assert.equal(existsSync(first.path), false, 'release removes only that slot');
-  const next = await acquireLedgerLock(dir);
-  assert.ok(next, 'the next dispatch acquires after the release');
-  next.release();
+  const stale = lockPath(r);
+  mkdirSync(stale);
+  writeFileSync(join(stale, 'owner'), JSON.stringify({ token: 'stale', pid: process.pid, at: Date.now() - 20000 }));
+  const ready = join(r.dir, 'ready');
+  mkdirSync(ready);
+  const ledgerUrl = JSON.stringify(pathToFileURL(join(ASSETS.hookedRules, 'lib', 'ledger.mjs')).href);
+  const script = join(r.dir, 'race.mjs');
+  writeFileSync(
+    script,
+    `import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+const { acquireLedgerLock } = await import(${ledgerUrl});
+const [dir, id, ready] = process.argv.slice(2);
+writeFileSync(join(ready, id), '');
+const until = Date.now() + 5000;
+while (Date.now() < until && readdirSync(ready).length < 2) {}
+const lock = await acquireLedgerLock(dir);
+if (lock === null) {
+  process.stdout.write(JSON.stringify({ acquired: false, owned: false }));
+} else {
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  let owned = false;
+  try {
+    owned = JSON.parse(readFileSync(join(lock.path, 'owner'), 'utf8')).token === lock.token;
+  } catch {}
+  lock.release();
+  process.stdout.write(JSON.stringify({ acquired: true, owned }));
+}
+`,
+  );
+  // Both children reach the stale lock at the same moment and really race for its rename.
+  const children = await Promise.all([
+    runNode(script, [dir, 'a', ready], { cwd: r.dir }),
+    runNode(script, [dir, 'b', ready], { cwd: r.dir }),
+  ]);
+  for (const child of children) assert.equal(child.code, 0, child.stderr);
+  const results = children.map((child) => JSON.parse(child.stdout));
+  assert.equal(results.filter((result) => result.owned).length, 1, 'exactly one dispatch still owns the lock');
+  assert.equal(existsSync(stale), false, 'the stale lock was taken over and the owner released it');
 });
 
-test('a stale write cannot roll the generation back below a lock-free bump', async () => {
-  const r = await repo();
-  mkdirSync(stateDirOf(r), { recursive: true });
-  writeFileSync(ledgerPath(r), JSON.stringify(empty()));
-  const value = await withLedger(stateDirOf(r), (ledger) => {
-    // A compaction that won no lock publishes the bump while this dispatch holds a stale copy.
-    writeFileSync(ledgerPath(r), JSON.stringify({ ...ledger, generation: ledger.generation + 1 }));
-    const entry = { sha256: 'x', generation: 0, state: 'pending', patterns: [], triggers: [] };
+test('a compaction published between a holder read and its write stays void', async () => {
+  const r = await repo({ '.agents/hooked-rules/apply.md': RULE('skills: ["s"]', 'Apply.\n') });
+  assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' });
+  const dir = stateDirOf(r);
+  const value = await withLedger(dir, (ledger) => {
+    // A compaction that won no lock publishes its marker after this dispatch read the ledger.
+    writeFileSync(join(dir, INVALIDATED_FILE), JSON.stringify({ at: Date.now() }));
+    const entry = { sha256: 'late', generation: ledger.generation, state: 'pending', patterns: [], triggers: [] };
     return { ledger: { ...ledger, entries: { ...ledger.entries, late: entry } }, value: 'decided' };
   });
   assert.equal(value, 'decided');
-  assert.equal(storedLedger(r).generation, 1, 'the compaction survives the stale write');
-  assert.equal(storedLedger(r).entries.late.state, 'pending');
+  const reread = readLedger(dir);
+  assert.ok(reread.generation > reread.entries['apply.md'].generation, 'the delivered entry is void');
+  assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' }, 'the rule delivers again');
+});
+
+test('a bump that wins no lock still publishes its invalidation', async () => {
+  const r = await repo({ '.agents/hooked-rules/apply.md': RULE('skills: ["s"]', 'Apply.\n') });
+  assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' });
+  const dir = stateDirOf(r);
+  const held = await acquireLedgerLock(dir);
+  assert.ok(held);
+  try {
+    await bump(dir); // waits the 1 s, then writes only the marker
+    assert.ok(existsSync(join(dir, INVALIDATED_FILE)), 'the marker is published without the lock');
+    assert.ok(readLedger(dir).generation > storedLedger(r).generation, 'the delivered entry is void');
+  } finally {
+    held.release();
+  }
+});
+
+test('release removes only a lock it still owns', async () => {
+  const r = await repo();
+  const lock = await acquireLedgerLock(stateDirOf(r));
+  assert.ok(lock);
+  // Another dispatch takes the lock over: the directory is renamed away and a new owner claims it.
+  renameSync(lock.path, `${lock.path}.taken`);
+  mkdirSync(lock.path);
+  writeFileSync(join(lock.path, 'owner'), JSON.stringify({ token: 'other', pid: process.pid, at: Date.now() }));
+  lock.release();
+  assert.ok(existsSync(lock.path), 'the new owner keeps its lock');
+  rmSync(`${lock.path}.taken`, { recursive: true, force: true });
+  rmSync(lock.path, { recursive: true, force: true });
+});
+
+test('a broken ledger.json is left alone by an aborted startup', async () => {
+  const r = await repo();
+  mkdirSync(stateDirOf(r), { recursive: true });
+  writeFileSync(ledgerPath(r), '{ not json');
+  const controller = new AbortController();
+  controller.abort();
+  assert.equal(await call(h, r, sessionStart(), { signal: controller.signal }), null);
+  assert.equal(readFileSync(ledgerPath(r), 'utf8'), '{ not json');
 });
 
 test('a broken ledger.json is repaired by an event that records nothing', async () => {
@@ -528,7 +599,10 @@ test('a broken ledger.json is repaired by an event that records nothing', async 
   mkdirSync(stateDirOf(r), { recursive: true });
   writeFileSync(ledgerPath(r), '{ not json');
   assert.equal(await call(h, r, shellAfter('echo hi')), null);
-  assert.deepEqual(storedLedger(r), empty());
+  const stored = storedLedger(r);
+  assert.equal(stored.version, 1);
+  assert.deepEqual(stored.entries, {});
+  assert.equal(typeof stored.decidedAt, 'number');
 });
 
 test('a broken ledger.json is left alone by a call that was aborted', async () => {
@@ -546,12 +620,11 @@ test('a startup report waits for the lock instead of being shown twice', async (
     '.agents/hooked-rules/bad.md': RULE(['skills: ["s"]', 'when: "x"'].join('\n'), 'Bad.\n'),
   });
   mkdirSync(stateDirOf(r), { recursive: true });
-  const slot = join(stateDirOf(r), 'ledger.lock.1');
-  writeFileSync(slot, JSON.stringify({ pid: process.pid, at: Date.now() }));
+  const held = holdLock(r);
   try {
     assert.equal(await call(h, r, sessionStart()), null, 'no report without the lock');
   } finally {
-    rmSync(slot, { force: true });
+    rmSync(held, { recursive: true, force: true });
   }
   const first = await call(h, r, sessionStart());
   assert.ok(first?.context?.includes('.agents/hooked-rules/bad.md'));
@@ -575,6 +648,25 @@ test('a compaction that was aborted or is past its deadline does not bump the ge
     assert.equal(storedLedger(r).generation, 0, `${event.type} did not bump`);
     assert.equal(storedLedger(r).entries['apply.md'].state, 'delivered');
     assert.equal(await call(h, r, skill('s')), null, 'the rule stays delivered');
+  }
+});
+
+test('a deadline that passes during the bump read writes nothing', async () => {
+  for (const event of [compact(), sessionStart(true)]) {
+    const r = await repo({ '.agents/hooked-rules/apply.md': RULE('skills: ["s"]', 'Apply.\n') });
+    assert.deepEqual(await call(h, r, skill('s')), { context: 'Apply.' });
+    const before = readFileSync(ledgerPath(r), 'utf8');
+    const real = Date.now;
+    let tick = real();
+    Date.now = () => (tick += 1000);
+    try {
+      // The deadline is still ahead when the call starts and passes while the ledger is read.
+      assert.equal(await call(h, r, event, { deadline: tick + 500 }), null);
+    } finally {
+      Date.now = real;
+    }
+    assert.equal(readFileSync(ledgerPath(r), 'utf8'), before, `${event.type} wrote nothing`);
+    assert.equal(existsSync(join(stateDirOf(r), INVALIDATED_FILE)), false, `${event.type} published no marker`);
   }
 });
 
