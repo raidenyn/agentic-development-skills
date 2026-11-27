@@ -35,12 +35,13 @@ The runtime's own config key is `hook-runtime.deadlines`: `{"<event>": milliseco
 
 ## Handler interface
 
-A handler is its own tool folder `.agents/harness/<name>/` with a lock entry, a `tool.json` of `{"name", "version", "handler": true}` and a `handler.mjs` whose default export is the handler object. The verify gate (`skills/agent-harness-verify-gate/assets/verify-gate/`) is the reference: its `cli.mjs` installs it with the shared `lib/install.mjs`. A tool without `"handler": true` is not loaded. A copy that differs from its lock is not loaded, and a `hook <tool> was not loaded` notice says why: on Claude Code at every event that has a channel, on OpenCode at `session.start`.
+A handler is its own tool folder `.agents/harness/<name>/` with a lock entry, a `tool.json` of `{"name", "version", "handler": true, "tools"?}` and a `handler.mjs` whose default export is the handler object. The verify gate (`skills/agent-harness-verify-gate/assets/verify-gate/`) is the reference: its `cli.mjs` installs it with the shared `lib/install.mjs`. A tool without `"handler": true` is not loaded. A copy that differs from its lock is not loaded, and a `hook <tool> was not loaded` notice says why: on Claude Code at every event that has a channel and that a handler would receive, on OpenCode at `session.start`.
 
 ```
 handler: { name, events, handle(event, context) -> result | null,
            proofs?: { name: check(context) -> null | failure text },
            timeouts?: { <event>: ms },          // addition: per-event deadline
+           tools?: [kind],                      // addition, from tool.json
            manual?: text }                      // addition: what to do by hand when the handler fails
 event:   { type: tool.before | tool.after | prompt | turn.end | compact | session.start,
            host: "claude-code" | "opencode",
@@ -56,6 +57,7 @@ context: { repoRoot, host, sessionId, agentId, deadline, signal, stateDir, confi
 The names marked as additions are optional and extend the RFC's handler shape without changing it.
 
 - **`events`** lists the types the handler wants. `handle` is called once per event, handlers one at a time in name order.
+- **`tools`** lists the tool kinds (`shell`, `edit`, `read`, `other`) the handler needs on `tool.before` and `tool.after`. When it is set, a tool call of another kind is not dispatched to the handler, and on Claude Code a call that no handler needs loads no handler. Without the key, the handler gets every kind.
 - **`tool`** is set on `tool.before` and `tool.after`. `command` is set for shell calls. `files` lists repo-relative paths for edit calls; paths outside the repo are dropped. On OpenCode a `patch` call lists its files only at `tool.after`, so its `tool.before` has `files: []`. `callId` is the same on a call's `tool.before` and `tool.after`.
 - **`afterCompact: true`** on `session.start` means the context was compacted. Re-deliver whatever the model must not forget.
 - **`background`** is set at `turn.end`: the number of this agent's subagents still running. It is always 0 at a Claude Code subagent's turn end. A subagent's own turn end is a `turn.end` too, with `agentId` set to the subagent.

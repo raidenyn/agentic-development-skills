@@ -32,7 +32,8 @@ const positive = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? 
 
 // With AGENT_HARNESS_TRACE=1, one JSON line per dispatched event in
 // <hook-runtime state>/trace.jsonl (design D7): {event, processStart, hostCreatedAt?, receivedAt,
-// handlersLoadedAt, settledAt, outcomes}. Never throws.
+// handlersLoadedAt, settledAt, outcomes}. A skipped call has skipped? instead of handlersLoadedAt.
+// Never throws.
 export function writeTrace(repoRoot, record, env = process.env) {
   if (env.AGENT_HARNESS_TRACE !== '1') return;
   try {
@@ -108,6 +109,30 @@ export function declaredKinds(meta) {
     kinds.push(kind);
   }
   return kinds;
+}
+
+// Whether any installed handler tool could want a tool call of this kind (design D2). A missing or
+// unreadable lock, tool.json or `tools` list means every kind, so the caller loads handlers instead
+// of skipping. Returns false only when every handler tool provably excludes the kind.
+export function anyHandlerWants(repoRoot, kind) {
+  let lock;
+  try {
+    lock = readLock(repoRoot);
+  } catch {
+    return true;
+  }
+  for (const name of Object.keys(lock.tools)) {
+    let meta;
+    try {
+      meta = JSON.parse(readFileSync(join(repoRoot, '.agents', 'harness', name, 'tool.json'), 'utf8'));
+    } catch {
+      return true;
+    }
+    if (!isObject(meta) || meta.handler !== true) continue;
+    const kinds = declaredKinds(meta);
+    if (!kinds || kinds.includes(kind)) return true;
+  }
+  return false;
 }
 
 export function createRuntime({ repoRoot, host, handlers = [], problems = [], now = Date.now, budgetMs } = {}) {

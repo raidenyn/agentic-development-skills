@@ -82,7 +82,8 @@ const positive = (v: unknown): number | undefined =>
 
 // With AGENT_HARNESS_TRACE=1, one JSON line per dispatched event in
 // <hook-runtime state>/trace.jsonl (design D7): {event, processStart, hostCreatedAt?, receivedAt,
-// handlersLoadedAt, settledAt, outcomes}. Never throws.
+// handlersLoadedAt, settledAt, outcomes}. A skipped call has skipped? instead of handlersLoadedAt.
+// Never throws.
 export function writeTrace(repoRoot: string, record: unknown, env: NodeJS.ProcessEnv = process.env): void {
   if (env.AGENT_HARNESS_TRACE !== '1') return;
   try {

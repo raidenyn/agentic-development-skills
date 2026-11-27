@@ -32,7 +32,8 @@ const positive = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? 
 
 // With AGENT_HARNESS_TRACE=1, one JSON line per dispatched event in
 // <hook-runtime state>/trace.jsonl (design D7): {event, processStart, hostCreatedAt?, receivedAt,
-// handlersLoadedAt, settledAt, outcomes}. Never throws.
+// handlersLoadedAt, settledAt, outcomes}. A skipped call has skipped? instead of handlersLoadedAt.
+// Never throws.
 export function writeTrace(repoRoot, record, env = process.env) {
   if (env.AGENT_HARNESS_TRACE !== '1') return;
   try {
