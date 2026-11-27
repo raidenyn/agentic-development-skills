@@ -131,6 +131,25 @@ test('tools does not filter non-tool events', async () => {
   assert.deepEqual(calls, ['prompt']);
 });
 
+test('a throwing tools getter is never read on non-tool events', async () => {
+  const calls = [];
+  const handler = {
+    name: 'h',
+    events: ['prompt'],
+    handle: () => {
+      calls.push('prompt');
+      return null;
+    },
+  };
+  Object.defineProperty(handler, 'tools', {
+    get() {
+      throw new Error('tools was read');
+    },
+  });
+  await rt([handler]).dispatch({ type: 'prompt', host: 'claude-code', prompt: 'hi' }, ids);
+  assert.deepEqual(calls, ['prompt']);
+});
+
 test('deny wins over context at tool.before', async () => {
   const out = await rt([
     { name: 'a', events: ['tool.before'], handle: () => ({ deny: 'no' }) },

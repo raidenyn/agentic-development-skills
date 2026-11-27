@@ -321,10 +321,12 @@ export function createRuntime(
     let spent = false; // a timer can fire a little before Date.now() reaches its moment
 
     for (const handler of sorted.filter((h) => Array.isArray(h.events) && h.events.includes(type))) {
-      // Validate on every dispatch so an in-process `tools: []` or an unknown kind means every kind.
-      const kinds = declaredKinds(handler);
-      if (kinds && (type === 'tool.before' || type === 'tool.after') && !kinds.includes(event.tool?.kind ?? 'other'))
-        continue;
+      // Only tool events read `tools` at all, so an unrelated dispatch never touches the key.
+      if (type === 'tool.before' || type === 'tool.after') {
+        // Validate on every tool dispatch so an in-process `tools: []` or an unknown kind means every kind.
+        const kinds = declaredKinds(handler);
+        if (kinds && !kinds.includes(event.tool?.kind ?? 'other')) continue;
+      }
       if (configError || spent || now() >= workDeadline) {
         const reason = configError ?? "skipped, the event's time budget was used up";
         notices.push(failureNotice(handler.name, type, reason, handler.manual));
