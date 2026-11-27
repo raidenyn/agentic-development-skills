@@ -270,16 +270,21 @@ const claudeRun = (r, input, env = {}) =>
 test('a Read with only the verify gate loads no handler and traces the skip', async () => {
   const r = await installed();
   const post = fxClaude('PostToolUse-Read', r.dir);
-  const inputs = [
-    post,
-    fxClaude('PreToolUse-Read', r.dir),
-    JSON.stringify({ ...JSON.parse(post), hook_event_name: 'PostToolUseFailure' }),
+  const cases = [
+    [post, 'tool.after'],
+    [fxClaude('PreToolUse-Read', r.dir), 'tool.before'],
+    [JSON.stringify({ ...JSON.parse(post), hook_event_name: 'PostToolUseFailure' }), 'tool.after'],
   ];
-  for (const input of inputs) {
+  const traceFile = join(r.gitDir, 'agent-harness', 'hook-runtime', 'trace.jsonl');
+  for (const [input, event] of cases) {
+    const before = existsSync(traceFile) ? traceLines(r).length : 0;
     const res = await claudeRun(r, input, { AGENT_HARNESS_TRACE: '1' });
     assert.equal(res.code, 0, res.stderr);
     assert.equal(res.stdout, '');
-    const t = traceLines(r).at(-1);
+    const lines = traceLines(r);
+    assert.equal(lines.length, before + 1, 'one new trace record per invocation');
+    const t = lines.at(-1);
+    assert.equal(t.event, event);
     assert.equal(t.skipped, 'no-subscriber');
     assert.deepEqual(t.outcomes, {});
     assert.equal('handlersLoadedAt' in t, false);
