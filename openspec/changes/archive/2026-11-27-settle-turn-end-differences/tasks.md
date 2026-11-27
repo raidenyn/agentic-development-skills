@@ -44,8 +44,8 @@
 
 ## 8. Versions, build and checks
 
-- [x] 8.1 Bump `src/hook-runtime/tool.json` to 0.1.4 and `src/verify-gate/tool.json` to 0.2.2, then run `pnpm run harness:update`
+- [x] 8.1 Bump `src/hook-runtime/tool.json` to 0.1.4 and `src/verify-gate/tool.json` to 0.2.3, then run `pnpm run harness:update`
 - [x] 8.2 Run `pnpm run check`, `python3 scripts/skills.py validate`, `claude plugin validate .`, `python3 -m unittest discover -s scripts -p 'test_*.py'` and `openspec validate settle-turn-end-differences --strict`; all pass
 - [x] 8.3 Sync the delta specs into `openspec/specs/` and archive the change in this PR (`openspec archive settle-turn-end-differences`), then re-run `openspec validate --strict`
 - [x] 8.4 Draft the PR report: each acceptance criterion with its evidence, the C1/C2/C3 findings and decisions, the changed contracts and versions, the reversed test, CI testing Ubuntu only, and the proposed follow-up tasks (parallel verify commands; reaping for manual CLI runs)
-- [ ] 8.5 After the merge, confirm that the Pages catalog lists `hook-runtime` 0.1.4 and `verify-gate` 0.2.2 (issue #62 acceptance criterion)
+- [ ] 8.5 After the merge, confirm that the Pages catalog lists `hook-runtime` 0.1.4 and `verify-gate` 0.2.3 (issue #62 acceptance criterion)

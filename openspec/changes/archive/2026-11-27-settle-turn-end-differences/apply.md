@@ -33,6 +33,10 @@
 
 ---
 
+## Rebase onto main
+
+Main merged #66 (`verify-gate` 0.2.2) before this PR. The branch was merged with `origin/main`; this change therefore releases `verify-gate` **0.2.3** on top of 0.2.2, not 0.2.2 over 0.2.1. `hook-runtime` stays at 0.1.4.
+
 ## Verification
 
 - `pnpm run check` — 421 tests, 421 pass, 0 fail.

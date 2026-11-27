@@ -51,7 +51,7 @@ If any items failed, list id + issues:
 | Task | Reason incomplete | Blocks archive? |
 |---|---|---|
 | 8.3 Sync the delta specs into `openspec/specs/` and archive the change | Deferred by the apply workflow: `openspec archive` runs after verify/finalize; the sync is performed by that command. The final whole-branch review agreed it must land in this PR. | Yes — it is the archive step itself. |
-| 8.5 After the merge, confirm the Pages catalog lists `hook-runtime` 0.1.4 and `verify-gate` 0.2.2 | Post-merge by nature: the release workflow runs on merge and the catalog cannot list the versions before then. | No — recorded on #62. |
+| 8.5 After the merge, confirm the Pages catalog lists `hook-runtime` 0.1.4 and `verify-gate` 0.2.3 | Post-merge by nature: the release workflow runs on merge and the catalog cannot list the versions before then. | No — recorded on #62. |
 
 No implementation task is open. 26 of 28 checkboxes are complete; the two remaining are process steps that depend on finalize and merge.
 
@@ -79,7 +79,7 @@ No other capability has a delta.
 | Reap at lock acquisition | D3: newest unreleased lock, dead pid, < 24 h, EPERM skipped, bounded by the event, SIGKILL before giving up, busy on survivors | ADDED "Reaping a dead holder's groups" and "Bounded reap" | None; code matches (`state.mts`, `supervisor.mts`). |
 | Signal cleanup | D4: SIGTERM/SIGHUP/SIGINT, 4.5 s cleanup, exit by 5 s, empty stdout, release pending first, listeners only in `runAsScript` | ADDED "Claude Code entry cleans up on signals" and "Exit after a signal" | None; code matches (`claude.mts`). |
 | C1 failure identity | D1: documentation only; changed tail is a new failure, per-session count, 10-block backstop | MODIFIED "Failure identity" (delta); Limits entry in the verify-gate skill | None; no code change, as decided. |
-| Versions | D6: `hook-runtime` 0.1.4, `verify-gate` 0.2.2 | `src/*/tool.json`, generated copies, lock hashes | None; one bump per tool. |
+| Versions | D6: `hook-runtime` 0.1.4, `verify-gate` 0.2.3 | `src/*/tool.json`, generated copies, lock hashes | None; one bump per tool. |
 
 **Drift warnings** (non-blocking):
 
@@ -106,7 +106,7 @@ No other capability has a delta.
 
 **Next step**:
 
-Run `/opsx:continue` (finalize) to push the branch and update/open the PR, then `/opsx:archive` to sync the delta specs and archive the change (8.3). After the merge, confirm the Pages catalog lists `hook-runtime` 0.1.4 and `verify-gate` 0.2.2 and record it on #62 (8.5). The push/merge is an outward side effect and waits for the owner's go-ahead.
+Run `/opsx:continue` (finalize) to push the branch and update/open the PR, then `/opsx:archive` to sync the delta specs and archive the change (8.3). After the merge, confirm the Pages catalog lists `hook-runtime` 0.1.4 and `verify-gate` 0.2.3 and record it on #62 (8.5). The push/merge is an outward side effect and waits for the owner's go-ahead.
 
 > **Convergence loop reminder**:
 > - PASS / PASS_WITH_WARNINGS → `/opsx:continue` advances to the finalize
