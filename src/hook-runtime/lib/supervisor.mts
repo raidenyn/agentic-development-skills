@@ -3,8 +3,11 @@
 // groups and holds gate locks on a worker's behalf, and when a worker generation ends it kills that
 // generation's groups (SIGTERM, then SIGKILL, until empty) and only then releases its locks.
 import { spawn as spawnChild } from 'node:child_process';
-import { basename, join } from 'node:path';
+import { accessSync, constants, statSync } from 'node:fs';
+import { basename, delimiter, join, resolve } from 'node:path';
+import type { Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import { inspect } from 'node:util';
 import { Worker } from 'node:worker_threads';
 import { acquireGateLock, staleGroups, updateGateLock } from './state.mts';
 import type { GateLockHandle } from './state.mts';
@@ -43,6 +46,58 @@ export const KILL_AFTER_MS = 5000;
 export const REAP_MAX_AGE_MS = 86_400_000;
 const POLL_MS = 25;
 const CONFIRM_MS = 5000;
+
+// The barrier (design D1): the child's shell reads fd 3 before it execs the command, so the
+// supervisor records the pgid in every held gate lock first. `exec` keeps the pid, and so the
+// pgid, for the command itself. EOF, or anything but `go`, exits 125 without running anything.
+export const SPAWN_BARRIER = 'IFS= read -r go <&3 && [ "$go" = go ] || exit 125\nexec 3>&- "$@"\n';
+const DEFAULT_PATH = '/usr/bin:/bin';
+
+// Resolve the command the way the shell would (design D2): `onSpawn` runs this before it spawns, so
+// a command that would fail gets a `spawn <file> ENOENT|EACCES` error naming what the handler
+// asked for. Resolution only decides the error; the barrier still execs `argv[0]` itself.
+export function resolveCommand(
+  file: string,
+  cwd: string | undefined,
+  env: Record<string, string | undefined>,
+): { ok: true } | { ok: false; error: string } {
+  if (typeof file !== 'string') {
+    return { ok: false, error: `The argument 'file' must be of type string. Received ${inspect(file)}` };
+  }
+  if (!file) return { ok: false, error: "The argument 'file' cannot be empty. Received ''" };
+  if (file.includes('\0')) {
+    return { ok: false, error: `The argument 'file' must be a string without null bytes. Received ${inspect(file)}` };
+  }
+  // Any other non-string cwd is left to spawnChild to reject, as it did before the barrier.
+  const cwdValue: unknown = cwd;
+  if (cwdValue != null && typeof cwdValue !== 'string') return { ok: true };
+  if (file.startsWith('-')) return { ok: false, error: `spawn ${file} ENOENT` };
+  const base = typeof cwdValue === 'string' ? cwdValue : process.cwd();
+  const candidates = file.includes('/')
+    ? [resolve(base, file)]
+    : (env.PATH ?? DEFAULT_PATH).split(delimiter).map((entry) => resolve(base, entry, file));
+  let eacces = false;
+  for (const candidate of candidates) {
+    let stats: ReturnType<typeof statSync>;
+    try {
+      stats = statSync(candidate);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EACCES') eacces = true;
+      continue;
+    }
+    if (!stats.isFile()) {
+      eacces = true;
+      continue;
+    }
+    try {
+      accessSync(candidate, constants.X_OK);
+      return { ok: true };
+    } catch {
+      eacces = true;
+    }
+  }
+  return { ok: false, error: `spawn ${file} ${eacces ? 'EACCES' : 'ENOENT'}` };
+}
 
 let genCounter = 0;
 let idCounter = 0;
@@ -303,17 +358,25 @@ class WorkerRecord {
   onSpawn({ requestId, callId, argv, cwd, env, timeoutMs }: Msg): unknown {
     const reply = (m: Msg) => this.post({ type: 'spawn.exit', requestId, callId, ...m });
     if (!this.isActive(requestId)) return reply({ error: 'the event has ended' });
+    const spawnEnv = { ...process.env, ...env };
     let child: ReturnType<typeof spawnChild>;
     try {
-      child = spawnChild(argv[0], argv.slice(1), {
+      const resolved = resolveCommand(argv[0], cwd, spawnEnv);
+      if (!resolved.ok) return reply({ error: resolved.error });
+      // The barrier `sh` waits on fd 3 before it execs the command (design D1): the pgid recorded
+      // below is the command's own, and the command cannot run before it is in every held lock.
+      child = spawnChild('/bin/sh', ['-c', SPAWN_BARRIER, 'agent-harness-spawn', ...argv], {
         cwd,
-        env: { ...process.env, ...env },
+        env: spawnEnv,
         detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
       });
     } catch (err) {
       return reply({ error: errText(err) });
     }
+    const pgid = child.pid;
+    let timedOut = false;
+    let timeout: NodeJS.Timeout | undefined;
     let done = false;
     const end = (m: Msg) => {
       if (done) return;
@@ -323,9 +386,10 @@ class WorkerRecord {
       if (pgid && !groupAlive(pgid)) this.groups.delete(pgid);
       reply(m);
     };
-    const pgid = child.pid;
-    let timedOut = false;
-    let timeout: NodeJS.Timeout | undefined;
+    // The barrier may exit before the release is written (a failed spawn, a dead child), so the
+    // release stream must swallow its error rather than crash the supervisor.
+    const gate = child.stdio[3] as Writable;
+    gate.on('error', () => {});
     if (pgid) {
       this.groups.set(pgid, requestId);
       this.children.set(callId, pgid);
@@ -335,6 +399,7 @@ class WorkerRecord {
           updateGateLock(lock.handle, { pgids: lock.pgids });
         } catch {}
       }
+      gate.write('go\n');
       if (timeoutMs > 0) {
         timeout = setTimeout(() => {
           timedOut = true;
@@ -348,7 +413,12 @@ class WorkerRecord {
     child.stderr!.on('data', (chunk: Buffer) =>
       this.post({ type: 'spawn.data', requestId, callId, stream: 'stderr', chunk: new Uint8Array(chunk) }),
     );
-    child.on('error', (err) => end({ error: errText(err), pgid }));
+    // Every error of this child names `/bin/sh`, so it is rewritten to name the command the
+    // handler asked for (design D4). That is how an invalid cwd reaches the handler as before.
+    child.on('error', (err) => {
+      const code = (err as NodeJS.ErrnoException).code;
+      end({ error: code ? `spawn ${argv[0]} ${code}` : errText(err), pgid });
+    });
     child.on('close', (code, signal) => end({ code, signal, pgid, timedOut }));
   }
 
