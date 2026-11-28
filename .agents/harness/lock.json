@@ -14,7 +14,7 @@
         "lib/runtime.mjs": "55a778d9a22befdc873f52be33e941f5da9d9f546beecc7e1abd42311ca70820",
         "lib/skill-path.mjs": "f12e70fabbae07e40e2bb8e044e1e068918eb5880b9ec7361ed7a60c4543445e",
         "lib/state.mjs": "0eb56ddc5457799a3348cbd701cd4f714727d2da3ea3ee3d6c07ef33c6c75ccc",
-        "lib/supervisor.mjs": "244376c27ef413341a8eeff27a28c5f7999666e0cc1aa585b1ae956ace4fd719",
+        "lib/supervisor.mjs": "1c43e8dd423a34fc7377572b73f56fc4cdada12215ba4aba8570e251e170a415",
         "lib/worker-entry.mjs": "c9564de05717b3bfd00ab60aa8a884f773334d6d96650e688671e2874704cce3",
         "opencode/index.mjs": "ea7c4c9b355fede5f2544f28e0e380a8b77b2ccea938858e984382a302faab16",
         "tool.json": "adb1226e85d6961bd82e179e1af1094fb7a7268260ba0256099f3554a8a59df5"

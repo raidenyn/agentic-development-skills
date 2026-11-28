@@ -290,10 +290,11 @@ test('the barrier holds the command until go', async () => {
   const dir = scratch('barrier-hold');
   const mark = join(dir, 'ran');
   const child = spawn('/bin/sh', ['-c', SPAWN_BARRIER, 'agent-harness-spawn', 'sh', '-c', 'touch "$0"', mark], {
-    stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
   });
   const closed = new Promise((resolve) => child.on('close', resolve));
   const gate = /** @type {import('node:stream').Writable} */ (child.stdio[3]);
+  child.stdin.end();
   try {
     await sleep(200);
     assert.equal(existsSync(mark), false, 'the command did not run before go');
@@ -362,6 +363,26 @@ test('a requested environment variable reaches the command', async () => {
   );
   const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
   assert.equal(out.context, 'bar');
+});
+
+test('the whole caller environment arrives unchanged', async () => {
+  const p = await proxy(
+    'envparityfull',
+    `
+    export default {
+      name: 'envparityfull', events: ['prompt'],
+      async handle(ev, c) {
+        const script = 'console.log(JSON.stringify({ pwd: process.env.PWD, foo: process.env.FOO, go: process.env.go }))';
+        const r = await c.spawn([process.execPath, '-e', script], {
+          env: { PWD: '/caller/says/this', FOO: 'bar', go: 'caller-go' },
+        });
+        return { context: r.stdout };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
+  assert.deepEqual(JSON.parse(out.context), { pwd: '/caller/says/this', foo: 'bar', go: 'caller-go' });
 });
 
 test('the barrier keeps the environment off its command line', async () => {

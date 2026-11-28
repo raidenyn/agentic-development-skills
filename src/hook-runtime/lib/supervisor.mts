@@ -47,22 +47,21 @@ export const REAP_MAX_AGE_MS = 86_400_000;
 const POLL_MS = 25;
 const CONFIRM_MS = 5000;
 
-// The barrier (design D1): the child's shell runs privileged with the caller's environment minus the
-// variables that can run code at startup or through the loader, waits on fd 3 for the release, then
-// reads quoted `export` lines from its stdin, so the pgid is in every held gate lock before any of
-// that environment is applied and no variable travels in argv. A command whose name contains `=`
-// would be read as an assignment by `env`, so it goes through the shell's own search. `exec` keeps
-// the pid, and so the pgid, for the command itself. EOF, or anything but `go`, exits 125 without
-// running anything.
+// The barrier (design D1): the child's shell starts with an empty environment and waits on fd 3, so
+// nothing the caller passes can run before the supervisor records the pgid in every held gate lock.
+// After `go` it reads quoted `export` lines from stdin and restores the whole environment, then
+// `exec` replaces the shell with the command itself: loader variables apply to the command only and
+// a name containing `=` runs through the shell's normal search. EOF, or anything but `go`, exits
+// 125 without running anything.
 export const SPAWN_BARRIER =
-  'IFS= read -r go <&3 && [ "$go" = go ] || exit 125\neval "$(/bin/cat)"\ncase "$1" in\n  *=*) exec 3>&- "$@" ;;\n  *) exec 3>&- /usr/bin/env "$@" ;;\nesac\n';
+  'IFS= read -r _agent_harness_go <&3 || exit 125\ncase $_agent_harness_go in go) ;; *) exit 125 ;; esac\neval "$(/bin/cat)"\nexec 3>&- "$@"\n';
 const DEFAULT_PATH = '/bin:/usr/bin';
 let defaultPath: string | undefined;
 
-// The default PATH of the C library (design D2): the command runs through `/usr/bin/env`, which
-// searches `_CS_PATH` when PATH is unset, not the wider PATH a shell would choose. Queried once and
-// trimmed, because `getconf` ends its answer with a newline; the fallback only covers a host where
-// `getconf` cannot answer.
+// The default PATH of the C library (design D2): when the caller's environment has no PATH, that is
+// where the shell's own `exec` search lands, so the preflight must search the same places. Queried
+// once and trimmed, because `getconf` ends its answer with a newline; the fallback only covers a
+// host where `getconf` cannot answer.
 function libraryPath(): string {
   if (defaultPath === undefined) {
     const out = spawnSync('/usr/bin/getconf', ['PATH'], { encoding: 'utf8', env: process.env, timeout: 2000 });
@@ -72,46 +71,28 @@ function libraryPath(): string {
   return defaultPath;
 }
 
-// Variables that can run code before the release, or change how the shell parses the rest of the
-// barrier (design D1). They stay out of the barrier's environment and are exported again from its
-// stdin after `go`.
-const STARTUP_ENV = new Set([
-  'ENV',
-  'BASH_ENV',
-  'SHELLOPTS',
-  'BASHOPTS',
-  'PS4',
-  'IFS',
-  'GCONV_PATH',
-  'LOCPATH',
-  'NLSPATH',
-]);
-const STARTUP_ENV_PREFIXES = ['BASH_FUNC_', 'LD_', 'DYLD_'];
+// `SHELLOPTS` and `BASHOPTS` are readonly in bash, and a failed assignment in POSIX mode ends the
+// shell, so exporting them again would stop the command from running (design D1).
+const RESTORE_SKIP = new Set(['SHELLOPTS', 'BASHOPTS']);
 const POSIX_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
-// Split the merged spawn environment for the barrier (design D1): the shell inherits everything that
-// cannot run code before the release, and the rest is returned as an `export` script for the
-// shell's stdin, so the command ends up with exactly the caller's environment. Exported bash
-// function bodies are dropped: a POSIX shell cannot re-export them, and they are code.
-function barrierEnv(env: Record<string, unknown>): {
-  cleanEnv: Record<string, string | undefined>;
-  restore: string;
-} {
-  const cleanEnv: Record<string, string | undefined> = {};
+// The barrier's stdin script (design D1): the shell starts empty, so every caller environment entry
+// is exported again after `go`. Names that are not shell identifiers cannot be exported by `sh`
+// (that includes `BASH_FUNC_*`), and `SHELLOPTS`/`BASHOPTS` would abort bash. When the caller has no
+// PATH, the C library default is exported so lookup and execution agree with a direct spawn.
+function restoreEnv(env: Record<string, unknown>): string {
   const lines: string[] = [];
+  let hasPath = false;
   for (const [name, value] of Object.entries(env)) {
     if (value === undefined) continue;
-    const unsafe = STARTUP_ENV.has(name) || STARTUP_ENV_PREFIXES.some((prefix) => name.startsWith(prefix));
-    if (!unsafe) {
-      cleanEnv[name] = typeof value === 'string' ? value : String(value);
-      continue;
-    }
-    if (name.startsWith('BASH_FUNC_') || typeof value !== 'string' || !POSIX_NAME.test(name)) continue;
-    lines.push(`export ${name}=${shellQuote(value)}`);
+    if (name === 'PATH') hasPath = true;
+    if (RESTORE_SKIP.has(name) || !POSIX_NAME.test(name)) continue;
+    lines.push(`export ${name}=${shellQuote(typeof value === 'string' ? value : String(value))}`);
   }
-  return { cleanEnv, restore: lines.length ? `${lines.join('\n')}\n` : '' };
+  if (!hasPath) lines.push(`export PATH=${shellQuote(libraryPath())}`);
+  return lines.length ? `${lines.join('\n')}\n` : '';
 }
 
 // Resolve the command the way execvp would (design D2): `onSpawn` runs this before it spawns, so a
@@ -454,15 +435,15 @@ class WorkerRecord {
     try {
       const resolved = resolveCommand(argv[0], cwd, spawnEnv);
       if (!resolved.ok) return reply({ error: resolved.error });
-      // The barrier `sh` runs privileged (design D1) with everything that cannot run code before the
-      // release; the removed startup and loader variables arrive on its stdin after `go`, so no
-      // environment value travels in argv, where /proc/<pid>/cmdline would expose it.
-      const { cleanEnv, restore } = barrierEnv(spawnEnv);
+      // The barrier `sh` starts empty (design D1), so nothing the caller passes can run before `go`;
+      // the quoted exports on its stdin restore the whole environment after the release, and `exec`
+      // then replaces the shell with the command itself.
+      const restore = restoreEnv(spawnEnv);
       // The barrier `sh` waits on fd 3 before it execs the command: the pgid recorded below is the
       // command's own, and the command cannot run before it is in every held lock.
       child = spawnChild('/bin/sh', ['-p', '-c', SPAWN_BARRIER, 'agent-harness-spawn', ...argv], {
         cwd,
-        env: cleanEnv,
+        env: {},
         detached: true,
         stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
       });
