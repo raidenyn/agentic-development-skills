@@ -9,7 +9,7 @@
 ## 2. A lock that cannot be written
 
 - [x] 2.1 Add the test "a lock that cannot be written stops the spawn" (chmod `0o500` on the gate dir). The spawn rejects with `could not record the process group`, no mark exists, and no process with the mark path is left. Skip it when running as root.
-- [x] 2.2 Replace the `catch {}` around `updateGateLock`: no `go`, SIGKILL to the group, and the error reply from `close` (design D3).
+- [x] 2.2 Replace the `catch {}` around the gate-lock record (`recordGatePgids`): no `go`, SIGKILL to the group, and the error reply from `close` (design D3).
 - [x] 2.3 Run `pnpm run build && node --test tests/agent-harness/` and confirm all tests pass.
 
 ## 3. Ship and verify

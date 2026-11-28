@@ -321,6 +321,49 @@ test('the barrier exits 125 and runs nothing on EOF', () => {
   }
 });
 
+test('the barrier starts empty so the caller cannot hook it with shell startup files', async () => {
+  const dir = scratch('barrier-hostile');
+  const evil = join(dir, 'evil');
+  const hook = join(dir, 'evil.sh');
+  writeFileSync(hook, `touch '${evil}'\n`);
+  const p = await proxy(
+    'barrierhostile',
+    `
+    export default {
+      name: 'barrierhostile', events: ['prompt'],
+      async handle(ev, c) {
+        // /usr/bin/env prints its own environment without starting a shell, so only a barrier that
+        // inherited these before its release could have sourced them.
+        const r = await c.spawn(['/usr/bin/env'], {
+          env: { BASH_ENV: ev.hook, ENV: ev.hook, 'BASH_FUNC_read%%': '() { :; }' },
+        });
+        return { context: r.stdout };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', hook }, ids);
+  assert.equal(existsSync(evil), false, 'no startup file ran before the release');
+  assert.ok(out.context.includes(`BASH_ENV=${hook}`), out.context);
+});
+
+test('a requested environment variable reaches the command', async () => {
+  const p = await proxy(
+    'envpass',
+    `
+    export default {
+      name: 'envpass', events: ['prompt'],
+      async handle(ev, c) {
+        const r = await c.spawn(['sh', '-c', 'printf %s "$FOO"'], { env: { FOO: 'bar' } });
+        return { context: r.stdout };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
+  assert.equal(out.context, 'bar');
+});
+
 test('spawn runs through the supervisor and returns exit status and output', async () => {
   const p = await proxy(
     'spawner',
@@ -454,6 +497,41 @@ test('a lock that cannot be written stops the spawn', { skip: process.getuid?.()
   assert.equal(spawnSync('pgrep', ['-f', mark]).status, 1, 'no process of the group is left');
 });
 
+test('a lock that cannot be read stops the spawn', { skip: process.getuid?.() === 0 }, async () => {
+  const dir = scratch('record-unreadable');
+  const mark = join(dir, 'ran');
+  const lock = join(dir, 'gate', 'gate.lock.1');
+  const p = await proxy(
+    'recordunreadable',
+    `
+    import { chmodSync } from 'node:fs';
+    export default {
+      name: 'recordunreadable', events: ['prompt'],
+      async handle(ev, c) {
+        await c.lock.acquire(ev.gate);
+        chmodSync(ev.lock, 0o000);
+        try {
+          await c.spawn(['sh', '-c', 'touch "$0"', ev.mark]);
+          return { context: 'spawned' };
+        } catch (err) {
+          return { context: 'error: ' + err.message };
+        } finally {
+          chmodSync(ev.lock, 0o600);
+        }
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', gate: join(dir, 'gate'), lock, mark }, ids);
+  assert.match(out.context, /could not record the process group/);
+  assert.equal(existsSync(mark), false, 'the command did not run');
+  assert.equal(spawnSync('pgrep', ['-f', mark]).status, 1, 'no process of the group is left');
+  const body = JSON.parse(readFileSync(lock, 'utf8'));
+  assert.equal(typeof body.pid, 'number', 'the lock record kept its pid');
+  assert.equal(typeof body.at, 'number', 'the lock record kept its at');
+  assert.deepEqual(body.pgids, [], 'the unrecorded group is not in the lock');
+});
+
 test('arguments arrive unchanged with no lock held', async () => {
   const argv = ['printf', '%s|', 'a b', 'q\'"', '$HOME', '-n'];
   const p = await proxy(
@@ -498,7 +576,35 @@ test('a command reached through a symlink and .. resolves like the shell', async
   assert.equal(out.context, 'through-link\n');
 });
 
-test('a spawn with no PATH uses the shell default', async () => {
+test('a cwd leading through a symlink and .. resolves like a direct spawn', async () => {
+  const dir = scratch('cwd-link');
+  mkdirSync(join(dir, 'a', 'b'), { recursive: true });
+  writeFileSync(join(dir, 'a', 'cmd'), '#!/bin/sh\necho through-cwd-link\n');
+  chmodSync(join(dir, 'a', 'cmd'), 0o755);
+  symlinkSync(join('a', 'b'), join(dir, 'link'));
+  const p = await proxy(
+    'cwdlink',
+    `
+    export default {
+      name: 'cwdlink', events: ['prompt'],
+      async handle(ev, c) {
+        try {
+          const r = await c.spawn(['./cmd'], { cwd: ev.cwd });
+          return { context: r.stdout };
+        } catch (err) {
+          return { context: 'error: ' + err.message };
+        }
+      },
+    };
+  `,
+  );
+  // Not `join(dir, 'link', '..')`: path.join would collapse `..` itself. The caller's raw path is
+  // what Node passes to chdir, and the kernel follows `link` before it applies `..`.
+  const out = await rt([p]).dispatch({ type: 'prompt', cwd: `${join(dir, 'link')}/..` }, ids);
+  assert.equal(out.context, 'through-cwd-link\n');
+});
+
+test('a spawn with no PATH uses the C library default', async () => {
   const p = await proxy(
     'nopath',
     `

@@ -37,9 +37,9 @@
 - Test: `tests/agent-harness/supervisor.test.mjs`
 
 **Interfaces:**
-- Produces: `export const SPAWN_BARRIER: string`. It is exactly `IFS= read -r go <&3 && [ "$go" = go ] || exit 125\nexec 3>&- "$@"\n`.
+- Produces: `export const SPAWN_BARRIER: string`. It is exactly `IFS= read -r go <&3 && [ "$go" = go ] || exit 125\nexec 3>&- /usr/bin/env -i -- "$@"\n`.
 - Produces: `export function resolveCommand(file: string, cwd: string | undefined, env: Record<string, string | undefined>): { ok: true } | { ok: false; error: string }`. The error is `spawn <file> ENOENT` or `spawn <file> EACCES`. An empty, non-string or NUL-containing name gets Node's `The argument 'file' …` message. A name starting with `-` gives ENOENT. The rules are in design D2.
-- Produces: `onSpawn` writes `go\n` to `child.stdio[3]` only after every held lock's `updateGateLock` has returned, and only when `pgid` is set.
+- Produces: `onSpawn` starts `/bin/sh` with `env: {}` and the invocation `['-c', SPAWN_BARRIER, 'agent-harness-spawn', ...envArgs, ...argv]`, where `envArgs` is the merged spawn env as `KEY=VALUE` strings for every defined value, and writes `go\n` to `child.stdio?.[3]` only after every held lock's `recordGatePgids` has returned, and only when `pgid` is set.
 
 - [ ] **Step 1: Write the tests** in `supervisor.test.mjs`. Import `SPAWN_BARRIER` alongside `killGroups, startWorker`. Add `openSync`, `closeSync`, `chmodSync` to the `node:fs` import, and import `setTimeout as sleep` from `node:timers/promises`. Generated handler sources import what they use themselves (for example `import { chmodSync } from 'node:fs'`). Every test uses a fresh `scratch()` dir.
   - **Red** `test('the barrier holds the command until go')`. Run `spawn('/bin/sh', ['-c', SPAWN_BARRIER, 'agent-harness-spawn', 'sh', '-c', 'touch "$0"', mark], { stdio: ['ignore', 'pipe', 'pipe', 'pipe'] })`. Inside `try`/`finally`, after `await sleep(200)` assert `!existsSync(mark)`, then write `child.stdio[3].write('go\n')` and assert exit code 0 and `existsSync(mark)`. The `finally` calls `child.stdio[3].end()`, so that a failed assertion cannot leave the `sh` blocked.
@@ -59,14 +59,15 @@
   Expected: the two barrier tests FAIL, because `SPAWN_BARRIER` is undefined. The guard tests pass, because a direct spawn already behaves that way. They pin the behavior that Step 3 must keep.
 
 - [ ] **Step 3: Implement in `supervisor.mts`**
-  - Add `SPAWN_BARRIER` and `resolveCommand` (design D2). Keep each candidate's `entry` and `file` verbatim after `base = resolve(cwd ?? process.cwd())` (an absolute `file` or `entry` is probed as it is), so the filesystem resolves `..` after symlinks as the shell does; do not run candidates through `resolve()`. If `PATH` is unset, use the default PATH of the `/bin/sh` that runs the barrier: query `spawnSync('/bin/sh', ['-c', 'printf %s "$PATH"'], { env: process.env without PATH })` once, cache it, and fall back to `/usr/bin:/bin` only if the query fails or prints nothing. Treat `cwd == null` as `process.cwd()`. If `cwd` is any other non-string value, skip resolution so that `spawnChild` throws as it does today. Use `statSync(p).isFile()` and `accessSync(p, constants.X_OK)`, and split PATH with `delimiter` from `node:path`.
+  - Add `SPAWN_BARRIER` and `resolveCommand` (design D2). Build the candidates from the raw `cwd` (`cwd == null ? process.cwd() : cwd`), with no `resolve()` on the base: `${base}/${entry}/${file}` for a relative PATH entry, `${entry}/${file}` for an absolute entry, `${base}/${file}` for a `file` containing `/`, and `file` itself when it is absolute, so the filesystem follows symlinks before `..` as `chdir` does. If `PATH` is unset, use the C library's `_CS_PATH`, because the command execs through `/usr/bin/env`: query `spawnSync('/usr/bin/getconf', ['PATH'], { encoding: 'utf8', env: process.env, timeout: 2000 })` once, cache it, and fall back to `/bin:/usr/bin` only if the query fails or prints nothing. Treat `cwd == null` as `process.cwd()`. If `cwd` is any other non-string value, skip resolution so that `spawnChild` throws as it does today. Use `statSync(p).isFile()` and `accessSync(p, constants.X_OK)`, and split PATH with `delimiter` from `node:path`.
+  - Add a local `recordGatePgids(handle, pgids)` (design D3) instead of `updateGateLock`, and remove `updateGateLock` from the `state.mts` import.
   - In `onSpawn`:
     - Move `let timeout`, `let timedOut` and the `pgid` binding above `end`.
     - Inside the existing `try` (whose `catch` replies `errText(err)`), call `resolveCommand(argv[0], cwd, { ...process.env, ...env })`. On failure, `return reply({ error })`.
-    - Spawn `'/bin/sh', ['-c', SPAWN_BARRIER, 'agent-harness-spawn', ...argv]` with `stdio: ['ignore', 'pipe', 'pipe', 'pipe']`.
-    - Attach `child.stdio[3]!.on('error', () => {})` before any write.
-    - In `child.on('error')`, when `err.code` is set, always reply with `spawn ${argv[0]} ${err.code}`. Every error from this child names `/bin/sh` (design D4).
-    - After the lock loop, run `if (pgid) child.stdio[3]!.write('go\n')`, then start the timeout.
+    - Spawn `'/bin/sh', ['-c', SPAWN_BARRIER, 'agent-harness-spawn', ...envArgs, ...argv]` with `env: {}` and `stdio: ['ignore', 'pipe', 'pipe', 'pipe']`, so the barrier shell starts empty and `env -i --` applies the caller's environment only at the release.
+    - Register `child.stdio?.[3]?.on('error', () => {})` and the child's `error`/`close` listeners before any write, and guard `child.stdout`, `child.stderr` and every `gate` access with `?.`, because a spawn under descriptor pressure can return a child without stdio.
+    - In `child.on('error')`, reply with `recordError` when it is set; otherwise, when `err.code` is set, reply with `spawn ${argv[0]} ${err.code}`. Every error from this child names `/bin/sh` (design D4).
+    - After the lock loop, run `gate?.write('go\n')` when there is no `recordError`, then start the timeout; on a `recordError`, close the release side with `gate?.end()` so the barrier exits 125 even if the SIGKILL is denied.
 
 - [ ] **Step 4: Run all the harness tests**
   Run `pnpm run build && node --test tests/agent-harness/`.
@@ -98,7 +99,7 @@
   Expected: FAIL, because the spawn resolves and the mark exists.
 
 - [ ] **Step 3: Implement**
-  - Replace the `catch {}` around `updateGateLock`. On the first throw, set `recordError = \`could not record the process group: ${errText(err)}\``, stop the loop, skip `go` and the timeout, and run `signalGroup(pgid, 'SIGKILL')`.
+  - Replace the `catch {}` around the gate-lock record (`recordGatePgids`). On the first throw, set `recordError = \`could not record the process group: ${errText(err)}\``, stop the loop, skip `go` and the timeout, and run `signalGroup(pgid, 'SIGKILL')`.
   - In `close`, when `recordError` is set, call `end({ error: recordError, pgid })` instead of the exit result.
   - The pgid stays in `this.groups` until `end` sees that it is dead, as it does today.
 
