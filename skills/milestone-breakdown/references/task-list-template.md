@@ -11,8 +11,6 @@ RFC: <link to the RFC file> · Milestone: <name> · Prepared: YYYY-MM-DD
 
 **Produces:** <contracts> · **Consumes:** <contracts, and the milestone that produced each>
 
-**Stacked pull requests:** <not needed so far / the person chose to split further / the person allowed them for this milestone>
-
 ## Coverage
 
 What the milestone must deliver, from the RFC, and which tasks deliver it.
@@ -63,7 +61,7 @@ For a contract that several tasks build:
 
 | # | Task | Key | Phase | Area | Depends on | Can run in parallel with | Size |
 |---|---|---|---|---|---|---|---|
-| 1 | <task name> | <key> | Spike / Refactor / Foundation / Feature / Migration / Hardening | <area> | none | none | S / M / L, ~lines, ~files |
+| 1 | <task name> | <key> | Spike / Refactor / Foundation / Feature / Migration / Hardening | <area> | none | none | ~lines, ~files |
 | 2 | <task name> | | | | <task names> | <task names> | |
 
 The number is only the order. Refer to tasks by name.
@@ -77,7 +75,7 @@ Dependencies
 - Start conditions met, or carried by the tasks they block: yes / no, with detail
 - Nothing is consumed before it is produced: yes / no
 - Every task that consumes something produced in this list depends on its producer, directly or through another task, and every stated dependency is a real one: yes / no
-- Every task depends only on merged work, or is stacked with the person's agreement for this milestone: yes / no
+- Every task depends only on merged work, or is stacked because the person asked for it: yes / no
 - Each part of a contract has one producer, and one task checks the complete shape of every contract built over several tasks: yes / no
 - No cycles: yes / no
 - Tasks marked parallel do not depend on each other, share no open decision, and do not write to the same files, hotspot, migration sequence or local resource: yes / no
@@ -98,7 +96,8 @@ Tasks
 - No open question blocks a written task, apart from questions the person deferred, and every assumption used is cited: yes / no
 - Every behavior task can be shown working on its own, and every enabling task says what it enables: yes / no
 - Every task can be verified alone: yes / no
-- Every task fits the size settings or states its exception, and none is too small: yes / no
+- Every task has one behavior and criteria within the setting, and none is too small: yes / no
+- <Only when the repository sets a size limit:> Every task fits it or states its exception: yes / no
 - Migrations ordered and split where data is live, and unfinished visible work guarded: yes / no / not applicable
 - Starts with an end-to-end path and ends with a closing task: yes / no / not applicable
 - No line numbers or step-by-step implementation in any task: yes / no
@@ -119,7 +118,7 @@ Empty at first. After each reconcile: date, what changed, why, and what caused i
 
 ## <Task name>
 
-**Phase:** Spike / Refactor / Foundation / Feature / Migration / Hardening · **Area:** <one component, module or repository> · **Size:** S / M / L (<rough lines and files>)
+**Phase:** Spike / Refactor / Foundation / Feature / Migration / Hardening · **Area:** <one component, module or repository> · **Size:** <rough lines and files, for the reviewer>
 
 **Outcome:** <one behavior, in one sentence. What can be shown working after this merges.>
 
@@ -178,7 +177,9 @@ Do these in order, before any design work, brainstorming or code, and before a c
 
 ### If it does not fit
 
-Stop when a frozen contract or agreed decision would have to change, when a provisional contract would have to change in a way the RFC does not allow, when behavior the RFC does not describe is needed, when the criteria cannot be proved inside this pull request, or when the work goes well past the size above (<the task overrun setting, about 1.5 times by default>).
+Stop when a frozen contract or agreed decision would have to change, when a provisional contract would have to change in a way the RFC does not allow, when behavior the RFC does not describe is needed, or when the criteria cannot be proved inside this pull request.
+
+<Only when the repository sets a size setting:> Also stop when the work goes well past the size above (<the repository's Task overrun, about 1.5 times by default>).
 
 Then do one of two things. If a coherent part passes the checks, ship that part, mark the unmet criteria "not done" with the reason, and propose how to split the rest. If nothing coherent passes, leave the branch clean and report what you tried and found.
 
@@ -189,6 +190,7 @@ Never drop a criterion silently, change or delete existing tests to make them pa
 - Each acceptance criterion with its evidence.
 - The contracts and areas of the code actually changed.
 - Anything that differs from this task, and assumptions that proved wrong.
+- The actual size against the estimate, when they differ a lot.
 - Effects on later tasks.
 - Work discovered on the way that was not needed to finish, as a proposed new task.
 
@@ -204,7 +206,7 @@ Never drop a criterion silently, change or delete existing tests to make them pa
 - **Phase** tells the reviewer what to expect. A Spike produces findings. A Refactor prepares the code with no behavior change. A Foundation task creates something stable that others consume: a contract, scaffolding or a missing check. A Feature shows a behavior working. A Migration moves callers or data from the old form to the new. A Hardening task is the closing task: it proves the whole flow and removes temporary code. Refactor, Foundation and Migration tasks are usually enabling tasks and say what they enable.
 - **Area** is one value per task, taken from the areas listed in the plan, so that a board can group by it. It names the component whose behavior the task delivers, not every layer the task touches.
 - **Links** anywhere in a task are paths from the repository root or full URLs, so they still resolve when the task is copied into an issue.
-- **Size** is a rough signal for the reviewer, not an estimate to be held to. S is well under half the task size settings, M is within them, L is at or over one of them. A task marked L is split or states why it is an exception. See [task-sizing.md](task-sizing.md).
+- **Size** is a rough signal for the reviewer. It is not a limit unless the repository sets a size setting. See [task-sizing.md](task-sizing.md).
 - **Out of scope** is never empty. It is the main defense against a task growing.
 - **Starting points** point at things that stay true: specs, contracts and entry points first, then one example to copy. Links deep into the code are fragile. A full file list goes stale after the first refactor, and line numbers go stale sooner.
 - **Acceptance criteria** always include the line about the standard checks and the main branch. It is what makes each task safe to merge on its own. Where the repo's practice allows, the tests for the other criteria fail before the task and pass after.
