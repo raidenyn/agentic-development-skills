@@ -402,6 +402,7 @@ class WorkerRecord {
     const pgid = child.pid;
     let timedOut = false;
     let timeout: NodeJS.Timeout | undefined;
+    let recordError: string | undefined;
     let done = false;
     const end = (m: Msg) => {
       if (done) return;
@@ -422,14 +423,24 @@ class WorkerRecord {
         lock.pgids.push(pgid);
         try {
           updateGateLock(lock.handle, { pgids: lock.pgids });
-        } catch {}
+        } catch (err) {
+          // A group whose pgid is not in every held lock can outlive a SIGKILL of the holder
+          // (design D3), so the command is never released: kill the barrier `sh` and reply from
+          // `close`, once the group is gone.
+          recordError = `could not record the process group: ${errText(err)}`;
+          break;
+        }
       }
-      gate.write('go\n');
-      if (timeoutMs > 0) {
-        timeout = setTimeout(() => {
-          timedOut = true;
-          killGroups([pgid]).catch(() => {});
-        }, timeoutMs);
+      if (recordError) {
+        signalGroup(pgid, 'SIGKILL');
+      } else {
+        gate.write('go\n');
+        if (timeoutMs > 0) {
+          timeout = setTimeout(() => {
+            timedOut = true;
+            killGroups([pgid]).catch(() => {});
+          }, timeoutMs);
+        }
       }
     }
     child.stdout!.on('data', (chunk: Buffer) =>
@@ -444,7 +455,9 @@ class WorkerRecord {
       const code = (err as NodeJS.ErrnoException).code;
       end({ error: code ? `spawn ${argv[0]} ${code}` : errText(err), pgid });
     });
-    child.on('close', (code, signal) => end({ code, signal, pgid, timedOut }));
+    child.on('close', (code, signal) =>
+      end(recordError ? { error: recordError, pgid } : { code, signal, pgid, timedOut }),
+    );
   }
 
   // Reap the groups a dead holder recorded before taking the gate lock (design D3): SIGTERM, then

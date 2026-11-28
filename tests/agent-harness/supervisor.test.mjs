@@ -423,6 +423,37 @@ test('the pgid is in the held lock when the command runs', async () => {
   assert.ok(seen.pgids.includes(pid), JSON.stringify(seen));
 });
 
+test('a lock that cannot be written stops the spawn', { skip: process.getuid?.() === 0 }, async () => {
+  const dir = scratch('record-fail');
+  const mark = join(dir, 'ran');
+  const p = await proxy(
+    'recordfail',
+    `
+    import { chmodSync } from 'node:fs';
+    export default {
+      name: 'recordfail', events: ['prompt'],
+      async handle(ev, c) {
+        await c.lock.acquire(ev.gate);
+        chmodSync(ev.gate, 0o500);
+        try {
+          await c.spawn(['sh', '-c', 'touch "$0"', ev.mark]);
+          return { context: 'spawned' };
+        } catch (err) {
+          return { context: 'error: ' + err.message };
+        } finally {
+          chmodSync(ev.gate, 0o700);
+        }
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', gate: join(dir, 'gate'), mark }, ids);
+  assert.match(out.context, /could not record the process group/);
+  assert.equal(existsSync(mark), false, 'the command did not run');
+  // No polling: the reply comes only after the group is gone.
+  assert.equal(spawnSync('pgrep', ['-f', mark]).status, 1, 'no process of the group is left');
+});
+
 test('arguments arrive unchanged with no lock held', async () => {
   const argv = ['printf', '%s|', 'a b', 'q\'"', '$HOME', '-n'];
   const p = await proxy(
