@@ -23,7 +23,7 @@ The last two are in [references/after-the-split.md](references/after-the-split.m
 - **The RFC is the authority** for decisions, contracts and scope. The code as it is now is the authority for facts about the code. The task list overrides neither.
 - **Plan here, build elsewhere.** This skill writes no production code. Implementation starts in a fresh session per task, after the person has approved the list.
 - **Never fill a gap silently.** Every detail the RFC leaves out is left to the implementer on purpose, recorded as an assumption, asked as a question, or raised as a proposal for a follow-up RFC.
-- **Review is the limit, not generation.** Size tasks by what can be reviewed well, by people with agents helping, and by what the checks can verify inside one pull request.
+- **One behavior, one way to verify it.** Size tasks by behavior and by what the checks can verify inside one pull request, not by line count. Agents review the change, and the person accepts it on its report and evidence.
 - **Names, not numbers.** Refer to tasks, contracts, decisions and assumptions by short names with links, so a task still makes sense after it is copied or reordered. Each task also has a key that never changes, so a tracker can recognize it after a rename.
 - **Where tasks are stored is the person's call.** An issue tracker, a project board, files in the repo: the skill does not assume one. It produces the tasks as Markdown that can be copied anywhere, and reads them back from wherever the person keeps them.
 - **English by default.** Write in another language only when the person explicitly asks.
@@ -34,16 +34,12 @@ The values below are defaults. If `openspec/design/README.md` (or the README of 
 
 | Setting | Default |
 |---|---|
-| Task size, lines of code | up to about 1,000 changed lines |
-| Task size, files | up to 30 changed code and config files |
 | Task size, acceptance criteria | 2 to 5 |
-| Task overrun | stop at about 1.5 times the task's estimate |
 | Tasks per milestone | up to about 15 |
 | Milestone size overrun | about 2 times the RFC's estimate for the milestone |
 | Independent review | from 6 tasks, or when the list marks any tasks as parallel |
 | Independent review model | ask the person, once per session |
 | Independent review rounds | at most 2 |
-| Stacked pull requests | ask the person, once per milestone |
 | How a task is started | the repo's own process, read in step 2. Ask the person only when the repo does not say |
 | Tasks in flight | 2 to 3 per reviewer |
 | Failed attempts before a task returns to planning | 2 |
@@ -52,7 +48,9 @@ The values below are defaults. If `openspec/design/README.md` (or the README of 
 | Standalone spike budget | one separate session, 1 to 2 hours of run time, or the cost cap the person sets |
 | Document language | English |
 
-Task size counts code and configuration, tests included. Documents, generated files and process files (an OpenSpec change's own files, task notes, changelogs) are not counted.
+The size estimate, and any size limit the repository sets, counts code and configuration, tests included. Documents, generated files and process files (an OpenSpec change's own files, task notes, changelogs) are not counted.
+
+There is no line or file limit by default. A repository that wants one adds "Task size, lines of code" or "Task size, files" to its Settings table, and optionally "Task overrun" (default about 1.5 times the task's estimate). Then the rules in [references/task-sizing.md](references/task-sizing.md#when-the-repository-sets-a-size-limit) apply.
 
 ## Before you start
 
@@ -125,7 +123,7 @@ A gap in an RFC decision or a frozen contract is never settled here. It needs a 
 
 ### 4. Decide whether to split at all
 
-If the whole milestone has one outcome and fits the task size settings, it is one task. Write that one task description, run the checks that apply, and skip the rest of the slicing.
+If the whole milestone has one outcome and fits the acceptance criteria setting, and any size limit the repository sets, it is one task. Write that one task description, run the checks that apply, and skip the rest of the slicing.
 
 ### 5. Slice and order
 
@@ -146,9 +144,9 @@ If the whole milestone has one outcome and fits the task size settings, it is on
 
 **Every task leaves the main branch working.** It can be merged, tested and released without the later ones. Work that users would see before the milestone is complete ships behind the guard the RFC or the repo already uses, and the task names the guard.
 
-**Size each task** against the settings. The signs of a task that is too big or too small, how to count mechanical changes, and the cases where "one task, one pull request, one session" does not fit are in [references/task-sizing.md](references/task-sizing.md). A task that is too small is as much a defect as one that is too big: each task costs a review.
+**Size each task** by behavior and criteria. The signs of a task that is too big or too small, how to count mechanical changes, and the cases where "one task, one pull request, one session" does not fit are in [references/task-sizing.md](references/task-sizing.md). A task that is too small is as much a defect as one that is too big: each task costs a review.
 
-**Ask before stacking.** When a behavior does not split cleanly below the size settings, there are two ways out: split it further into smaller tasks that can each still be verified alone, which usually costs extra scaffolding or narrower checks, or allow a short chain of stacked pull requests. Which is better depends mostly on how many reviewers the team has. Unless the stacked pull requests setting already answers it, ask the person which they want for this milestone, the first time the case comes up, and apply the answer to the rest of the milestone. Do not choose for them. Write the answer into the list, so a later session does not ask again. If no further split leaves every part verifiable alone and the person does not want a stack, keep one task and state the size exception.
+**Stack only on request.** Do not ask whether to stack pull requests. Stack them only when the person asks for it. A behavior that cannot be split into parts that can each be verified alone stays one task. When the repository sets a size limit, that task states the size exception (see [references/task-sizing.md](references/task-sizing.md#when-the-repository-sets-a-size-limit)).
 
 If the split lands above the tasks-per-milestone setting or the milestone size overrun setting, stop and give the person two options. First look for a point inside the list where something shippable works and the main branch could be released, because that is where a milestone would split.
 
@@ -192,7 +190,7 @@ Run every check before showing the list, and report the result. The template has
 
 - **Nothing is consumed before it is produced.** For every contract or piece of data a task consumes, an earlier task or an earlier milestone produces it. A task that produces a contract and uses it in the same change lists it under Produces only, so an interface can arrive together with its first use.
 - **Dependencies are stated, not implied by the order.** A task that consumes something another task in this list produces depends on that task, directly or through another task. A dependency exists only where there is a real one. "Depends on: none" is right only when everything the task needs already exists in the code.
-- **A task depends only on merged work.** If it needs a sibling's unmerged code, it comes after that sibling, or the two are stacked because the person allowed it for this milestone (see [references/task-sizing.md](references/task-sizing.md)).
+- **A task depends only on merged work.** If it needs a sibling's unmerged code, it comes after that sibling, or the two are stacked because the person asked for it (see [references/task-sizing.md](references/task-sizing.md)).
 - **Each part of a contract has one producer.** This includes the milestone-level contracts from step 3. A contract may be built over several tasks, each adding a named part. Then the plan lists the parts with their tasks, a consumer depends on the task that produces the part it uses, and one task, normally the closing one, checks the complete shape against the RFC. What a later milestone consumes is complete only with that task.
 - **The order is a real order.** No cycles.
 - **Parallel tasks are safe.** Tasks marked parallel meet the three conditions in [references/task-sizing.md](references/task-sizing.md). If two tasks must touch the same hotspot, add a dependency or move the shared edit into one task.
@@ -213,7 +211,7 @@ Run every check before showing the list, and report the result. The template has
 - No blocking question is open for a task that was written, and every assumption used is cited. The one exception is a question the person deferred, which the task carries under "Ready to start when".
 - Every behavior task passes the "what can be shown working" test, and every enabling task says what it enables.
 - Every task can be verified alone: its criteria pass without later tasks.
-- Every task fits the size settings or says why it is an exception, and none is too small.
+- Every task has one behavior and criteria within the setting, and none is too small. When the repository sets a size limit, every task fits it or states its exception.
 - Migrations are ordered, and split where data is live. Unfinished visible work is guarded.
 - The milestone starts with an end-to-end path and ends with the closing task, where they apply.
 - No task contains line numbers or step-by-step implementation.
@@ -228,7 +226,7 @@ Show the list and lead with what is expensive to get wrong:
 - open questions and the list of assumptions;
 - contracts between tasks, and the risky tasks (migrations, security, rollout);
 - what you claim can run in parallel;
-- anything outside the size settings, any stacked pull requests, and where the count differs from the RFC's estimate.
+- anything outside the settings, any stacked pull requests, and where the count differs from the RFC's estimate.
 
 Adjust until they agree, and run the affected checks again after each change. They decide the final split, including merging or splitting tasks. How many tasks run at once is also their call. The tasks-in-flight setting is a starting point, because unreviewed pull requests pile up faster than agents run out of work.
 
