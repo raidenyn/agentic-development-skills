@@ -65,7 +65,7 @@ A stack is a short chain of dependent pull requests behind one guard, each revie
 
 Use a stack only when the person asks for it. This skill never asks whether to stack.
 
-Before stacking, check whether a merged contract would decouple them. If it would, split instead.
+Before stacking, check whether a merged contract between the parts would decouple them. If it would, split instead.
 
 In a stack, each task names the task it sits on, and the checks treat that as a dependency on unmerged work that was allowed on purpose.
 

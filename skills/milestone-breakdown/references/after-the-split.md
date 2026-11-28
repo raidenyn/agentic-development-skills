@@ -53,7 +53,7 @@ Stop patching tasks and split the remaining work again when any of these happens
 - An follow-up RFC that affects the remaining tasks was accepted.
 - A spike answered differently than planned.
 - A pull request was rejected because the plan's picture of the code was wrong.
-- Two tasks in a row ran over their size, had to be split, or collided on files.
+- Two tasks in a row ran far past their size estimate, had to be split, or collided on files.
 - The share of remaining tasks that need edits passes the setting for a new breakdown.
 
 Breaking down again means running the main procedure on what is left: redo the code reading for the affected areas, keep the coverage list, mark what is already delivered (after a follow-up RFC, first update the list's entries from both RFCs and check that earlier evidence still proves the changed ones), and re-slice the rest. Keep the names of tasks that do not change.

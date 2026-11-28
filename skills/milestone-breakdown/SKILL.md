@@ -48,7 +48,7 @@ The values below are defaults. If `openspec/design/README.md` (or the README of 
 | Standalone spike budget | one separate session, 1 to 2 hours of run time, or the cost cap the person sets |
 | Document language | English |
 
-The size estimate, and any size setting the repository sets, counts code and configuration, tests included. Documents, generated files and process files (an OpenSpec change's own files, task notes, changelogs) are not counted.
+The size estimate, and any size limit the repository sets, counts code and configuration, tests included. Documents, generated files and process files (an OpenSpec change's own files, task notes, changelogs) are not counted.
 
 There is no line or file limit by default. A repository that wants one adds "Task size, lines of code" or "Task size, files" to its Settings table, and optionally "Task overrun" (default about 1.5 times the task's estimate). Then the rules in [references/task-sizing.md](references/task-sizing.md#when-the-repository-sets-a-size-limit) apply.
 
@@ -123,7 +123,7 @@ A gap in an RFC decision or a frozen contract is never settled here. It needs a 
 
 ### 4. Decide whether to split at all
 
-If the whole milestone has one outcome and fits the acceptance criteria setting, and any size setting the repository sets, it is one task. Write that one task description, run the checks that apply, and skip the rest of the slicing.
+If the whole milestone has one outcome and fits the acceptance criteria setting, and any size limit the repository sets, it is one task. Write that one task description, run the checks that apply, and skip the rest of the slicing.
 
 ### 5. Slice and order
 

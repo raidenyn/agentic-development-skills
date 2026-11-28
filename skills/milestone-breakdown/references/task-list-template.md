@@ -179,7 +179,7 @@ Do these in order, before any design work, brainstorming or code, and before a c
 
 Stop when a frozen contract or agreed decision would have to change, when a provisional contract would have to change in a way the RFC does not allow, when behavior the RFC does not describe is needed, or when the criteria cannot be proved inside this pull request.
 
-<Only when the repository sets a size setting:> Also stop when the work goes well past the size above (<the repository's Task overrun, about 1.5 times by default>).
+<Only when the repository sets a size limit ("Task size, lines of code" or "Task size, files"):> Also stop when the work goes well past the size above (<the repository's Task overrun, about 1.5 times by default>).
 
 Then do one of two things. If a coherent part passes the checks, ship that part, mark the unmet criteria "not done" with the reason, and propose how to split the rest. If nothing coherent passes, leave the branch clean and report what you tried and found.
 
@@ -206,7 +206,7 @@ Never drop a criterion silently, change or delete existing tests to make them pa
 - **Phase** tells the reviewer what to expect. A Spike produces findings. A Refactor prepares the code with no behavior change. A Foundation task creates something stable that others consume: a contract, scaffolding or a missing check. A Feature shows a behavior working. A Migration moves callers or data from the old form to the new. A Hardening task is the closing task: it proves the whole flow and removes temporary code. Refactor, Foundation and Migration tasks are usually enabling tasks and say what they enable.
 - **Area** is one value per task, taken from the areas listed in the plan, so that a board can group by it. It names the component whose behavior the task delivers, not every layer the task touches.
 - **Links** anywhere in a task are paths from the repository root or full URLs, so they still resolve when the task is copied into an issue.
-- **Size** is a rough signal for the reviewer. It is not a limit unless the repository sets a size setting. See [task-sizing.md](task-sizing.md).
+- **Size** is a rough signal for the reviewer. It is not a limit unless the repository sets a size limit ("Task size, lines of code" or "Task size, files"). See [task-sizing.md](task-sizing.md).
 - **Out of scope** is never empty. It is the main defense against a task growing.
 - **Starting points** point at things that stay true: specs, contracts and entry points first, then one example to copy. Links deep into the code are fragile. A full file list goes stale after the first refactor, and line numbers go stale sooner.
 - **Acceptance criteria** always include the line about the standard checks and the main branch. It is what makes each task safe to merge on its own. Where the repo's practice allows, the tests for the other criteria fail before the task and pass after.
