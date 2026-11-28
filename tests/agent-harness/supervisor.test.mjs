@@ -4,14 +4,25 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import { ASSETS, tempRepo, until } from './helpers.mjs';
 
 const lib = (f) => import(pathToFileURL(join(ASSETS.hookRuntime, 'lib', f)).href);
 const { createRuntime, loadHandlers } = await lib('runtime.mjs');
-const { killGroups, startWorker } = await lib('supervisor.mjs');
+const { SPAWN_BARRIER, killGroups, startWorker } = await lib('supervisor.mjs');
 const { installTool } = await lib('install.mjs');
 
 const repo = await tempRepo();
@@ -275,6 +286,164 @@ test('config changes between events reach the worker', async () => {
   await repo.write('.agents/harness.json', '{}');
 });
 
+test('the barrier holds the command until go', async () => {
+  const dir = scratch('barrier-hold');
+  const mark = join(dir, 'ran');
+  const child = spawn('/bin/sh', ['-c', SPAWN_BARRIER, 'agent-harness-spawn', 'sh', '-c', 'touch "$0"', mark], {
+    stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+  });
+  const closed = new Promise((resolve) => child.on('close', resolve));
+  const gate = /** @type {import('node:stream').Writable} */ (child.stdio[3]);
+  child.stdin.end();
+  try {
+    await sleep(200);
+    assert.equal(existsSync(mark), false, 'the command did not run before go');
+    gate.write('go\n');
+    assert.equal(await closed, 0);
+    assert.ok(existsSync(mark), 'the command ran after go');
+  } finally {
+    gate.end();
+  }
+});
+
+test('the barrier exits 125 and runs nothing on EOF', () => {
+  const dir = scratch('barrier-eof');
+  const mark = join(dir, 'ran');
+  const fd = openSync('/dev/null', 'r');
+  try {
+    const r = spawnSync('/bin/sh', ['-c', SPAWN_BARRIER, 'agent-harness-spawn', 'sh', '-c', 'touch "$0"', mark], {
+      stdio: ['ignore', 'pipe', 'pipe', fd],
+      timeout: 5000,
+    });
+    assert.equal(r.status, 125);
+    assert.equal(existsSync(mark), false);
+  } finally {
+    closeSync(fd);
+  }
+});
+
+test('the barrier starts empty so the caller cannot hook it with shell startup files', async () => {
+  const dir = scratch('barrier-hostile');
+  const evil = join(dir, 'evil');
+  const hook = join(dir, 'evil.sh');
+  writeFileSync(hook, `touch '${evil}'\n`);
+  const p = await proxy(
+    'barrierhostile',
+    `
+    export default {
+      name: 'barrierhostile', events: ['prompt'],
+      async handle(ev, c) {
+        // /usr/bin/env prints its own environment without starting a shell, so only a barrier that
+        // inherited these before its release could have sourced them.
+        const r = await c.spawn(['/usr/bin/env'], {
+          env: { BASH_ENV: ev.hook, ENV: ev.hook, 'BASH_FUNC_read%%': '() { :; }' },
+        });
+        return { context: r.stdout };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', hook }, ids);
+  assert.equal(existsSync(evil), false, 'no startup file ran before the release');
+  assert.ok(out.context.includes(`BASH_ENV=${hook}`), out.context);
+});
+
+test('a requested environment variable reaches the command', async () => {
+  const p = await proxy(
+    'envpass',
+    `
+    export default {
+      name: 'envpass', events: ['prompt'],
+      async handle(ev, c) {
+        const r = await c.spawn(['sh', '-c', 'printf %s "$FOO"'], { env: { FOO: 'bar' } });
+        return { context: r.stdout };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
+  assert.equal(out.context, 'bar');
+});
+
+test('the whole caller environment arrives unchanged', async () => {
+  const p = await proxy(
+    'envparityfull',
+    `
+    export default {
+      name: 'envparityfull', events: ['prompt'],
+      async handle(ev, c) {
+        const script = 'console.log(JSON.stringify({ pwd: process.env.PWD, foo: process.env.FOO, go: process.env.go }))';
+        const r = await c.spawn([process.execPath, '-e', script], {
+          env: { PWD: '/caller/says/this', FOO: 'bar', go: 'caller-go' },
+        });
+        return { context: r.stdout };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
+  assert.deepEqual(JSON.parse(out.context), { pwd: '/caller/says/this', foo: 'bar', go: 'caller-go' });
+});
+
+test('a shell-special environment name does not stop the spawn', async () => {
+  const p = await proxy(
+    'specialenv',
+    `
+    export default {
+      name: 'specialenv', events: ['prompt'],
+      async handle(ev, c) {
+        const r = await c.spawn(['sh', '-c', 'echo ok'], { env: { UID: '12345', EUID: '12345' } });
+        return { context: JSON.stringify({ code: r.code, stdout: r.stdout }) };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
+  assert.deepEqual(JSON.parse(out.context), { code: 0, stdout: 'ok\n' });
+});
+
+test('a NUL in an environment value is rejected like a direct spawn', async () => {
+  // JSON.stringify escapes the NUL, so the generated handler source stays plain.
+  const nul = 'a\u0000b';
+  const p = await proxy(
+    'nulenv',
+    `
+    export default {
+      name: 'nulenv', events: ['prompt'],
+      async handle(ev, c) {
+        try {
+          await c.spawn(['true'], { env: { FOO: ${JSON.stringify(nul)} } });
+          return { context: 'spawned' };
+        } catch (err) {
+          return { context: err.message };
+        }
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
+  assert.match(out.context, /null bytes/);
+});
+
+test('the barrier keeps the environment off its command line', async () => {
+  const child = spawn('/bin/sh', ['-p', '-c', SPAWN_BARRIER, 'agent-harness-spawn', '/bin/true'], {
+    env: { SECRET: 'top-secret-value' },
+    stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+  });
+  const closed = new Promise((resolve) => child.on('close', resolve));
+  const gate = /** @type {import('node:stream').Writable} */ (child.stdio[3]);
+  try {
+    await sleep(200);
+    // The secret is in the shell's environment, which only its owner can read, not in argv.
+    const cmdline = `/proc/${child.pid}/cmdline`;
+    if (existsSync(cmdline)) assert.equal(readFileSync(cmdline, 'utf8').includes('top-secret-value'), false);
+    gate.write('go\n');
+    assert.equal(await closed, 0);
+  } finally {
+    gate.end();
+  }
+});
+
 test('spawn runs through the supervisor and returns exit status and output', async () => {
   const p = await proxy(
     'spawner',
@@ -283,24 +452,303 @@ test('spawn runs through the supervisor and returns exit status and output', asy
     export default {
       name: 'spawner', events: ['prompt'],
       async handle(ev, c) {
-        const r = await c.spawn(['sh', '-c', 'echo out; echo err >&2; exit 3'], { cwd: c.repoRoot });
+        const r = await c.spawn(['sh', '-c', 'echo $$ >&2; echo out; echo err >&2; exit 3'], { cwd: c.repoRoot });
         const t = await c.spawn(['sh', '-c', 'sleep 30'], { cwd: c.repoRoot, timeoutMs: 100 });
         return { context: JSON.stringify({ main: isMainThread, code: r.code, stdout: r.stdout, stderr: r.stderr,
-          pgid: typeof r.pgid, timedOut: t.timedOut, tsig: t.signal }) };
+          pgid: r.pgid, timedOut: t.timedOut, tsig: t.signal }) };
       },
     };
   `,
   );
   const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
-  assert.deepEqual(JSON.parse(out.context), {
-    main: false,
-    code: 3,
-    stdout: 'out\n',
-    stderr: 'err\n',
-    pgid: 'number',
-    timedOut: true,
-    tsig: 'SIGTERM',
-  });
+  const r = JSON.parse(out.context);
+  assert.equal(r.main, false);
+  assert.equal(r.code, 3);
+  assert.equal(r.stdout, 'out\n');
+  assert.equal(typeof r.pgid, 'number');
+  const [first, ...rest] = r.stderr.split('\n');
+  assert.equal(first, String(r.pgid), 'the first stderr line is the pid of the spawned group');
+  assert.equal(rest.join('\n'), 'err\n');
+  assert.equal(r.timedOut, true);
+  assert.equal(r.tsig, 'SIGTERM');
+});
+
+test('spawn errors through the supervisor name the command', async () => {
+  const dir = scratch('spawn-errors');
+  const nx = join(dir, 'nx');
+  writeFileSync(nx, '#!/bin/sh\necho no\n');
+  chmodSync(nx, 0o644);
+  const bin = join(dir, 'bin');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, 'hello'), '#!/bin/sh\necho hi\n');
+  chmodSync(join(bin, 'hello'), 0o755);
+  const p = await proxy(
+    'spawnerr',
+    `
+    import { join } from 'node:path';
+    export default {
+      name: 'spawnerr', events: ['prompt'],
+      async handle(ev, c) {
+        const call = async (argv, opts = {}) => {
+          try {
+            const r = await c.spawn(argv, { cwd: c.repoRoot, ...opts });
+            return r.stdout;
+          } catch (err) {
+            return 'error: ' + err.message;
+          }
+        };
+        const out = {};
+        out.missing = await call(['agent-harness-no-such-cmd']);
+        out.noexec = await call([ev.nx]);
+        out.badcwd = await call(['true'], { cwd: join(ev.dir, 'missing') });
+        out.hello = await call(['hello'], { env: { PATH: ev.bin + ':' + process.env.PATH } });
+        out.empty = await call(['']);
+        out.nul = await call(['a' + String.fromCharCode(0) + 'b']);
+        out.numeric = await call([42]);
+        return { context: JSON.stringify(out) };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', dir, nx, bin }, ids);
+  const r = JSON.parse(out.context);
+  assert.match(r.missing, /spawn agent-harness-no-such-cmd ENOENT/);
+  assert.match(r.noexec, /EACCES/);
+  assert.ok(r.noexec.includes(nx), r.noexec);
+  assert.match(r.badcwd, /spawn true ENOENT/);
+  assert.match(r.empty, /argument 'file'/);
+  assert.match(r.empty, /cannot be empty/);
+  assert.match(r.nul, /argument 'file'/);
+  assert.match(r.nul, /must be a string without null bytes/);
+  assert.match(r.numeric, /spawn 42 ENOENT/);
+  assert.equal(r.hello, 'hi\n');
+});
+
+test('the pgid is in the held lock when the command runs', async () => {
+  const dir = scratch('pgid-lock');
+  const p = await proxy(
+    'pgidlock',
+    `
+    export default {
+      name: 'pgidlock', events: ['prompt'],
+      async handle(ev, c) {
+        await c.lock.acquire(ev.gate);
+        await c.spawn(['sh', '-c', 'echo $$ > "$0/pid"; cat "$0/gate/gate.lock.1" > "$0/seen.json"', ev.dir]);
+        return { context: 'ok' };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', gate: join(dir, 'gate'), dir }, ids);
+  assert.equal(out.context, 'ok');
+  const pid = Number(readFileSync(join(dir, 'pid'), 'utf8').trim());
+  const seen = JSON.parse(readFileSync(join(dir, 'seen.json'), 'utf8'));
+  assert.ok(seen.pgids.includes(pid), JSON.stringify(seen));
+});
+
+test('a lock that cannot be written stops the spawn', { skip: process.getuid?.() === 0 }, async () => {
+  const dir = scratch('record-fail');
+  const mark = join(dir, 'ran');
+  const p = await proxy(
+    'recordfail',
+    `
+    import { chmodSync } from 'node:fs';
+    export default {
+      name: 'recordfail', events: ['prompt'],
+      async handle(ev, c) {
+        await c.lock.acquire(ev.gate);
+        chmodSync(ev.gate, 0o500);
+        try {
+          await c.spawn(['sh', '-c', 'touch "$0"', ev.mark]);
+          return { context: 'spawned' };
+        } catch (err) {
+          return { context: 'error: ' + err.message };
+        } finally {
+          chmodSync(ev.gate, 0o700);
+        }
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', gate: join(dir, 'gate'), mark }, ids);
+  assert.match(out.context, /could not record the process group/);
+  assert.equal(existsSync(mark), false, 'the command did not run');
+  // No polling: the reply comes only after the group is gone.
+  assert.equal(spawnSync('pgrep', ['-f', mark]).status, 1, 'no process of the group is left');
+});
+
+test('a lock that cannot be read stops the spawn', { skip: process.getuid?.() === 0 }, async () => {
+  const dir = scratch('record-unreadable');
+  const mark = join(dir, 'ran');
+  const lock = join(dir, 'gate', 'gate.lock.1');
+  const p = await proxy(
+    'recordunreadable',
+    `
+    import { chmodSync } from 'node:fs';
+    export default {
+      name: 'recordunreadable', events: ['prompt'],
+      async handle(ev, c) {
+        await c.lock.acquire(ev.gate);
+        chmodSync(ev.lock, 0o000);
+        try {
+          await c.spawn(['sh', '-c', 'touch "$0"', ev.mark]);
+          return { context: 'spawned' };
+        } catch (err) {
+          return { context: 'error: ' + err.message };
+        } finally {
+          chmodSync(ev.lock, 0o600);
+        }
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', gate: join(dir, 'gate'), lock, mark }, ids);
+  assert.match(out.context, /could not record the process group/);
+  assert.equal(existsSync(mark), false, 'the command did not run');
+  assert.equal(spawnSync('pgrep', ['-f', mark]).status, 1, 'no process of the group is left');
+  const body = JSON.parse(readFileSync(lock, 'utf8'));
+  assert.equal(typeof body.pid, 'number', 'the lock record kept its pid');
+  assert.equal(typeof body.at, 'number', 'the lock record kept its at');
+  assert.deepEqual(body.pgids, [], 'the unrecorded group is not in the lock');
+});
+
+test('arguments arrive unchanged with no lock held', async () => {
+  const argv = ['printf', '%s|', 'a b', 'q\'"', '$HOME', '-n'];
+  const p = await proxy(
+    'argpass',
+    `
+    export default {
+      name: 'argpass', events: ['prompt'],
+      async handle(ev, c) {
+        const r = await c.spawn(${JSON.stringify(argv)});
+        return { context: r.stdout };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
+  assert.equal(out.context, 'a b|q\'"|$HOME|-n|');
+});
+
+test('a command reached through a symlink and .. resolves like the shell', async () => {
+  const dir = scratch('raw-path');
+  mkdirSync(join(dir, 'a', 'b'), { recursive: true });
+  writeFileSync(join(dir, 'a', 'cmd'), '#!/bin/sh\necho through-link\n');
+  chmodSync(join(dir, 'a', 'cmd'), 0o755);
+  symlinkSync(join('a', 'b'), join(dir, 'link'));
+  const p = await proxy(
+    'rawpath',
+    `
+    export default {
+      name: 'rawpath', events: ['prompt'],
+      async handle(ev, c) {
+        try {
+          const r = await c.spawn(['./link/../cmd'], { cwd: ev.dir });
+          return { context: r.stdout };
+        } catch (err) {
+          return { context: 'error: ' + err.message };
+        }
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', dir }, ids);
+  assert.equal(out.context, 'through-link\n');
+});
+
+test('a cwd leading through a symlink and .. resolves like a direct spawn', async () => {
+  const dir = scratch('cwd-link');
+  mkdirSync(join(dir, 'a', 'b'), { recursive: true });
+  writeFileSync(join(dir, 'a', 'cmd'), '#!/bin/sh\necho through-cwd-link\n');
+  chmodSync(join(dir, 'a', 'cmd'), 0o755);
+  symlinkSync(join('a', 'b'), join(dir, 'link'));
+  const p = await proxy(
+    'cwdlink',
+    `
+    export default {
+      name: 'cwdlink', events: ['prompt'],
+      async handle(ev, c) {
+        try {
+          const r = await c.spawn(['./cmd'], { cwd: ev.cwd });
+          return { context: r.stdout };
+        } catch (err) {
+          return { context: 'error: ' + err.message };
+        }
+      },
+    };
+  `,
+  );
+  // Not `join(dir, 'link', '..')`: path.join would collapse `..` itself. The caller's raw path is
+  // what Node passes to chdir, and the kernel follows `link` before it applies `..`.
+  const out = await rt([p]).dispatch({ type: 'prompt', cwd: `${join(dir, 'link')}/..` }, ids);
+  assert.equal(out.context, 'through-cwd-link\n');
+});
+
+test('a spawn with no PATH uses the C library default', async () => {
+  const p = await proxy(
+    'nopath',
+    `
+    export default {
+      name: 'nopath', events: ['prompt'],
+      async handle(ev, c) {
+        const r = await c.spawn(['true'], { env: { PATH: undefined } });
+        return { context: JSON.stringify({ code: r.code, pgid: typeof r.pgid }) };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
+  assert.deepEqual(JSON.parse(out.context), { code: 0, pgid: 'number' });
+});
+
+test('a command name starting with - is rejected before it runs', async () => {
+  const dir = scratch('leading-dash');
+  const bin = join(dir, 'bin');
+  mkdirSync(bin, { recursive: true });
+  const mark = join(dir, 'ran');
+  writeFileSync(join(bin, '-hello'), `#!/bin/sh\ntouch '${mark}'\n`);
+  chmodSync(join(bin, '-hello'), 0o755);
+  const p = await proxy(
+    'dashcmd',
+    `
+    export default {
+      name: 'dashcmd', events: ['prompt'],
+      async handle(ev, c) {
+        try {
+          await c.spawn(['-hello'], { env: { PATH: ev.bin + ':' + process.env.PATH } });
+          return { context: 'ran' };
+        } catch (err) {
+          return { context: 'error: ' + err.message };
+        }
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', bin }, ids);
+  assert.match(out.context, /spawn -hello ENOENT/);
+  assert.equal(existsSync(mark), false);
+});
+
+test('a command name containing = runs instead of being read as an assignment', async () => {
+  const dir = scratch('equals-cmd');
+  const bin = join(dir, 'bin');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, 'a=b'), '#!/bin/sh\necho eq-cmd\n');
+  chmodSync(join(bin, 'a=b'), 0o755);
+  const p = await proxy(
+    'eqcmd',
+    `
+    export default {
+      name: 'eqcmd', events: ['prompt'],
+      async handle(ev, c) {
+        const r = await c.spawn(['a=b'], { env: { PATH: ev.bin + ':' + process.env.PATH } });
+        return { context: JSON.stringify({ code: r.code, stdout: r.stdout }) };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', bin }, ids);
+  assert.deepEqual(JSON.parse(out.context), { code: 0, stdout: 'eq-cmd\n' });
 });
 
 test('a deadline that passes while the event waits for a worker to load: no post, no leak, lock free', async () => {

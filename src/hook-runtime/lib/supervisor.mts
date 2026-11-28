@@ -2,11 +2,14 @@
 // handler). The supervisor owns everything that outlives JavaScript: it spawns processes in their own
 // groups and holds gate locks on a worker's behalf, and when a worker generation ends it kills that
 // generation's groups (SIGTERM, then SIGKILL, until empty) and only then releases its locks.
-import { spawn as spawnChild } from 'node:child_process';
-import { basename, join } from 'node:path';
+import { spawn as spawnChild, spawnSync } from 'node:child_process';
+import { accessSync, constants, readFileSync, statSync } from 'node:fs';
+import { basename, delimiter, isAbsolute, join } from 'node:path';
+import type { Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import { inspect } from 'node:util';
 import { Worker } from 'node:worker_threads';
-import { acquireGateLock, staleGroups, updateGateLock } from './state.mts';
+import { acquireGateLock, staleGroups, writeJsonAtomic } from './state.mts';
 import type { GateLockHandle } from './state.mts';
 import type { EventPayload, Handler, HandlerContext } from './handler.types.mts';
 
@@ -44,12 +47,151 @@ export const REAP_MAX_AGE_MS = 86_400_000;
 const POLL_MS = 25;
 const CONFIRM_MS = 5000;
 
+// The barrier (design D1): the child's shell starts with an empty environment and waits on fd 3, so
+// nothing the caller passes can run before the supervisor records the pgid in every held gate lock.
+// After `go` it reads quoted `export` lines from stdin and restores the whole environment, then
+// `exec` replaces the shell with the command itself: loader variables apply to the command only and
+// a name containing `=` runs through the shell's normal search. EOF, or anything but `go`, exits
+// 125 without running anything.
+export const SPAWN_BARRIER =
+  'IFS= read -r _agent_harness_go <&3 || exit 125\ncase $_agent_harness_go in go) ;; *) exit 125 ;; esac\neval "$(/bin/cat)"\nexec 3>&- "$@"\n';
+const DEFAULT_PATH = '/bin:/usr/bin';
+let defaultPath: string | undefined;
+
+// The default PATH of the C library (design D2): when the caller's environment has no PATH, that is
+// where the shell's own `exec` search lands, so the preflight must search the same places. Queried
+// once and trimmed, because `getconf` ends its answer with a newline; the fallback only covers a
+// host where `getconf` cannot answer.
+function libraryPath(): string {
+  if (defaultPath === undefined) {
+    const out = spawnSync('/usr/bin/getconf', ['PATH'], { encoding: 'utf8', env: process.env, timeout: 2000 });
+    const text = String(out.stdout ?? '').trim();
+    defaultPath = out.status === 0 && text !== '' ? text : DEFAULT_PATH;
+  }
+  return defaultPath;
+}
+
+// bash treats the first eight as readonly, so exporting them again fails, and a failed assignment in
+// POSIX mode ends the shell; `EXECIGNORE` changes how bash searches PATH. The command recomputes its
+// own values for all of them (design D1).
+const RESTORE_SKIP = new Set([
+  'UID',
+  'EUID',
+  'PPID',
+  'GROUPS',
+  'BASHOPTS',
+  'SHELLOPTS',
+  'BASH_VERSINFO',
+  'BASH_VERSION',
+  'EXECIGNORE',
+]);
+const POSIX_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
+
+// The barrier's stdin script (design D1): the shell starts empty, so every caller environment entry
+// is exported again after `go`. Names that are not shell identifiers cannot be exported by `sh`
+// (that includes `BASH_FUNC_*`), and the `RESTORE_SKIP` names would abort or mislead bash. When the
+// caller has no PATH, the C library default is exported so lookup and execution agree with a direct
+// spawn. A NUL in a value is rejected here, as a direct spawn rejects it.
+function restoreEnv(env: Record<string, unknown>): string {
+  const lines: string[] = [];
+  let hasPath = false;
+  for (const [name, value] of Object.entries(env)) {
+    if (value === undefined) continue;
+    if (typeof value === 'string' && value.includes('\0')) {
+      throw new Error("The argument 'env' must be a string without null bytes");
+    }
+    if (name === 'PATH') hasPath = true;
+    if (RESTORE_SKIP.has(name) || !POSIX_NAME.test(name)) continue;
+    lines.push(`export ${name}=${shellQuote(typeof value === 'string' ? value : String(value))}`);
+  }
+  if (!hasPath) lines.push(`export PATH=${shellQuote(libraryPath())}`);
+  return lines.length ? `${lines.join('\n')}\n` : '';
+}
+
+// Resolve the command the way execvp would (design D2): `onSpawn` runs this before it spawns, so a
+// command that would fail gets a `spawn <file> ENOENT|EACCES` error naming what the handler asked
+// for. Resolution only decides the error; the barrier still execs `argv[0]` itself.
+export function resolveCommand(
+  file: string,
+  cwd: string | undefined,
+  env: Record<string, string | undefined>,
+): { ok: true } | { ok: false; error: string } {
+  if (typeof file !== 'string') {
+    return { ok: false, error: `The argument 'file' must be of type string. Received ${inspect(file)}` };
+  }
+  if (!file) return { ok: false, error: "The argument 'file' cannot be empty. Received ''" };
+  if (file.includes('\0')) {
+    return { ok: false, error: `The argument 'file' must be a string without null bytes. Received ${inspect(file)}` };
+  }
+  // Any other non-string cwd is left to spawnChild to reject, as it did before the barrier.
+  const cwdValue: unknown = cwd;
+  if (cwdValue != null && typeof cwdValue !== 'string') return { ok: true };
+  if (file.startsWith('-')) return { ok: false, error: `spawn ${file} ENOENT` };
+  // The raw cwd, not `resolve(cwd)`: the filesystem follows symlinks before `..`, as a direct spawn
+  // does, while `resolve()` would collapse `..` lexically and miss a cwd such as `link/..`.
+  const base = typeof cwdValue === 'string' ? cwdValue : process.cwd();
+  // Keep `entry` and `file` verbatim after the raw base: the filesystem resolves symlinks before
+  // `..`, as a direct spawn does. An absolute entry and an absolute file are probed as they are.
+  let candidates: string[];
+  if (isAbsolute(file)) {
+    candidates = [file];
+  } else if (file.includes('/')) {
+    candidates = [`${base}/${file}`];
+  } else {
+    candidates = (env.PATH ?? libraryPath())
+      .split(delimiter)
+      .map((entry) => (isAbsolute(entry) ? `${entry}/${file}` : `${base}/${entry}/${file}`));
+  }
+  let eacces = false;
+  for (const candidate of candidates) {
+    let stats: ReturnType<typeof statSync>;
+    try {
+      stats = statSync(candidate);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EACCES') eacces = true;
+      continue;
+    }
+    if (!stats.isFile()) {
+      eacces = true;
+      continue;
+    }
+    try {
+      accessSync(candidate, constants.X_OK);
+      return { ok: true };
+    } catch {
+      eacces = true;
+    }
+  }
+  return { ok: false, error: `spawn ${file} ${eacces ? 'EACCES' : 'ENOENT'}` };
+}
+
 let genCounter = 0;
 let idCounter = 0;
 const generations = new Map<number, WorkerRecord>();
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Record a group in a lock the supervisor holds (design D3). The record must still be ours: a lock
+// file that cannot be read is an error, because replacing it with `{ pgids }` would drop `pid` and
+// `at` and the next supervisor could no longer reap the holder's groups. Kept local because
+// `state.mts` is shared with hooked-rules and verify-gate.
+function recordGatePgids(handle: { path: string }, pgids: number[]): void {
+  let body: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(handle.path, 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not a lock record');
+    body = parsed as Record<string, unknown>;
+  } catch (err) {
+    throw new Error(`could not read the gate lock (${errText(err)})`);
+  }
+  if (body.pid !== process.pid || typeof body.at !== 'number' || body.released === true) {
+    throw new Error('the gate lock is not ours');
+  }
+  writeJsonAtomic(handle.path, { ...body, pgids });
+}
 
 export function groupAlive(pgid: number): boolean {
   try {
@@ -303,17 +445,33 @@ class WorkerRecord {
   onSpawn({ requestId, callId, argv, cwd, env, timeoutMs }: Msg): unknown {
     const reply = (m: Msg) => this.post({ type: 'spawn.exit', requestId, callId, ...m });
     if (!this.isActive(requestId)) return reply({ error: 'the event has ended' });
+    const spawnEnv = { ...process.env, ...env };
     let child: ReturnType<typeof spawnChild>;
     try {
-      child = spawnChild(argv[0], argv.slice(1), {
+      const resolved = resolveCommand(argv[0], cwd, spawnEnv);
+      if (!resolved.ok) return reply({ error: resolved.error });
+      // The barrier `sh` starts empty (design D1), so nothing the caller passes can run before `go`;
+      // the quoted exports on its stdin restore the whole environment after the release, and `exec`
+      // then replaces the shell with the command itself.
+      const restore = restoreEnv(spawnEnv);
+      // The barrier `sh` waits on fd 3 before it execs the command: the pgid recorded below is the
+      // command's own, and the command cannot run before it is in every held lock.
+      child = spawnChild('/bin/sh', ['-p', '-c', SPAWN_BARRIER, 'agent-harness-spawn', ...argv], {
         cwd,
-        env: { ...process.env, ...env },
+        env: {},
         detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
       });
+      // A failed spawn is reported here; otherwise the barrier `eval`s these exports after `go`.
+      child.stdin?.on('error', () => {});
+      child.stdin?.end(restore);
     } catch (err) {
       return reply({ error: errText(err) });
     }
+    const pgid = child.pid;
+    let timedOut = false;
+    let timeout: NodeJS.Timeout | undefined;
+    let recordError: string | undefined;
     let done = false;
     const end = (m: Msg) => {
       if (done) return;
@@ -323,33 +481,61 @@ class WorkerRecord {
       if (pgid && !groupAlive(pgid)) this.groups.delete(pgid);
       reply(m);
     };
-    const pgid = child.pid;
-    let timedOut = false;
-    let timeout: NodeJS.Timeout | undefined;
+    // Under descriptor pressure a spawn can return a child without stdio and a pending EMFILE error,
+    // so the listeners go on before anything touches a stream, and every access stays guarded. The
+    // barrier may also exit before the release is written, so the release stream swallows its error
+    // rather than crash the supervisor.
+    const gate = child.stdio?.[3] as Writable | undefined;
+    gate?.on('error', () => {});
+    child.stdout?.on('data', (chunk: Buffer) =>
+      this.post({ type: 'spawn.data', requestId, callId, stream: 'stdout', chunk: new Uint8Array(chunk) }),
+    );
+    child.stderr?.on('data', (chunk: Buffer) =>
+      this.post({ type: 'spawn.data', requestId, callId, stream: 'stderr', chunk: new Uint8Array(chunk) }),
+    );
+    // Every error of this child names `/bin/sh`, so it is rewritten to name the command the handler
+    // asked for (design D4). That is how an invalid cwd reaches the handler as before. A failed
+    // record keeps its own error, because the command was never released.
+    child.on('error', (err) => {
+      if (recordError) return end({ error: recordError, pgid });
+      const code = (err as NodeJS.ErrnoException).code;
+      end({ error: code ? `spawn ${argv[0]} ${code}` : errText(err), pgid });
+    });
+    child.on('close', (code, signal) =>
+      end(recordError ? { error: recordError, pgid } : { code, signal, pgid, timedOut }),
+    );
     if (pgid) {
       this.groups.set(pgid, requestId);
       this.children.set(callId, pgid);
       for (const lock of this.locks.values()) {
         lock.pgids.push(pgid);
         try {
-          updateGateLock(lock.handle, { pgids: lock.pgids });
-        } catch {}
+          recordGatePgids(lock.handle, lock.pgids);
+        } catch (err) {
+          // A group whose pgid is not in every held lock can outlive a SIGKILL of the holder
+          // (design D3), so the command is never released: kill the barrier `sh` and reply from
+          // `close`, once the group is gone.
+          recordError = `could not record the process group: ${errText(err)}`;
+          break;
+        }
       }
-      if (timeoutMs > 0) {
-        timeout = setTimeout(() => {
-          timedOut = true;
-          killGroups([pgid]).catch(() => {});
-        }, timeoutMs);
+      if (recordError) {
+        signalGroup(pgid, 'SIGKILL');
+        // A denied kill must not park the barrier: the closed release side reads as EOF, so the
+        // barrier exits 125 without running the command.
+        try {
+          gate?.end();
+        } catch {}
+      } else {
+        gate?.write('go\n');
+        if (timeoutMs > 0) {
+          timeout = setTimeout(() => {
+            timedOut = true;
+            killGroups([pgid]).catch(() => {});
+          }, timeoutMs);
+        }
       }
     }
-    child.stdout!.on('data', (chunk: Buffer) =>
-      this.post({ type: 'spawn.data', requestId, callId, stream: 'stdout', chunk: new Uint8Array(chunk) }),
-    );
-    child.stderr!.on('data', (chunk: Buffer) =>
-      this.post({ type: 'spawn.data', requestId, callId, stream: 'stderr', chunk: new Uint8Array(chunk) }),
-    );
-    child.on('error', (err) => end({ error: errText(err), pgid }));
-    child.on('close', (code, signal) => end({ code, signal, pgid, timedOut }));
   }
 
   // Reap the groups a dead holder recorded before taking the gate lock (design D3): SIGTERM, then

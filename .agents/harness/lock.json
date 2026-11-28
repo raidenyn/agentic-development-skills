@@ -2,7 +2,7 @@
   "version": 1,
   "tools": {
     "hook-runtime": {
-      "version": "0.2.0",
+      "version": "0.2.1",
       "files": {
         "claude.mjs": "e0c5afe0429d142a01e33c3ea30b23f954ef58513a21171c787abffd4df93118",
         "cli.mjs": "3331ac704c0354eae128cd51a3e07b0a0b0b6b7bd7de518bdd439a86bc315491",
@@ -14,10 +14,10 @@
         "lib/runtime.mjs": "55a778d9a22befdc873f52be33e941f5da9d9f546beecc7e1abd42311ca70820",
         "lib/skill-path.mjs": "f12e70fabbae07e40e2bb8e044e1e068918eb5880b9ec7361ed7a60c4543445e",
         "lib/state.mjs": "0eb56ddc5457799a3348cbd701cd4f714727d2da3ea3ee3d6c07ef33c6c75ccc",
-        "lib/supervisor.mjs": "1a931c6bc186ae82d47a0269fa66e1661fff0cc69acbae371560e8ced023374c",
+        "lib/supervisor.mjs": "179f8c7835207daae908201b386083bcb59010c0d121ef2a16a2f29a516853c2",
         "lib/worker-entry.mjs": "c9564de05717b3bfd00ab60aa8a884f773334d6d96650e688671e2874704cce3",
         "opencode/index.mjs": "ea7c4c9b355fede5f2544f28e0e380a8b77b2ccea938858e984382a302faab16",
-        "tool.json": "672f185ad53605503ee436def1ce3d197dc269990d3e64d48fd6be30d96a6d00"
+        "tool.json": "adb1226e85d6961bd82e179e1af1094fb7a7268260ba0256099f3554a8a59df5"
       }
     },
     "hooked-rules": {
