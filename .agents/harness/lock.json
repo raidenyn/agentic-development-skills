@@ -2,7 +2,7 @@
   "version": 1,
   "tools": {
     "hook-runtime": {
-      "version": "0.2.0",
+      "version": "0.2.1",
       "files": {
         "claude.mjs": "e0c5afe0429d142a01e33c3ea30b23f954ef58513a21171c787abffd4df93118",
         "cli.mjs": "3331ac704c0354eae128cd51a3e07b0a0b0b6b7bd7de518bdd439a86bc315491",
@@ -17,7 +17,7 @@
         "lib/supervisor.mjs": "f92daa351ca44249c126140c1a02d7c58ae6bccc3d87e9f1389f727fc1328400",
         "lib/worker-entry.mjs": "c9564de05717b3bfd00ab60aa8a884f773334d6d96650e688671e2874704cce3",
         "opencode/index.mjs": "ea7c4c9b355fede5f2544f28e0e380a8b77b2ccea938858e984382a302faab16",
-        "tool.json": "672f185ad53605503ee436def1ce3d197dc269990d3e64d48fd6be30d96a6d00"
+        "tool.json": "adb1226e85d6961bd82e179e1af1094fb7a7268260ba0256099f3554a8a59df5"
       }
     },
     "hooked-rules": {
