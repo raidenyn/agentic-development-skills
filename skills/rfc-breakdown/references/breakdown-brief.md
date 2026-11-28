@@ -11,7 +11,6 @@ Break down one milestone of an accepted feature RFC into tasks. Use the `milesto
 **Start conditions:** <for each milestone under this milestone's "Depends on": the closing entry that shows it is done. Or "depends on nothing">
 
 **Decided for the whole RFC**
-- Stacked pull requests: <allowed / not allowed / not decided>
 - Other answers from the person: <list, or none>
 - Questions the person deferred: <for each: the question, the reading to write the task on, who deferred it and when. Or none>
 - How a task is started in this repo: <the text that ends every task's "Start" section>
@@ -23,7 +22,7 @@ Break down one milestone of an accepted feature RFC into tasks. Use the `milesto
 
 **How this run differs from a normal one**
 1. Run the skill through its checks (step 7), then stop. Do not do step 8 (the review with the person) or step 9 (the hand-over). Another session does both for all milestones together.
-2. You cannot ask the person, and you must not guess. Where the skill tells you to ask, do not ask: put the question in your report, with the possible readings and your recommendation. This includes blocking questions and the question about stacked pull requests when it is not decided above.
+2. You cannot ask the person, and you must not guess. Where the skill tells you to ask, do not ask: put the question in your report, with the possible readings and your recommendation. This includes blocking questions.
 3. Do not write a task that waits on a blocking question. In the coverage table, write what that entry waits on. The one exception is a question listed above as deferred by the person: write that task on the reading given, name the question under its "Ready to start when", and record the deferral in the plan. Never treat a question as deferred because you have a recommendation for it.
 4. Do not start an independent review. Report whether the list reached the skill's independent review setting.
 5. If you need an Area value or a shared name that is not on the list, do not invent one. Report it.

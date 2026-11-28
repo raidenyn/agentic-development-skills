@@ -66,8 +66,7 @@ Ask once, together, and only what the request, the repo's settings (see `milesto
 - where the tasks folder goes;
 - whether to publish, and where (for example a GitHub Project), or keep the files only;
 - which model independent reviewers use;
-- how a task is started in this repo (the branch rule, the command or skill that opens a change, the reviews required), when the repo's agent instructions and contribution docs do not say;
-- whether stacked pull requests are allowed for every milestone of this RFC. If the person does not want to decide that for the whole RFC, leave it open: each breakdown returns the question when a real case comes up.
+- how a task is started in this repo (the branch rule, the command or skill that opens a change, the reviews required), when the repo's agent instructions and contribution docs do not say.
 
 ### 3. Sort the milestones
 
@@ -174,7 +173,7 @@ One review for the whole RFC. Lead with what is expensive to get wrong:
 - the assumptions and the answers given;
 - the blockers that cross milestones;
 - the risky tasks (migrations, security, rollout) and what is claimed to be parallel;
-- anything outside the size settings, and each milestone's count against the RFC's estimate. Where a count passes the milestone size overrun setting, the person chooses: keep it as one milestone, or split it through a follow-up RFC.
+- anything outside the settings, and each milestone's count against the RFC's estimate. Where a count passes the milestone size overrun setting, the person chooses: keep it as one milestone, or split it through a follow-up RFC.
 
 Adjust until they agree, and run the affected checks again after each change. The person decides the final set.
 
