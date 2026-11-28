@@ -12,6 +12,7 @@ import {
   openSync,
   readFileSync,
   readdirSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -438,6 +439,77 @@ test('arguments arrive unchanged with no lock held', async () => {
   );
   const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
   assert.equal(out.context, 'a b|q\'"|$HOME|-n|');
+});
+
+test('a command reached through a symlink and .. resolves like the shell', async () => {
+  const dir = scratch('raw-path');
+  mkdirSync(join(dir, 'a', 'b'), { recursive: true });
+  writeFileSync(join(dir, 'a', 'cmd'), '#!/bin/sh\necho through-link\n');
+  chmodSync(join(dir, 'a', 'cmd'), 0o755);
+  symlinkSync(join('a', 'b'), join(dir, 'link'));
+  const p = await proxy(
+    'rawpath',
+    `
+    export default {
+      name: 'rawpath', events: ['prompt'],
+      async handle(ev, c) {
+        try {
+          const r = await c.spawn(['./link/../cmd'], { cwd: ev.dir });
+          return { context: r.stdout };
+        } catch (err) {
+          return { context: 'error: ' + err.message };
+        }
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', dir }, ids);
+  assert.equal(out.context, 'through-link\n');
+});
+
+test('a spawn with no PATH uses the shell default', async () => {
+  const p = await proxy(
+    'nopath',
+    `
+    export default {
+      name: 'nopath', events: ['prompt'],
+      async handle(ev, c) {
+        const r = await c.spawn(['true'], { env: { PATH: undefined } });
+        return { context: JSON.stringify({ code: r.code, pgid: typeof r.pgid }) };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
+  assert.deepEqual(JSON.parse(out.context), { code: 0, pgid: 'number' });
+});
+
+test('a command name starting with - is rejected before it runs', async () => {
+  const dir = scratch('leading-dash');
+  const bin = join(dir, 'bin');
+  mkdirSync(bin, { recursive: true });
+  const mark = join(dir, 'ran');
+  writeFileSync(join(bin, '-hello'), `#!/bin/sh\ntouch '${mark}'\n`);
+  chmodSync(join(bin, '-hello'), 0o755);
+  const p = await proxy(
+    'dashcmd',
+    `
+    export default {
+      name: 'dashcmd', events: ['prompt'],
+      async handle(ev, c) {
+        try {
+          await c.spawn(['-hello'], { env: { PATH: ev.bin + ':' + process.env.PATH } });
+          return { context: 'ran' };
+        } catch (err) {
+          return { context: 'error: ' + err.message };
+        }
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', bin }, ids);
+  assert.match(out.context, /spawn -hello ENOENT/);
+  assert.equal(existsSync(mark), false);
 });
 
 test('a deadline that passes while the event waits for a worker to load: no post, no leak, lock free', async () => {

@@ -23,7 +23,7 @@ If a gate lock cannot be written during a spawn, the supervisor SHALL NOT run th
 - **THEN** the spawned process exits without running the requested command
 
 ### Requirement: Spawn results are unchanged
-A spawn through the supervisor SHALL return the same results as a direct spawn of the command in its own group: the command's pid as `pgid`, its output, its exit code or signal, and `timedOut` when its timeout fires. A command that is not found, a file that is not executable, and a `cwd` that does not exist SHALL each be answered with an error that names the command, as a direct spawn does. An empty command name SHALL be answered with the same invalid-argument error a direct spawn gives.
+A spawn through the supervisor SHALL return the same results as a direct spawn of the command in its own group: the command's pid as `pgid`, its output, its exit code or signal, and `timedOut` when its timeout fires. A command that is not found, a file that is not executable, and a `cwd` that does not exist SHALL each be answered with an error that names the command, as a direct spawn does. An empty command name SHALL be answered with the same invalid-argument error a direct spawn gives. A command name that begins with `-` SHALL be answered with `spawn <name> ENOENT`.
 
 #### Scenario: Results of a command
 - **WHEN** a worker spawns a command that prints its own pid, writes to stdout and stderr, and exits 3

@@ -3,9 +3,9 @@
 // handler). The supervisor owns everything that outlives JavaScript: it spawns processes in their own
 // groups and holds gate locks on a worker's behalf, and when a worker generation ends it kills that
 // generation's groups (SIGTERM, then SIGKILL, until empty) and only then releases its locks.
-import { spawn as spawnChild } from 'node:child_process';
+import { spawn as spawnChild, spawnSync } from 'node:child_process';
 import { accessSync, constants, statSync } from 'node:fs';
-import { basename, delimiter, join, resolve } from 'node:path';
+import { basename, delimiter, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inspect } from 'node:util';
 import { Worker } from 'node:worker_threads';
@@ -23,6 +23,21 @@ const CONFIRM_MS = 5000;
 // pgid, for the command itself. EOF, or anything but `go`, exits 125 without running anything.
 export const SPAWN_BARRIER = 'IFS= read -r go <&3 && [ "$go" = go ] || exit 125\nexec 3>&- "$@"\n';
 const DEFAULT_PATH = '/usr/bin:/bin';
+let shellPath;
+
+// The default PATH of the `/bin/sh` that runs the barrier (design D2): when the merged env has no
+// PATH, preflight must search where the shell will search, not a guess. Queried once; the fallback
+// only covers a shell that cannot answer.
+function defaultShellPath() {
+  if (shellPath === undefined) {
+    const env = { ...process.env };
+    delete env.PATH;
+    const out = spawnSync('/bin/sh', ['-c', 'printf %s "$PATH"'], { encoding: 'utf8', env });
+    const text = typeof out.stdout === 'string' ? out.stdout : '';
+    shellPath = out.status === 0 && text !== '' ? text : DEFAULT_PATH;
+  }
+  return shellPath;
+}
 
 // Resolve the command the way the shell would (design D2): `onSpawn` runs this before it spawns, so
 // a command that would fail gets a `spawn <file> ENOENT|EACCES` error naming what the handler
@@ -39,10 +54,20 @@ export function resolveCommand(file, cwd, env) {
   const cwdValue = cwd;
   if (cwdValue != null && typeof cwdValue !== 'string') return { ok: true };
   if (file.startsWith('-')) return { ok: false, error: `spawn ${file} ENOENT` };
-  const base = typeof cwdValue === 'string' ? cwdValue : process.cwd();
-  const candidates = file.includes('/')
-    ? [resolve(base, file)]
-    : (env.PATH ?? DEFAULT_PATH).split(delimiter).map((entry) => resolve(base, entry, file));
+  const base = resolve(typeof cwdValue === 'string' ? cwdValue : process.cwd());
+  // Keep `entry` and `file` verbatim after the resolved base: the filesystem resolves symlinks
+  // before `..`, as a direct spawn does, while `resolve()` would collapse `..` lexically and miss
+  // `./link/../cmd`. An absolute entry and an absolute file are probed as they are.
+  let candidates;
+  if (isAbsolute(file)) {
+    candidates = [file];
+  } else if (file.includes('/')) {
+    candidates = [`${base}/${file}`];
+  } else {
+    candidates = (env.PATH ?? defaultShellPath())
+      .split(delimiter)
+      .map((entry) => (isAbsolute(entry) ? `${entry}/${file}` : `${base}/${entry}/${file}`));
+  }
   let eacces = false;
   for (const candidate of candidates) {
     let stats;
