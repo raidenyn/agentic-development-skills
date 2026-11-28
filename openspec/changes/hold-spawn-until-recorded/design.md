@@ -7,7 +7,7 @@ The supervisor spawns every handler process in its own group (`detached: true`) 
 **Goals:**
 - No command spawned through the supervisor starts before its pgid is written to every gate lock the supervisor holds.
 - A group whose pgid could not be recorded never runs its command.
-- Handlers see the same results as today: pid and pgid, stdout and stderr, exit code and signal, timeout, and the spawn errors for a missing command, a non-executable file, an invalid command name and an invalid `cwd`, all naming `argv[0]`. The known differences are listed under Risks.
+- Handlers see the same results as today: pid and pgid, stdout and stderr, exit code and signal, timeout, and the spawn errors for a missing command, a non-executable file, an invalid command name and an invalid `cwd`, all naming `argv[0]`. The command receives the caller's environment except names a shell treats as readonly or special (`UID`, `EUID`, `PPID`, `GROUPS`, `BASHOPTS`, `SHELLOPTS`, `BASH_VERSINFO`, `BASH_VERSION`, `EXECIGNORE`), names that are not valid identifiers (including `BASH_FUNC_*`), and an absent `PATH`, which is supplied from `getconf PATH`. The known differences are listed under Risks.
 
 **Non-Goals:**
 - `localSpawn` and `localLock` in the verify gate. The local lock does not record pgids, so it has nothing to reap.
@@ -42,7 +42,7 @@ The shell starts privileged (`-p`) with an empty environment, so nothing the cal
 - A candidate qualifies when it is a regular file that passes `accessSync(X_OK)`. EACCES is remembered when `statSync` fails with EACCES, when the candidate is not a regular file (for example a directory), or when `accessSync` fails. Every other `statSync` error (ENOENT, ENOTDIR, ELOOP) is skipped.
 - If nothing qualifies, the reply is `spawn <file> EACCES` when EACCES was remembered, and `spawn <file> ENOENT` otherwise. Nothing is started.
 
-Resolution only decides the error. The barrier still execs `argv[0]` itself, so `$0` and the PATH search are unchanged, and fd 3 carries only the release.
+Resolution only decides the error. The barrier execs `argv[0]` itself with the restored environment; when the caller has no `PATH` it exports `getconf PATH`, so the search matches the preflight. fd 3 carries only the release.
 
 **D3. Order in `onSpawn`.**
 1. `resolveCommand`.
@@ -64,7 +64,7 @@ If any `recordGatePgids` throws, the supervisor does not write `go`. It records 
 ## Risks / Trade-offs
 
 - **One extra `sh` and one `/bin/cat` exec per spawn**, about a millisecond. The lock writes already happen today.
-- **What is not passed to the command.** Environment entries whose names are not shell identifiers — including every exported `BASH_FUNC_*` function — cannot be exported by the barrier shell and are absent. `SHELLOPTS` and `BASHOPTS` are left out too, because bash treats them as readonly and a failed assignment in POSIX mode ends the shell. An absent `PATH` is supplied as the C library's `getconf PATH`, and a name beginning with `-` is refused with `spawn <name> ENOENT`.
+- **What is not passed to the command.** Environment entries whose names are not shell identifiers — including every exported `BASH_FUNC_*` function — cannot be exported by the barrier shell and are absent. These names are left out too: `UID`, `EUID`, `PPID`, `GROUPS`, `BASHOPTS`, `SHELLOPTS`, `BASH_VERSINFO`, `BASH_VERSION` (bash treats them as readonly, and a failed assignment in POSIX mode ends the shell) and `EXECIGNORE` (it changes bash's PATH search). The command recomputes its own values for them. An absent `PATH` is supplied as the C library's `getconf PATH`, so the search matches the preflight. A name beginning with `-` is refused with `spawn <name> ENOENT`. A NUL byte in an environment value is rejected with Node's `The argument 'env' must be a string without null bytes`, as a direct spawn does.
 - **Known differences from a direct spawn.** An `exec` failure — a script whose `#!` interpreter is missing, or a binary built for the wrong architecture — gives exit 126 or 127, with the shell's message on stderr, instead of an ENOENT or ENOEXEC error. The verify gate reports this as a failed verify that shows that message, not as "could not start". This is rare, and reporting a failed `exec` back would need a status channel, which is not worth the complexity. A file system change between resolution and `exec` can turn an error into an exit code.
 - **While a process waits at the barrier, `ps` shows `sh`.** This lasts only until the `exec`, which happens in the same tick as the spawn.
 

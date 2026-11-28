@@ -385,6 +385,46 @@ test('the whole caller environment arrives unchanged', async () => {
   assert.deepEqual(JSON.parse(out.context), { pwd: '/caller/says/this', foo: 'bar', go: 'caller-go' });
 });
 
+test('a shell-special environment name does not stop the spawn', async () => {
+  const p = await proxy(
+    'specialenv',
+    `
+    export default {
+      name: 'specialenv', events: ['prompt'],
+      async handle(ev, c) {
+        const r = await c.spawn(['sh', '-c', 'echo ok'], { env: { UID: '12345', EUID: '12345' } });
+        return { context: JSON.stringify({ code: r.code, stdout: r.stdout }) };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
+  assert.deepEqual(JSON.parse(out.context), { code: 0, stdout: 'ok\n' });
+});
+
+test('a NUL in an environment value is rejected like a direct spawn', async () => {
+  // JSON.stringify escapes the NUL, so the generated handler source stays plain.
+  const nul = 'a\u0000b';
+  const p = await proxy(
+    'nulenv',
+    `
+    export default {
+      name: 'nulenv', events: ['prompt'],
+      async handle(ev, c) {
+        try {
+          await c.spawn(['true'], { env: { FOO: ${JSON.stringify(nul)} } });
+          return { context: 'spawned' };
+        } catch (err) {
+          return { context: err.message };
+        }
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt' }, ids);
+  assert.match(out.context, /null bytes/);
+});
+
 test('the barrier keeps the environment off its command line', async () => {
   const child = spawn('/bin/sh', ['-p', '-c', SPAWN_BARRIER, 'agent-harness-spawn', '/bin/true'], {
     env: { SECRET: 'top-secret-value' },

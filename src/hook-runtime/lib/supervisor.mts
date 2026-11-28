@@ -71,22 +71,37 @@ function libraryPath(): string {
   return defaultPath;
 }
 
-// `SHELLOPTS` and `BASHOPTS` are readonly in bash, and a failed assignment in POSIX mode ends the
-// shell, so exporting them again would stop the command from running (design D1).
-const RESTORE_SKIP = new Set(['SHELLOPTS', 'BASHOPTS']);
+// bash treats the first eight as readonly, so exporting them again fails, and a failed assignment in
+// POSIX mode ends the shell; `EXECIGNORE` changes how bash searches PATH. The command recomputes its
+// own values for all of them (design D1).
+const RESTORE_SKIP = new Set([
+  'UID',
+  'EUID',
+  'PPID',
+  'GROUPS',
+  'BASHOPTS',
+  'SHELLOPTS',
+  'BASH_VERSINFO',
+  'BASH_VERSION',
+  'EXECIGNORE',
+]);
 const POSIX_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
 // The barrier's stdin script (design D1): the shell starts empty, so every caller environment entry
 // is exported again after `go`. Names that are not shell identifiers cannot be exported by `sh`
-// (that includes `BASH_FUNC_*`), and `SHELLOPTS`/`BASHOPTS` would abort bash. When the caller has no
-// PATH, the C library default is exported so lookup and execution agree with a direct spawn.
+// (that includes `BASH_FUNC_*`), and the `RESTORE_SKIP` names would abort or mislead bash. When the
+// caller has no PATH, the C library default is exported so lookup and execution agree with a direct
+// spawn. A NUL in a value is rejected here, as a direct spawn rejects it.
 function restoreEnv(env: Record<string, unknown>): string {
   const lines: string[] = [];
   let hasPath = false;
   for (const [name, value] of Object.entries(env)) {
     if (value === undefined) continue;
+    if (typeof value === 'string' && value.includes('\0')) {
+      throw new Error("The argument 'env' must be a string without null bytes");
+    }
     if (name === 'PATH') hasPath = true;
     if (RESTORE_SKIP.has(name) || !POSIX_NAME.test(name)) continue;
     lines.push(`export ${name}=${shellQuote(typeof value === 'string' ? value : String(value))}`);
