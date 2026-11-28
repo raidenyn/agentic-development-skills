@@ -19,24 +19,30 @@ The supervisor spawns every handler process in its own group (`detached: true`) 
 **D1. Barrier wrapper on fd 3.** `onSpawn` runs:
 
 ```
-/bin/sh -c "$SPAWN_BARRIER" agent-harness-spawn <KEY=VALUE...> <argv...>
+/bin/sh -p -c "$SPAWN_BARRIER" agent-harness-spawn <argv...>
 ```
 
-with `env: {}`, `stdio: ['ignore', 'pipe', 'pipe', 'pipe']` and `detached: true`. `SPAWN_BARRIER` is exactly:
+with the sanitized merged environment, `stdio: ['pipe', 'pipe', 'pipe', 'pipe']` and `detached: true`. `SPAWN_BARRIER` is exactly:
 
 ```sh
 IFS= read -r go <&3 && [ "$go" = go ] || exit 125
-exec 3>&- /usr/bin/env -i -- "$@"
+eval "$(/bin/cat)"
+case "$1" in
+  *=*) exec 3>&- "$@" ;;
+  *) exec 3>&- /usr/bin/env "$@" ;;
+esac
 ```
 
-The barrier shell starts with an empty environment, and `/usr/bin/env -i --` applies the caller's environment only at the release, so an exported shell function (bash as `/bin/sh`) or an `LD_PRELOAD` constructor cannot run before this group is recorded. `--` also stops option parsing for the command's own arguments.
+The shell runs privileged (`-p`) and inherits every variable that cannot run code at startup — ordinary values and secrets included — so nothing is on its command line, where `/proc/<pid>/cmdline` is world-readable. Only the variables that can execute code before the release stay out of its environment: `ENV`, `BASH_ENV`, `SHELLOPTS`, `BASHOPTS`, `PS4`, `IFS`, every `BASH_FUNC_*`, every `LD_*` and `DYLD_*`, and `GCONV_PATH`, `LOCPATH`, `NLSPATH`. Those are sent to the shell on stdin as one quoted `export NAME='value'` line each and `eval`ed after `go`, so the command ends up with exactly the caller's environment.
 
-`exec` replaces the shell, so the pid recorded before the release, and therefore the pgid, is the command's own. The `sh` leads the group from the start, so anything the command forks stays in the recorded group. The command does not inherit fd 3. fd 3 is blocking on the child side, so `read` waits however late `go` arrives. The reviewer verified this on Node 26 with dash. For the alternatives that were considered (a test-only wait, an intent marker with a process scan, starting the child stopped), see `brainstorm.md`.
+The `case` sends a command name containing `=` through the shell's own search, because `/usr/bin/env` would parse it as an assignment. Otherwise `/usr/bin/env` runs the command with the restored environment, which keeps the direct-spawn PATH semantics when `PATH` is unset (`_CS_PATH`).
+
+`exec` replaces the shell, so the pid recorded before the release, and therefore the pgid, is the command's own. The `sh` leads the group from the start, so anything the command forks stays in the recorded group. The command does not inherit fd 3. fd 3 is blocking on the child side, so `read` waits however late `go` arrives. For the alternatives that were considered (a test-only wait, an intent marker with a process scan, starting the child stopped), see `brainstorm.md`.
 
 **D2. Validate and resolve the command in the supervisor before spawning.** `resolveCommand(file, cwd, env)` runs inside `onSpawn`'s existing `try`, and anything it throws is replied as `errText(err)`. Rules:
 - A `file` that is not a string, is empty, or contains a NUL byte gets an error that starts with Node's wording, `The argument 'file' …`, for example `The argument 'file' cannot be empty. Received ''`. The tests assert only `/argument 'file'/`. The worker sends `argv.map(String)`, so a non-string name is only defence in depth. A `cwd` of `null` or `undefined` means `process.cwd()`. Any other non-string `cwd` skips resolution, so that `spawnChild` throws inside the same `try` as today.
 - A `file` starting with `-` gives `spawn <file> ENOENT`. This is kept as a known, documented difference: a direct spawn would treat it as a file name.
-- A `file` containing `/` is resolved against the raw `cwd` (`cwd ?? process.cwd()`, with no lexical `resolve`). Otherwise each entry of the merged `env.PATH` is tried in order. Candidates are `${base}/${entry}/${file}` for a relative entry, `${entry}/${file}` for an absolute one, `${base}/${file}` for a `file` containing `/`, and `file` itself when it is absolute. The base is left raw because `chdir` follows the symlinks in the path before it applies `..`, while `resolve()` would collapse `..` lexically and miss a cwd such as `link/..`. If `PATH` is unset, `_CS_PATH`, the C library's default, is used, because the command execs through `/usr/bin/env`, not through a shell: it is queried once with `spawnSync('/usr/bin/getconf', ['PATH'], { env: process.env, timeout: 2000 })` and falls back to `/bin:/usr/bin` only if the query fails or prints nothing.
+- A `file` containing `/` is resolved against the raw `cwd` (`cwd ?? process.cwd()`, with no lexical `resolve`). Otherwise each entry of the merged `env.PATH` is tried in order. Candidates are `${base}/${entry}/${file}` for a relative entry, `${entry}/${file}` for an absolute one, `${base}/${file}` for a `file` containing `/`, and `file` itself when it is absolute. The base is left raw because `chdir` follows the symlinks in the path before it applies `..`, while `resolve()` would collapse `..` lexically and miss a cwd such as `link/..`. If `PATH` is unset, `_CS_PATH`, the C library's default, is used, because the command execs through `/usr/bin/env`, not through a shell: it is queried once with `spawnSync('/usr/bin/getconf', ['PATH'], { env: process.env, timeout: 2000 })`; the answer is trimmed because `getconf` ends it with a newline, and the fallback `/bin:/usr/bin` applies only when the trimmed answer is empty or the query fails.
 - A candidate qualifies when it is a regular file that passes `accessSync(X_OK)`. EACCES is remembered when `statSync` fails with EACCES, when the candidate is not a regular file (for example a directory), or when `accessSync` fails. Every other `statSync` error (ENOENT, ENOTDIR, ELOOP) is skipped.
 - If nothing qualifies, the reply is `spawn <file> EACCES` when EACCES was remembered, and `spawn <file> ENOENT` otherwise. Nothing is started.
 
@@ -61,7 +67,8 @@ If any `recordGatePgids` throws, the supervisor does not write `go`. It records 
 
 ## Risks / Trade-offs
 
-- **One extra `sh` and one extra `env` exec per spawn**, about a millisecond. The lock writes already happen today.
+- **One extra `sh`, one `/bin/cat` and one `env` exec per spawn**, about a millisecond. The lock writes already happen today.
+- **Exported bash functions are not passed to the spawned command.** `BASH_FUNC_*` bodies are shell code; they are dropped instead of restored, because restoring them would put their bodies in argv. A command run by a bash-as-`sh` platform therefore does not inherit them.
 - **Known differences from a direct spawn.** In each of these cases the result is an exit code instead of an error:
   - A file that resolves but whose `exec` fails: a script whose `#!` interpreter is missing, or a binary built for the wrong architecture. These give exit 126 or 127, with `env`'s or the shell's message on stderr, instead of an ENOENT or ENOEXEC error. The verify gate reports this as a failed verify that shows that message, not as "could not start". This is rare, and reporting a failed `exec` back would need a status channel, which is not worth the complexity.
   - A file system change between resolution and `exec` can turn an error into an exit code.

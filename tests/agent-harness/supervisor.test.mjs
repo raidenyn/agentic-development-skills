@@ -364,6 +364,25 @@ test('a requested environment variable reaches the command', async () => {
   assert.equal(out.context, 'bar');
 });
 
+test('the barrier keeps the environment off its command line', async () => {
+  const child = spawn('/bin/sh', ['-p', '-c', SPAWN_BARRIER, 'agent-harness-spawn', '/bin/true'], {
+    env: { SECRET: 'top-secret-value' },
+    stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+  });
+  const closed = new Promise((resolve) => child.on('close', resolve));
+  const gate = /** @type {import('node:stream').Writable} */ (child.stdio[3]);
+  try {
+    await sleep(200);
+    // The secret is in the shell's environment, which only its owner can read, not in argv.
+    const cmdline = `/proc/${child.pid}/cmdline`;
+    if (existsSync(cmdline)) assert.equal(readFileSync(cmdline, 'utf8').includes('top-secret-value'), false);
+    gate.write('go\n');
+    assert.equal(await closed, 0);
+  } finally {
+    gate.end();
+  }
+});
+
 test('spawn runs through the supervisor and returns exit status and output', async () => {
   const p = await proxy(
     'spawner',
@@ -647,6 +666,28 @@ test('a command name starting with - is rejected before it runs', async () => {
   const out = await rt([p]).dispatch({ type: 'prompt', bin }, ids);
   assert.match(out.context, /spawn -hello ENOENT/);
   assert.equal(existsSync(mark), false);
+});
+
+test('a command name containing = runs instead of being read as an assignment', async () => {
+  const dir = scratch('equals-cmd');
+  const bin = join(dir, 'bin');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, 'a=b'), '#!/bin/sh\necho eq-cmd\n');
+  chmodSync(join(bin, 'a=b'), 0o755);
+  const p = await proxy(
+    'eqcmd',
+    `
+    export default {
+      name: 'eqcmd', events: ['prompt'],
+      async handle(ev, c) {
+        const r = await c.spawn(['a=b'], { env: { PATH: ev.bin + ':' + process.env.PATH } });
+        return { context: JSON.stringify({ code: r.code, stdout: r.stdout }) };
+      },
+    };
+  `,
+  );
+  const out = await rt([p]).dispatch({ type: 'prompt', bin }, ids);
+  assert.deepEqual(JSON.parse(out.context), { code: 0, stdout: 'eq-cmd\n' });
 });
 
 test('a deadline that passes while the event waits for a worker to load: no post, no leak, lock free', async () => {
