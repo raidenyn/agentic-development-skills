@@ -65,7 +65,7 @@ A stack is a short chain of dependent pull requests behind one guard, each revie
 
 Use a stack only when the person asks for it. This skill never asks whether to stack.
 
-Before stacking, check whether a merged contract between the parts would decouple them. If it would, split instead.
+Before stacking, check whether a merged contract between the parts would decouple them. If it would, tell the person that a plain split works, and stack only if they still want it.
 
 In a stack, each task names the task it sits on, and the checks treat that as a dependency on unmerged work that was allowed on purpose.
 
@@ -77,7 +77,7 @@ This applies only when the repository's Settings table sets "Task size, lines of
 
 - size tasks against those values;
 - a task also stops at the "Task overrun" value: the repository's own, or about 1.5 times its estimate when it sets none;
-- a behavior that cannot be split into parts that can each be verified alone while staying within the limit: first check whether a merged contract would decouple the parts. If it would, that is a plain split. Otherwise write one task that states the size exception. Do not ask about stacking.
+- when a behavior cannot be split into parts that can each be verified alone within the limit, first check whether a merged contract would decouple the parts. If it would, split there. Otherwise write one task that states the size exception, and do not ask about stacking.
 
 ## Running tasks in parallel
 
