@@ -22,7 +22,7 @@ export const OUTPUT_MS = 1000;
 export const LOAD_BUDGET_MS = 2000;
 
 const KINDS = ['deny', 'block', 'context'];
-const TOOL_KINDS = ['shell', 'edit', 'read', 'other'];
+const TOOL_KINDS = ['shell', 'edit', 'read', 'skill', 'other'];
 const JOIN = '\n\n';
 const byName = (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
 const errText = (err) => (err instanceof Error ? err.message : String(err));
@@ -114,10 +114,18 @@ export function declaredKinds(meta) {
   return kinds;
 }
 
-// Whether any installed handler tool could want a tool call of this kind (design D2). A missing or
-// unreadable lock, tool.json or `tools` list means every kind, so the caller loads handlers instead
-// of skipping. Returns false only when every handler tool provably excludes the kind.
-export function anyHandlerWants(repoRoot, kind) {
+// Whether a handler with these declared kinds (null for every kind) wants a tool event (design D1).
+// `skill` covers a skill call and a read of a skill file, whatever the event's kind.
+export function wantsEvent(kinds, event) {
+  if (!kinds) return true;
+  if (kinds.includes(event.tool?.kind ?? 'other')) return true;
+  return kinds.includes('skill') && event.skill !== undefined;
+}
+
+// Whether any installed handler tool could want a tool event (design D2). A missing or unreadable
+// lock, tool.json or `tools` list means every kind, so the caller loads handlers instead of
+// skipping. Returns false only when every handler tool provably excludes the event.
+export function anyHandlerWants(repoRoot, event) {
   let lock;
   try {
     lock = readLock(repoRoot);
@@ -132,8 +140,7 @@ export function anyHandlerWants(repoRoot, kind) {
       return true;
     }
     if (!isObject(meta) || meta.handler !== true) continue;
-    const kinds = declaredKinds(meta);
-    if (!kinds || kinds.includes(kind)) return true;
+    if (wantsEvent(declaredKinds(meta), event)) return true;
   }
   return false;
 }
@@ -288,7 +295,7 @@ export function createRuntime({ repoRoot, host, handlers = [], problems = [], no
       if (type === 'tool.before' || type === 'tool.after') {
         // Validate on every tool dispatch so an in-process `tools: []` or an unknown kind means every kind.
         const kinds = declaredKinds(handler);
-        if (kinds && !kinds.includes(event.tool?.kind ?? 'other')) continue;
+        if (!wantsEvent(kinds, event)) continue;
       }
       if (configError || spent || now() >= workDeadline) {
         const reason = configError ?? "skipped, the event's time budget was used up";

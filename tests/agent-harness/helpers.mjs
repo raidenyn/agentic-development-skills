@@ -10,6 +10,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const ASSETS = {
   hookRuntime: join(root, 'skills', 'agent-harness-hook-runtime', 'assets', 'hook-runtime'),
   verifyGate: join(root, 'skills', 'agent-harness-verify-gate', 'assets', 'verify-gate'),
+  hookedRules: join(root, 'skills', 'agent-harness-hooked-rules', 'assets', 'hooked-rules'),
 };
 
 export async function tempRepo({ commit = true, files = {} } = {}) {

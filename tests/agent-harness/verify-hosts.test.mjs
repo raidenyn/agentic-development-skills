@@ -103,7 +103,8 @@ test('an Edit outside editFiles prints nothing and traces edit-skipped', async (
 
 test('a no-change Stop prints nothing and its trace line says no-change', async () => {
   const r = await installed();
-  assert.equal(out(await stop(r)), null);
+  // The first Stop must stay untraced whatever the parent environment holds; only the second writes.
+  assert.equal(out(await stop(r, { env: { AGENT_HARNESS_TRACE: '' } })), null);
   assert.equal(r.log().length, 1);
   const res = await stop(r, { env: { AGENT_HARNESS_TRACE: '1' } });
   assert.equal(res.stdout, '');
@@ -168,13 +169,16 @@ test('two simultaneous failures at count two (two OpenCode sessions sharing a ro
 });
 
 test('OpenCode: a no-change turn end writes a trace line with hostCreatedAt', async () => {
-  const r = await installed();
-  const p = await opencode(r);
-  turn(p.emit, ROOT);
-  await until(() => r.passRecord() !== null, 15000, 'a first full pass');
-  await new Promise((res) => setTimeout(res, 200));
-  process.env.AGENT_HARNESS_TRACE = '1';
+  const saved = process.env.AGENT_HARNESS_TRACE;
+  // The first pass must stay untraced even when the parent environment already turns tracing on.
+  delete process.env.AGENT_HARNESS_TRACE;
   try {
+    const r = await installed();
+    const p = await opencode(r);
+    turn(p.emit, ROOT);
+    await until(() => r.passRecord() !== null, 15000, 'a first full pass');
+    await new Promise((res) => setTimeout(res, 200));
+    process.env.AGENT_HARNESS_TRACE = '1';
     const file = join(r.gitDir, 'agent-harness', 'hook-runtime', 'trace.jsonl');
     p.emit('session.execution.started', ROOT);
     p.emit('session.execution.succeeded', ROOT, {});
@@ -187,11 +191,12 @@ test('OpenCode: a no-change turn end writes a trace line with hostCreatedAt', as
     assert.deepEqual(t.outcomes, { 'verify-gate': 'no-change' });
     assert.equal(typeof t.hostCreatedAt, 'number');
     assert.ok(t.receivedAt <= t.settledAt);
+    assert.equal(r.log().length, 1);
+    await p.close();
   } finally {
-    delete process.env.AGENT_HARNESS_TRACE;
+    if (saved === undefined) delete process.env.AGENT_HARNESS_TRACE;
+    else process.env.AGENT_HARNESS_TRACE = saved;
   }
-  assert.equal(r.log().length, 1);
-  await p.close();
 });
 
 test('an OpenCode handler that spawns with default settings gets 5 s of work', async () => {
@@ -372,4 +377,60 @@ test('an unreadable tool.json falls back to the full load', async () => {
   assert.equal(res.code, 0, res.stderr);
   const text = JSON.parse(res.stdout).hookSpecificOutput.additionalContext;
   assert.match(text, /hook verify-gate was not loaded/);
+});
+
+// ---- skill fields: a rules-style declaration and skill-file reads (design D1) -----------------
+
+async function rulesStyleStub(r) {
+  const src = join(r.gitDir, 'src-skill-stub');
+  mkdirSync(src, { recursive: true });
+  writeFileSync(
+    join(src, 'tool.json'),
+    JSON.stringify({ name: 'skill-stub', version: '0.1.0', handler: true, tools: ['shell', 'skill'] }),
+  );
+  writeFileSync(
+    join(src, 'handler.mjs'),
+    "export default { name: 'skill-stub', events: ['tool.after'],\n" +
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the string is source text that holds ${...} on purpose
+      '  handle: (e) => ({ context: `stub ${e.skill}|${e.skillVia}|${e.tool.kind}|${e.ok}` }) };\n',
+  );
+  const install = installTool({ sourceDir: src, repoRoot: r.dir });
+  assert.equal(install.code, 0, install.messages.join('\n'));
+}
+
+const readPayload = (r, path) => ({
+  ...JSON.parse(fxClaude('PostToolUse-Read', r.dir)),
+  tool_input: { file_path: join(r.dir, path) },
+});
+
+test('a plain Read and a missing SKILL.md with a rules-style handler installed are traced as skipped', async () => {
+  const r = await installed();
+  await rulesStyleStub(r);
+  await r.write('src/a.mts', 'a\n');
+  for (const path of ['src/a.mts', 'skills/x/SKILL.md']) {
+    const res = await claudeRun(r, JSON.stringify(readPayload(r, path)), { AGENT_HARNESS_TRACE: '1' });
+    assert.equal(res.code, 0, res.stderr);
+    assert.equal(res.stdout, '', path);
+    const t = traceLines(r).at(-1);
+    assert.equal(t.event, 'tool.after');
+    assert.equal(t.skipped, 'no-subscriber', path);
+    assert.deepEqual(t.outcomes, {});
+  }
+});
+
+test('a Read of a skill file loads the handlers and the rules-style stub sees the skill', async () => {
+  const r = await installed();
+  await rulesStyleStub(r);
+  await r.write('skills/agent-harness-verify-gate/SKILL.md', '# gate\n');
+  const res = await claudeRun(r, JSON.stringify(readPayload(r, 'skills/agent-harness-verify-gate/SKILL.md')), {
+    AGENT_HARNESS_TRACE: '1',
+  });
+  assert.equal(res.code, 0, res.stderr);
+  assert.equal(
+    JSON.parse(res.stdout).hookSpecificOutput.additionalContext,
+    'stub agent-harness-verify-gate|read|read|true',
+  );
+  const t = traceLines(r).at(-1);
+  assert.equal(typeof t.handlersLoadedAt, 'number');
+  assert.equal(t.outcomes['skill-stub'], 'result');
 });

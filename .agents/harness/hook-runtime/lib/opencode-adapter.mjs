@@ -10,6 +10,7 @@ import { capabilityNotice, HOST_CAPABILITIES } from './capabilities.mjs';
 import { readHarnessConfig } from './config.mjs';
 import { CLEANUP_MS, createRuntime, DEFAULT_DEADLINE_MS, failureNotice, loadHandlers, writeTrace } from './runtime.mjs';
 import { sessionStateDir } from './state.mjs';
+import { skillFromPath } from './skill-path.mjs';
 
 export const HOST = 'opencode';
 export const PLUGIN_ID = 'agent-harness-hook-runtime';
@@ -28,6 +29,7 @@ const KINDS = {
   read: 'read',
   glob: 'read',
   grep: 'read',
+  skill: 'skill',
 };
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -59,7 +61,8 @@ function repoRelative(path, repoRoot) {
 
 // Tool hook input to a normalized tool event. `patch` files come from the result's metadata,
 // `edit` and `write` files from input.path (OpenCode 2.4.1's native tools, relative to the session
-// directory) or input.filePath.
+// directory) or input.filePath. A skill's name is the arguments' id, then name, never the call id;
+// a `read` of a SKILL.md carries the skill, while grep and glob (the same kind) never do.
 export function toToolEvent(type, input, repoRoot) {
   const name = String(input?.tool ?? '');
   const toolInput = isObject(input?.input) ? input.input : {};
@@ -76,6 +79,21 @@ export function toToolEvent(type, input, repoRoot) {
         : [toolInput.path ?? toolInput.filePath];
     event.files = [...new Set(paths.map((p) => repoRelative(p, repoRoot)).filter((p) => p !== null))];
   }
+  if (kind === 'skill') {
+    event.skillVia = 'call';
+    const skill = isId(toolInput.id) ? toolInput.id : isId(toolInput.name) ? toolInput.name : null;
+    if (skill) event.skill = skill;
+  }
+  if (name === 'read') {
+    const skill = skillFromPath(toolInput.path ?? toolInput.filePath, repoRoot);
+    if (skill) {
+      event.skill = skill;
+      event.skillVia = 'read';
+    }
+  }
+  // A shell call also needs a zero exit code; any other tool's status is the whole answer.
+  if (type === 'tool.after')
+    event.ok = input?.status === 'completed' && (kind !== 'shell' || input?.result?.metadata?.exit === 0);
   return event;
 }
 

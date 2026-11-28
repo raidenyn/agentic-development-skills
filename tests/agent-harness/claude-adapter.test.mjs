@@ -2,7 +2,7 @@
 // against the recorded fixtures, and the spawned claude.mjs entry against inline test handlers.
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ASSETS, runNode, tempRepo } from './helpers.mjs';
@@ -358,4 +358,61 @@ test('a handler that never settles at tool.after: the spawned claude.mjs prints 
       additionalContext: 'hook test-handler failed on tool.after: timed out after 300 ms. Do this step by hand.',
     },
   });
+});
+
+// ---- skill fields and tool outcome (design D1) --------------------------------------------------
+
+async function repoWithSkillFiles() {
+  const r = await tempRepo();
+  cleanups.push(r.cleanup);
+  await r.write('skills/real-skill/SKILL.md', '# x\n');
+  await r.write('notes/x.md', 'notes\n');
+  await r.write('docs/skills/x/SKILL.md.bak', 'a backup, not a skill\n');
+  // The link and its target use different slugs, so a match proves the resolved target is used.
+  mkdirSync(join(r.dir, '.claude', 'skills', 'link-skill'), { recursive: true });
+  symlinkSync('../../../skills/real-skill/SKILL.md', join(r.dir, '.claude', 'skills', 'link-skill', 'SKILL.md'));
+  // A symlink under skills/ that resolves outside any skills folder earns no credit.
+  mkdirSync(join(r.dir, 'skills', 'y'), { recursive: true });
+  symlinkSync('../../notes/x.md', join(r.dir, 'skills', 'y', 'SKILL.md'));
+  return r;
+}
+
+test('a Skill call is kind skill with skillVia call, also without a name, and carries no ok', () => {
+  const p = { ...fixture('PreToolUse-Read'), tool_name: 'Skill', tool_input: { skill: 'openspec-apply-change' } };
+  const r = toEvent(p, REPO);
+  assert.equal(r.event.tool.kind, 'skill');
+  assert.equal(r.event.skill, 'openspec-apply-change');
+  assert.equal(r.event.skillVia, 'call');
+  assert.equal(Object.hasOwn(r.event, 'ok'), false);
+  const nameless = toEvent({ ...p, tool_input: {} }, REPO);
+  assert.equal(nameless.event.skill, undefined);
+  assert.equal(nameless.event.skillVia, 'call');
+});
+
+test('a Read of a SKILL.md carries the skill, through a symlink too; lookalikes and other read tools do not', async () => {
+  const r = await repoWithSkillFiles();
+  const read = (tool_name, path) =>
+    toEvent({ ...fixture('PostToolUse-Read', r.dir), tool_name, tool_input: { file_path: join(r.dir, path) } }, r.dir)
+      .event;
+  const direct = read('Read', 'skills/real-skill/SKILL.md');
+  assert.equal(direct.tool.kind, 'read');
+  assert.equal(direct.skill, 'real-skill');
+  assert.equal(direct.skillVia, 'read');
+  assert.equal(read('Read', '.claude/skills/link-skill/SKILL.md').skill, 'real-skill');
+  // Backslashes are read as slashes before the path is resolved (a Linux realpath regression).
+  assert.equal(read('Read', 'skills\\real-skill\\SKILL.md').skill, 'real-skill');
+  for (const [tool, path] of [
+    ['Grep', 'skills/real-skill/SKILL.md'],
+    ['Read', 'docs/skills/x/SKILL.md.bak'],
+    ['Read', 'skills/y/SKILL.md'],
+    ['Read', 'skills/missing/SKILL.md'],
+  ])
+    assert.equal(read(tool, path).skill, undefined, `${tool} ${path}`);
+});
+
+test('tool.after carries ok: true for PostToolUse and false for PostToolUseFailure', () => {
+  assert.equal(toEvent(fixture('PostToolUse-Bash'), REPO).event.ok, true);
+  const failed = { ...fixture('PostToolUse-Bash'), hook_event_name: 'PostToolUseFailure' };
+  assert.equal(toEvent(failed, REPO).event.ok, false);
+  assert.equal(Object.hasOwn(toEvent(fixture('PreToolUse-Bash'), REPO).event, 'ok'), false);
 });

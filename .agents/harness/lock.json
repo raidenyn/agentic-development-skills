@@ -2,21 +2,37 @@
   "version": 1,
   "tools": {
     "hook-runtime": {
-      "version": "0.1.6",
+      "version": "0.2.0",
       "files": {
-        "claude.mjs": "d26283eb8a65d5da85615aa847ace4398b3e284814f18e77b533df6146479e27",
+        "claude.mjs": "e0c5afe0429d142a01e33c3ea30b23f954ef58513a21171c787abffd4df93118",
         "cli.mjs": "3331ac704c0354eae128cd51a3e07b0a0b0b6b7bd7de518bdd439a86bc315491",
         "lib/capabilities.mjs": "554bb968549ed7292ff4c5501f655fe218627b23db11d2539ce919259b0b9e93",
-        "lib/claude-adapter.mjs": "2d23589b378393fff378555b2db4b96499e75b58b8e0867ce992d9d5746d688f",
+        "lib/claude-adapter.mjs": "487a17a120478d0a83db2f8f53535e49ff40037184e64e9a868a742e2288a5b7",
         "lib/config.mjs": "afcabd0f71591de520665f08798e5456e5abdb6ed95bb4ff6a79f24739270d40",
         "lib/install.mjs": "d1abb61c1b9bd95317c4efb0b8205ed0bd24e16a29a0de4304b0a29634b0dffa",
-        "lib/opencode-adapter.mjs": "75e950568fbf68f8d4a457cd106c013b5fcd03bd9c959958bec955362cedf3dc",
-        "lib/runtime.mjs": "cbdccef94c73c6805bfa4c8f77dfd39a6faec489b042c9d3294743beb2348074",
+        "lib/opencode-adapter.mjs": "2a7ea77595f4998037561ff60eb0efc110d23be97dfcbc2757909a2a46acce21",
+        "lib/runtime.mjs": "55a778d9a22befdc873f52be33e941f5da9d9f546beecc7e1abd42311ca70820",
+        "lib/skill-path.mjs": "f12e70fabbae07e40e2bb8e044e1e068918eb5880b9ec7361ed7a60c4543445e",
         "lib/state.mjs": "0eb56ddc5457799a3348cbd701cd4f714727d2da3ea3ee3d6c07ef33c6c75ccc",
         "lib/supervisor.mjs": "1a931c6bc186ae82d47a0269fa66e1661fff0cc69acbae371560e8ced023374c",
         "lib/worker-entry.mjs": "c9564de05717b3bfd00ab60aa8a884f773334d6d96650e688671e2874704cce3",
         "opencode/index.mjs": "ea7c4c9b355fede5f2544f28e0e380a8b77b2ccea938858e984382a302faab16",
-        "tool.json": "7a319f631cab4cbe15b837c6bb021406f2e6f99e21408541031fef2e25a4230c"
+        "tool.json": "672f185ad53605503ee436def1ce3d197dc269990d3e64d48fd6be30d96a6d00"
+      }
+    },
+    "hooked-rules": {
+      "version": "0.1.0",
+      "files": {
+        "cli.mjs": "7649ee03928097c0a6028a13a5b12e21aa91c95089e556dceb4d26eeb367a6c6",
+        "handler.mjs": "c1152ba7eea6f6a21443d0832fc13be63b2dbbd14d5d0bf1f197abdb4a0b9eb5",
+        "lib/config.mjs": "afcabd0f71591de520665f08798e5456e5abdb6ed95bb4ff6a79f24739270d40",
+        "lib/deliver.mjs": "b845e31965ab53fb615f12865125a83f9cb8965eb0df45dde6feab8717c91d42",
+        "lib/install.mjs": "d1abb61c1b9bd95317c4efb0b8205ed0bd24e16a29a0de4304b0a29634b0dffa",
+        "lib/ledger.mjs": "5900debc5f88ecd45b923cf277ea388e3b1f33aa273c202a993620ff99585a85",
+        "lib/pointers.mjs": "eb1597d0df998bab5f77eacd77734507204ef8b32f4b957cb1f080940c055718",
+        "lib/rules.mjs": "51482d989b6c9e41826309217d94231eb74d07e139416ef30b441787128cd4e6",
+        "lib/state.mjs": "0eb56ddc5457799a3348cbd701cd4f714727d2da3ea3ee3d6c07ef33c6c75ccc",
+        "tool.json": "c48a70772e2315cd1fff303b7c6d464e498f2db57b11aed6e0d75e61f37a39a7"
       }
     },
     "verify-gate": {

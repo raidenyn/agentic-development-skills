@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const TOOLS = [
   ['hook-runtime', 'agent-harness-hook-runtime'],
+  ['hooked-rules', 'agent-harness-hooked-rules'],
   ['verify-gate', 'agent-harness-verify-gate'],
 ];
 

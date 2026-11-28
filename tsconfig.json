@@ -12,7 +12,7 @@
     "skipLibCheck": true,
     "allowJs": true,
     "checkJs": false,
-    "rootDirs": ["src/hook-runtime", "src/verify-gate", "src/shared"]
+    "rootDirs": ["src/hook-runtime", "src/verify-gate", "src/shared", "src/hooked-rules"]
   },
   "include": ["src/**/*.mts", "scripts/**/*.mts", "scripts/**/*.d.ts"]
 }

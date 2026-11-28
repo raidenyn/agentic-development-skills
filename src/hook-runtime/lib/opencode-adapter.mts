@@ -9,6 +9,7 @@ import { capabilityNotice, HOST_CAPABILITIES } from './capabilities.mts';
 import { readHarnessConfig } from './config.mts';
 import { CLEANUP_MS, createRuntime, DEFAULT_DEADLINE_MS, failureNotice, loadHandlers, writeTrace } from './runtime.mts';
 import { sessionStateDir } from './state.mts';
+import { skillFromPath } from './skill-path.mts';
 import type { DispatchResult, EventPayload, Handler, HarnessEvent, ToolKind } from './handler.types.mts';
 import type { Runtime } from './runtime.mts';
 
@@ -45,6 +46,7 @@ const KINDS: Record<string, ToolKind> = {
   read: 'read',
   glob: 'read',
   grep: 'read',
+  skill: 'skill',
 };
 
 const isObject = (v: unknown): v is Record<string, any> => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -83,7 +85,8 @@ function repoRelative(path: unknown, repoRoot: string): string | null {
 
 // Tool hook input to a normalized tool event. `patch` files come from the result's metadata,
 // `edit` and `write` files from input.path (OpenCode 2.4.1's native tools, relative to the session
-// directory) or input.filePath.
+// directory) or input.filePath. A skill's name is the arguments' id, then name, never the call id;
+// a `read` of a SKILL.md carries the skill, while grep and glob (the same kind) never do.
 export function toToolEvent(type: HarnessEvent, input: HostObject, repoRoot: string): EventPayload {
   const name = String(input?.tool ?? '');
   const toolInput = isObject(input?.input) ? input.input : {};
@@ -100,6 +103,21 @@ export function toToolEvent(type: HarnessEvent, input: HostObject, repoRoot: str
         : [toolInput.path ?? toolInput.filePath];
     event.files = [...new Set(paths.map((p) => repoRelative(p, repoRoot)).filter((p) => p !== null))] as string[];
   }
+  if (kind === 'skill') {
+    event.skillVia = 'call';
+    const skill = isId(toolInput.id) ? toolInput.id : isId(toolInput.name) ? toolInput.name : null;
+    if (skill) event.skill = skill;
+  }
+  if (name === 'read') {
+    const skill = skillFromPath(toolInput.path ?? toolInput.filePath, repoRoot);
+    if (skill) {
+      event.skill = skill;
+      event.skillVia = 'read';
+    }
+  }
+  // A shell call also needs a zero exit code; any other tool's status is the whole answer.
+  if (type === 'tool.after')
+    event.ok = input?.status === 'completed' && (kind !== 'shell' || input?.result?.metadata?.exit === 0);
   return event;
 }
 
