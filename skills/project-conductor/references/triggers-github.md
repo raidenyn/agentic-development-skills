@@ -9,7 +9,7 @@ The placeholders are those of [run-github.md](run-github.md#preflight): `<work>`
 | `<conductor project>` | The conductor thread's T3 project: `thread.projectId` of the `t3_thread_read` answer in [Identity](run-github.md#identity). |
 | `<reconcile>` | `reconcileMinutes` of `<work>/settings.json`: a whole number from 1 to 1440. |
 
-Every procedure here runs in the conductor thread itself, after the identity check of [Preflight](run-github.md#preflight). An identity failure stops it before any trigger call. Inside onboarding, which runs before the thread has its title and the block its `conductor`, onboarding's own [Preflight](onboarding-github.md#preflight) and [Conductor thread](onboarding-github.md#conductor-thread) step replace the identity check. A `null` `reconcileMinutes` (a settings gap) stops every trigger write except the `enabled: false` writes of [End of the board](#end-of-the-board), which need no setting: the report names the gap.
+Every procedure here runs in the conductor thread itself, after the identity check of [Preflight](run-github.md#preflight). An identity failure stops it before any trigger call. Inside onboarding, which runs before the block has its `conductor`, onboarding's own [Preflight](onboarding-github.md#preflight) and [Conductor thread](onboarding-github.md#conductor-thread) step replace the identity check. A `null` `reconcileMinutes` (a settings gap) stops every trigger write except the `enabled: false` writes of [End of the board](#end-of-the-board), which need no setting: the report names the gap.
 
 Nothing here keeps state. Which repositories have a hook, and which are an owner step, is read again each time from GitHub and from this thread's own reports.
 
@@ -40,7 +40,7 @@ The conductor has exactly two triggers, both made with `bindToCurrentThread: tru
     },
     "dedupe": {
       "replayKey": "{{headers.x-github-delivery}}",
-      "coalesceKey": "project-conductor",
+      "coalesceKey": "{{headers.x-github-hook-id}}",
       "coalesceWindowSeconds": 120
     },
     "maxDeliveryAgeMinutes": <reconcile>
@@ -63,9 +63,9 @@ The conductor has exactly two triggers, both made with `bindToCurrentThread: tru
 
 Rules for both:
 
-- **The prompt** is two lines: the `Trigger:` line, then the wake sentence. It never carries the board URL: a wake takes the board from its own thread title.
+- **The prompt** is two lines: the `Trigger:` line, then the wake sentence. It never carries the board URL: a wake takes the board from its conductor thread's launch line ([Identity](run-github.md#identity)).
 - **No merged filter.** A filter on `body.pull_request.merged` drops every `issues` delivery, because the path is missing there (`evidence/00-trigger-syntax.md`). So a pull request closed without a merge also starts a run, which finds nothing to do.
-- **`replayKey` `{{headers.x-github-delivery}}`** drops a repeated delivery of the same event. The constant `coalesceKey` turns a merge that closes its issue, which sends two deliveries, into one wake.
+- **`replayKey` `{{headers.x-github-delivery}}`** drops a repeated delivery of the same event. **`coalesceKey` `{{headers.x-github-hook-id}}`** is the same for every delivery of one repository's hook, so a merge that closes its issue, which sends two deliveries, becomes one wake. The host accepts only a template here: a literal key such as `project-conductor` is rejected with `Expected <filter>` (live proofs of 2026-11-26 and 2026-11-27). Deliveries of two repositories' hooks are not coalesced; both wakes read the same board and are harmless.
 - **`maxDeliveryAgeMinutes`** equals `<reconcile>`: a delivery held longer than that is skipped, because the timer has already run by then.
 - **The payload is only a hint.** A webhook wake runs the same steps as a timer wake and reads everything again from GitHub and T3. It takes no fact from the request. (Spec: Webhook payload is only a hint.)
 - **The URL.** Only the call that creates the webhook trigger returns its `webhookUrl`, once. Print it in that run's report, since the owner needs it for the hooks. Later it is in T3's Settings; an update by `scheduledTaskId` keeps it.
@@ -118,6 +118,23 @@ Registers the webhook trigger's URL as a GitHub webhook of one repository. Onboa
    Read back: list the hooks again, as above. The hook with `<url>` must have `active` true and exactly the events `issues` and `pull_request`. Then the result is `registered <id>` (created) or `reused <id>`. A non-zero exit or a failed read-back is a refusal: go to step 4.
 4. **Without admin, or on a refusal:** nothing else is tried: no other API, no other account, no retry. The result is `owner step`, and the report gives the owner's steps, as below.
 
+### Done by the owner
+
+When the owner says in this thread that they added the webhook of an owner step, for example "Add the GitHub webhook for `<repo>` - done", run Register the webhook for `<repo>` again without a URL and without a secret:
+
+1. **With admin,** list the hooks into `<work>/hooks.json` as in step 3 and look for one whose URL is the trigger's. The URL is not known in this run, so match, without case, the part `/scheduled-task%3A<uuid>/` or `/scheduled-task:<uuid>/` of `config.url`, where `<uuid>` is the webhook trigger's `scheduledTaskId` from `list_scheduled_tasks` without its `scheduled-task:` prefix:
+
+   ```bash
+   jq -r --arg u '<uuid>' '($u | ascii_downcase) as $u
+     | [.[] | select((.url // "") | ascii_downcase | (contains("/scheduled-task%3a" + $u + "/") or contains("/scheduled-task:" + $u + "/"))) | .id]
+     | first // empty' <work>/hooks.json    # <id>, or nothing
+   ```
+
+   Found, active and with exactly `issues` and `pull_request`: the result is `reused <id>`. Otherwise the result stays `owner step`, and the report says what differs.
+2. **Without admin,** the agent cannot read the hooks. Take the owner's word: the result is `done by the owner, not checked: not an admin`. Nothing is written.
+
+Both end with the standalone report below. A `done by the owner` repository leaves the `Webhook owner steps:` list, so a missed delivery from it counts for the [automatic check](#automatic-check), which then tells the owner to check that hook.
+
 ### Owner steps
 
 Print this block for `<repo>`, with the URL filled in:
@@ -145,14 +162,14 @@ Webhook owner steps: <repo>, <repo>
 `Webhook owner steps: none` when the list is empty. The [automatic check](#automatic-check) reads the newest such line, so the line always repeats the whole list, never only this run's changes:
 
 1. **When this run created the webhook trigger, or no webhook trigger exists after the run,** start from every repository of the board, `<work>/repos.json`: a new URL leaves every hook registered before pointing at a dead URL, and without a trigger no hook delivers. Otherwise take the list of the newest message of this thread that holds a line starting with `Webhook owner steps:`. Find it with the [backward scan](#the-backward-scan); none found is the empty list.
-2. Remove every repository this run registered or reused, and add every repository whose result in this run is `owner step`.
+2. Remove every repository this run registered, reused or recorded as done by the owner, and add every repository whose result in this run is `owner step`.
 
 **A standalone run** ("register the webhook for `<repo>`") ends with this report:
 
 ```markdown
 ## Register the webhook: <repo>
 
-Result: <registered <id> | reused <id> | owner step>, <reason when an owner step: not an admin, or the refused command and its error>
+Result: <registered <id> | reused <id> | done by the owner, not checked: not an admin | owner step>, <reason when an owner step: not an admin, or the refused command and its error>
 
 <the owner steps block, when an owner step>
 
@@ -196,7 +213,7 @@ First run [Identity](run-github.md#identity), [Board](run-github.md#board), the 
 
    An answer with `id` null means that trigger is missing.
 4. **Fix**, one trigger at a time, reading each fix back with `list_scheduled_tasks` and the compare:
-   - **The webhook trigger's `schedule` is never updated here.** On this host, an update that passes `schedule` clears the stored signature secret, even when `secret` or `secretRef` is omitted; the live proof on 2026-11-26 lost the secret this way. Only `enabled: true` may be set on the webhook trigger. A differing webhook schedule, including the unavoidable `dedupe.coalesceKey` gap and `maxDeliveryAgeMinutes`, is reported as an owner step: recreate the trigger with a new secret and register every repository's hook again. The timer may be updated normally.
+   - **The webhook trigger's `schedule` is never updated here.** On this host, an update that passes `schedule` clears the stored signature secret, even when `secret` or `secretRef` is omitted; the live proof on 2026-11-26 lost the secret this way. Only `enabled: true` may be set on the webhook trigger. A differing webhook schedule, such as `dedupe` or `maxDeliveryAgeMinutes`, is reported as an owner step: recreate the trigger with a new secret and register every repository's hook again. The timer may be updated normally.
    - **A trigger that differs** is updated in place, so the webhook trigger keeps its URL: `schedule_task` with `scheduledTaskId` `<id>` and only the differing fields. This rule applies to the timer; the webhook trigger follows the rule above. For example, `reconcileMinutes` 20 updates the timer to `"schedule": {"type": "interval", "everyMs": 1200000}`.
    - **A disabled trigger** is re-enabled with `schedule_task` `scheduledTaskId` `<id>`, `enabled: true`, unless the board has ended ([End of the board](#end-of-the-board)). At the end of the board it stays disabled, and the report says why.
    - **A missing timer** is created with the timer object of [Triggers](#triggers). This needs no secret.
@@ -253,7 +270,7 @@ No candidate: the condition does not hold, and no thread is read.
 
 ### The backward scan
 
-The bounds come from this thread's own messages. Read them newest first: call `t3_thread_read` with `threadId` `<conductor id>`, `view` `"activity"`, `limit` 100, `runLimit` 50 and `maxCharsPerItem` 20000, and write each answer's `items` to `<work>/scan-<k>.json`, with `<k>` 1, 2, …. For the next page, call again with `beforePosition` set to the answer's `earlierPosition`. **`runLimit` 50 is required:** without it the tool returns only the current run, and the scan silently misses the earlier onboarding, trigger-check and register reports. It is the host's maximum; a report older than 50 runs is out of the scan's reach, and the report says so. Join the text of an item with `textTruncated` true as [Collect](run-github.md#collect) does. After each page, run:
+The bounds come from this thread's own messages. Read them newest first: call `t3_thread_read` with `threadId` `<conductor id>`, `view` `"messages"`, `limit` 100, `runLimit` 50 and `maxCharsPerItem` 20000, and write each answer's `items` to `<work>/scan-<k>.json`, with `<k>` 1, 2, …. For the next page, call again with `beforePosition` set to the answer's `earlierPosition`. **`view` `"messages"`** returns only the user and assistant messages, the only items the scan reads; `"activity"` also returns every tool call and its output, which made one page of a long conductor thread too large to read (live proof of 2026-11-27). **`runLimit` 50 is required:** without it the tool returns only the current run, and the scan silently misses the earlier onboarding, trigger-check and register reports. It is the host's maximum; a report older than 50 runs is out of the scan's reach, and the report says so. Join the text of an item with `textTruncated` true as [Collect](run-github.md#collect) does. After each page, run:
 
 ```bash
 cat > <work>/missed.jq <<'EOF'

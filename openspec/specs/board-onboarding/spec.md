@@ -12,7 +12,7 @@ The repository SHALL contain a skill `project-conductor` at `skills/project-cond
 - a row in the README's Skills table;
 - a reference file `references/onboarding-github.md` holding the `gh` commands the procedure uses.
 
-The procedure MUST start from the command `/project-conductor <board URL>`, and MUST run in the thread where that command is typed. That thread MAY be in any T3 project or in "No project".
+The procedure MUST start from the command `/project-conductor <board URL>` as the first line of the thread's first message, the launch line, and MUST run in that thread. A run in a thread whose first message is not a launch line for this board MUST NOT write; it MAY run as a dry run. That thread MAY be in any T3 project or in "No project".
 
 #### Scenario: Validators accept the skill
 - **WHEN** `python3 scripts/skills.py validate`, `claude plugin validate .`, the Python unit tests and `pnpm run check` run
@@ -126,19 +126,23 @@ Every run SHALL end with a report listing:
 - **THEN** it writes nothing and states that nothing changed. It still lists every open owner step, the repositories whose webhook is an owner step, and the unkeyed issues
 
 ### Requirement: The onboarding thread becomes the conductor
-A run that writes SHALL rename its own thread to `project-conductor <board URL>`, and SHALL record its own thread id as `conductor` in the settings block.
+A run that writes SHALL rename its own thread to `<board title> Conductor`, such as `Bank MCP Conductor`, and SHALL record its own thread id as `conductor` in the settings block.
 
 #### Scenario: First onboarding
 - **WHEN** the owner types `/project-conductor https://github.com/users/raidenyn-shadow/projects/5` in a new thread in "No project" and agrees to the plan
-- **THEN** that thread's title is `project-conductor https://github.com/users/raidenyn-shadow/projects/5` and the readme block's `conductor` is its id
+- **THEN** that thread's title is `task-run scratch Conductor` and the readme block's `conductor` is its id
+
+#### Scenario: Conductor with the old title
+- **WHEN** onboarding runs again in a conductor titled `project-conductor <board URL>`
+- **THEN** the plan changes the title to `<board title> Conductor` and nothing else
 
 ### Requirement: One conductor per board
 Before any write, the procedure SHALL check two places for another conductor:
 - **The settings block's `conductor`.** When it names another thread that is not archived, the run MUST stop and name that thread.
-- **Every T3 project from `t3_project_list`, "No project" included.** The procedure MUST search each for the conductor title and compare titles exactly. A match that is not this thread MUST stop the run.
+- **Every T3 project from `t3_project_list`, "No project" included.** The procedure MUST search each for the conductor title `<board title> Conductor` and the old title `project-conductor <board URL>`, and compare titles exactly. A match that is not this thread MUST stop the run when its launch line names this board, is missing, or cannot be read; a match whose launch line names another board MUST NOT.
 
 #### Scenario: Conductor already exists in another project
-- **WHEN** a thread in project A titled `project-conductor <board URL>` exists and the owner runs the command in project B
+- **WHEN** a thread in project A titled `<board title> Conductor`, whose launch line names this board, exists and the owner runs the command in project B
 - **THEN** nothing is written and the report names the existing thread
 
 ### Requirement: Settings block in the board readme
@@ -177,7 +181,7 @@ The procedure SHALL ask the owner for the webhook secret with `request_secret` o
 
 It MUST NOT generate, print or store the secret. When the webhook trigger is created in this run, the procedure SHALL run Register the webhook for each repository of the board with the new URL.
 
-On a repeat run that reuses the webhook trigger, the URL is not known, because only creation returns it. The run then MUST NOT ask for a secret and MUST NOT register hooks. It MUST carry the `Webhook owner steps:` list from the newest onboarding or check report in this thread, and add every repository of the board that none of those reports covered.
+On a repeat run that reuses the webhook trigger, the URL is not known, because only creation returns it. The run then MUST NOT ask for a secret and MUST NOT register hooks. It MUST carry the `Webhook owner steps:` list from the newest onboarding, check or register report in this thread, and add every repository of the board that none of those reports covered. It MUST read the thread's messages (`view` `"messages"`), newest first, and MAY stop once it has the newest such report and every repository of the board is named by a report read.
 
 #### Scenario: Onboarding the scratch board
 - **WHEN** onboarding runs on the scratch board, where the agent is an admin of the repository

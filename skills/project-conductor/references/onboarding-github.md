@@ -13,7 +13,9 @@ Placeholders:
 | `<board owner>`, `<n>` | The board's owner and number, from its URL: `https://github.com/users/<board owner>/projects/<n>` or `.../orgs/<board owner>/projects/<n>`. |
 | `<board URL>` | The board's URL as `gh project view` returns it. |
 | `<project id>` | The board's node id, from Preflight. |
-| `<title>` | The conductor title, `project-conductor <board URL>`. |
+| `<board title>` | The board's `title`, from Preflight. |
+| `<title>` | The conductor title, `<board title> Conductor`, such as `Bank MCP Conductor`. |
+| `<old title>` | The conductor title before 2026-11-27, `project-conductor <board URL>`. |
 | `<conductor id>` | This thread's id, from Preflight. The thread that runs onboarding becomes the conductor. |
 | `<conductor project>` | This thread's T3 project, `thread.projectId` of its `t3_thread_read`. |
 | `<agent>` | The agent's login, from Preflight. |
@@ -46,6 +48,7 @@ Then read this thread, the one that becomes the conductor:
 
 1. Call `t3_thread_configure` with no arguments. Its `threadId` is `<conductor id>`.
 2. Call `t3_thread_read` with `threadId` `<conductor id>` and `limit` 1. Keep `thread.title` and `thread.projectId` (`<conductor project>`).
+3. Read the launch line as [Identity](run-github.md#identity) does, step 3 and the `sed`: the first line of this thread's first message. Its board must be this board, compared by `<board owner>` without case and by `<n>`. No launch line, or another board: a run that would write stops here, nothing is written: "Run the onboarding of this board in a new thread that starts with `/project-conductor <board URL>`." When the block's `conductor` is this thread, the message is instead the one below; parse the block for this first, as [The block's `conductor`](#the-blocks-conductor) does, from `<work>/readme.json`: "Archive this thread and delete its two triggers with `delete_scheduled_task`, then run the onboarding of the board in a new thread that starts with `/project-conductor <board URL>`. That onboarding creates new triggers, so every repository's webhook must be registered again with the new URL." A dry run goes on as a dry run outside the conductor thread, and its Pending also says: "The rename, the secret and the triggers need a thread that starts with `/project-conductor <board URL>`."
 
 A failed call stops the run: "The onboarding could not read its own thread: <error>."
 
@@ -72,9 +75,9 @@ jq -r --arg me <conductor id> '.conductor // "none"
 
 List every T3 project: call `t3_project_list` with `limit` 100, and again with `cursor` set to `nextCursor` while it is not null. Write each answer to `<work>/t3-projects-<k>.json`, with `<k>` 1, 2, …, as is: [Repositories](#repositories) matches the repositories against the same files. "No project" is one of the listed projects, with its own id. A failed call stops the run.
 
-For each project whose `deletedAt` is null, call `t3_thread_search` with `query` `<title>`, `projectId` the project's id and `limit` 50. The search matches by word prefix and also message text, so compare every `matches[].title` with `<title>` exactly, character for character:
+For each project whose `deletedAt` is null, call `t3_thread_search` with `query` `<title>`, and again with `query` `<old title>`, `projectId` the project's id and `limit` 50. The search matches by word prefix and also message text, so compare every `matches[].title` with `<title>` and `<old title>` exactly, character for character:
 
-- An exact match whose thread id is not `<conductor id>`: **stop the run.** Nothing is written. The report names the thread and its project: "Thread `<id>` in project `<project title>` is already titled `<title>`. Run the onboarding there, or archive that thread first."
+- An exact match whose thread id is not `<conductor id>`: read its launch line as in [Identity](run-github.md#identity), step 3, with `threadId` the match's thread id. It names this board, has no launch line (the `sed` prints nothing), or cannot be read: **stop the run.** Nothing is written. The report names the thread and its project: "Thread `<id>` in project `<project title>` already conducts this board. Run the onboarding there, or archive that thread first." Only a launch line that names another board, which has the same title, is no conflict: go on.
 - 50 matches with no exact match from another thread: the search matches message text too, and task threads carry the board URL and the wake sentence, so a busy project fills the page without another conductor. Go on, and list under Pending "search not exhaustive for project `<id>`". The tool ranks title matches first, and the block's `conductor` is the exact guard.
 - A failed search: that project could not be checked. Stop the run and name the project and the error.
 
@@ -85,10 +88,11 @@ The search skips archived threads, so an archived conductor never stops the run.
 | This thread's title | Plan |
 |---|---|
 | exactly `<title>` | reuse |
-| `project-conductor <another board URL>` | cannot do: this thread conducts another board. Stop the run: "Run the onboarding of this board in a new thread." |
-| anything else | change: show the old title and `<title>` |
+| anything else, `<old title>` included | change: show the old title and `<title>` |
 
-Write, only in this thread: call `t3_thread_update` with `action` `"rename"`, `title` `<title>` and no `threadId`. Read it back with `t3_thread_read`: `thread.title` must equal `<title>`. A refused rename is not tried another way: the owner step is "Rename this thread to `<title>`, exactly." Without the title the wakes fail their identity check, so the report puts this step first.
+A thread whose launch line is missing or names another board gets here only in a dry run, which Preflight lets go on. There this table is not used: plan the rename as "in the conductor thread", as [the triggers](#webhook) are planned.
+
+Write, only in this thread: call `t3_thread_update` with `action` `"rename"`, `title` `<title>` and no `threadId`. Read it back with `t3_thread_read`: `thread.title` must equal `<title>`. A refused rename is not tried another way: the owner step is "Rename this thread to `<title>`, exactly." A wrong title does not stop the wakes, which take the board from the launch line, but each wake reports it as a gap.
 
 ## Fields
 
@@ -519,7 +523,7 @@ In the survey, the URL is not known yet. The plan lists each repository as "regi
 
 The trigger exists, so its URL is not known in this run: only its creation returned it. Ask for no secret and register no hook. The `Webhook owner steps:` list is carried instead.
 
-Read this thread's own messages, newest first, as [The backward scan](triggers-github.md#the-backward-scan) does (`t3_thread_read` with `view` `"activity"`, `limit` 100, `runLimit` 50 and `maxCharsPerItem` 20000), every page to the start of the thread, into `<work>/scan-<k>.json`. Without `runLimit` 50 the tool returns only the current run and the carried list is wrong. Then:
+Read this thread's own messages, newest first, as [The backward scan](triggers-github.md#the-backward-scan) does (`t3_thread_read` with `view` `"messages"`, `limit` 100, `runLimit` 50 and `maxCharsPerItem` 20000), into `<work>/scan-<k>.json`. Without `runLimit` 50 the tool returns only the current run and the carried list is wrong; with `view` `"activity"` the tool calls and their output make the pages of a long conductor thread too large to read. Read the next page, with `beforePosition` set to `earlierPosition`, until the pages read hold a report with a `Webhook owner steps:` line and every repository of `<work>/repos.txt` is named by one of the reports read that hold a `Webhook owner steps:` line, as the `jq` below counts them, or until `earlierPosition` is null. Older pages cannot change the result: the carried list comes from the newest report, and a repository already named is not added. Then:
 
 ```bash
 jq -s 'add | unique_by(.position)' <work>/scan-*.json | jq -r --rawfile repos <work>/repos.txt '
